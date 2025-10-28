@@ -1,0 +1,21 @@
+*{
+background: rgba(12, 19, 29, 0.4);
+foreground: rgba(194, 196, 198, 0.4);
+cursor: rgba(194, 196, 198, 0.4);
+color0: rgba(12, 19, 29, 0.4);
+color1: rgba(66, 86, 87, 0.4);
+color2: rgba(65, 93, 102, 0.4);
+color3: rgba(76, 110, 115, 0.4);
+color4: rgba(80, 115, 118, 0.4);
+color5: rgba(81, 116, 119, 0.4);
+color6: rgba(80, 116, 119, 0.4);
+color7: rgba(194, 196, 198, 0.4);
+color8: rgba(92, 99, 112, 0.4);
+color9: rgba(66, 86, 87, 0.4);
+color10: rgba(65, 93, 102, 0.4);
+color11: rgba(76, 110, 115, 0.4);
+color12: rgba(80, 115, 118, 0.4);
+color13: rgba(81, 116, 119, 0.4);
+color14: rgba(80, 116, 119, 0.4);
+color15: rgba(194, 196, 198, 0.4);
+}
