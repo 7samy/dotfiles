@@ -1,0 +1,106 @@
+@import "/home/azu/.cache/wal/colors-waybar.css";
+
+* {
+  border: none;
+  font-family: ArcadeClassic;
+  font-size: 15px;
+  min-height: 24px;
+}
+
+window#waybar {
+  background: rgba(0, 0, 0, 0);
+}
+
+/*--------------------------------------------------------------------------------------------------*/
+
+#workspaces {
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+	margin-right: 15px;
+  padding-top: 1px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+#workspaces button {
+  background: rgba(25, 26, 36, 0);
+  color: #c0caf5;
+}
+
+#workspaces button.active {
+  color: @color11;
+}
+
+/*--------------------------------------------------------------------------------------------------*/
+
+/* Right Modules */
+
+#clock {
+  font-family: Milker;
+  font-size: 12px;
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+  padding-left: 9px;
+  padding-right: 10px;
+  margin-right: 15px;
+}
+
+#pulseaudio {
+  font-family: Milker;
+  font-size: 12px;
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+  padding-left: 9px;
+  padding-right: 10px;
+  margin-right: 15px;
+}
+
+/*--------------------------------------------------------------------------------------------------*/
+
+/* Left Modules */
+
+#custom-arch {
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+	margin-right: 15px;
+  padding-top: 1px;
+  padding-left: 14px;
+  padding-right: 9.5px;
+}
+
+#custom-arch {
+  font-size: 20px;
+	margin-left: 15px;
+}
+
+#memory {
+  font-family: Milker;
+  font-size: 12px;
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+  padding-left: 9px;
+  padding-right: 10px;
+  margin-right: 15px;
+}
+
+#custom-window-name {
+  font-family: Milker;
+  font-size: 10px;
+  border-radius: 10px;
+  background-color: rgba(25, 26, 36, 0.5);
+  color: #c0caf5;
+  margin-top: 7px;
+  padding-left: 9px;
+  padding-right: 10px;
+  margin-right: 15px;
+}
