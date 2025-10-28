@@ -18,3 +18,4 @@ done
 # Wallpaper anwenden
 wal -n -i "$selected_file"
 swww img "$selected_file" --transition-type fade --transition-step 10
+/home/azu/.config/rofi/scripts/hextorgb.zsh
