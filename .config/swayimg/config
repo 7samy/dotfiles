@@ -1,0 +1,10 @@
+[list]
+# Automatically add all files from the directory
+all = yes
+# Optional: set the sort order (alpha, numeric, random, etc.)
+order = alpha
+
+[keys.viewer]
+# Map 'h' and 'l' to previous and next file navigation
+h = prev_file
+l = next_file
