@@ -4,18 +4,18 @@
 
 cd ~/dotfiles
 
-rsync -aq ~/.config/hypr/ ~/dotfiles/.config/hypr/
-rsync -aq ~/.config/kitty/ ~/dotfiles/.config/kitty/
-rsync -aq ~/.config/mpd/ ~/dotfiles/.config/mpd/
-rsync -aq ~/.config/neofetch/ ~/dotfiles/.config/neofetch/
-rsync -aq ~/.config/nvim/ ~/dotfiles/.config/nvim/
-rsync -aq ~/.config/rmpc/ ~/dotfiles/.config/rmpc/
-rsync -aq ~/.config/rofi/ ~/dotfiles/.config/rofi/
-rsync -aq ~/.config/swayimg/ ~/dotfiles/.config/swayimg/
-rsync -aq ~/.config/wal/ ~/dotfiles/.config/wal/
-rsync -aq ~/.config/waybar/ ~/dotfiles/.config/waybar/
+rsync -aq --delete ~/.config/hypr/ ~/dotfiles/.config/hypr/
+rsync -aq --delete ~/.config/kitty/ ~/dotfiles/.config/kitty/
+rsync -aq --delete ~/.config/mpd/ ~/dotfiles/.config/mpd/
+rsync -aq --delete ~/.config/neofetch/ ~/dotfiles/.config/neofetch/
+rsync -aq --delete ~/.config/nvim/ ~/dotfiles/.config/nvim/
+rsync -aq --delete ~/.config/rmpc/ ~/dotfiles/.config/rmpc/
+rsync -aq --delete ~/.config/rofi/ ~/dotfiles/.config/rofi/
+rsync -aq --delete ~/.config/swayimg/ ~/dotfiles/.config/swayimg/
+rsync -aq --delete ~/.config/wal/ ~/dotfiles/.config/wal/
+rsync -aq --delete ~/.config/waybar/ ~/dotfiles/.config/waybar/
 
-rsync -aq ~/Pictures/Wallpaper/ ~/dotfiles/wallpaper/
+rsync -aq --delete ~/Pictures/Wallpaper/ ~/dotfiles/wallpaper/
 
 git add .config/ wallpaper/ 2>/dev/null
 if ! git diff --cached --quiet; then
