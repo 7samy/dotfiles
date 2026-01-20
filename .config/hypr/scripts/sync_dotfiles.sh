@@ -22,4 +22,3 @@ if ! git diff --cached --quiet; then
     git commit -m "auto: $(date '+%Y-%m-%d %H:%M')" 2>/dev/null
     git push origin main 2>/dev/null
 fi
-EOF
