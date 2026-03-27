@@ -48,7 +48,7 @@ kitty --title="nvim" nvim &
 # Applications
 flatpak run com.discordapp.Discord &
 steam & 
-brave --password-store=basic &
+zen-browser & 
 openrgb &
 
 # Audio
