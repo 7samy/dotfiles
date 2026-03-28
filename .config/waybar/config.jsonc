@@ -3,7 +3,7 @@
     "height": 10,
     "modules-left": ["custom/arch", "memory", "custom/window-name"],
     "modules-center": ["hyprland/workspaces"],
-    "modules-right": ["pulseaudio","clock"],
+    "modules-right": ["network","pulseaudio","clock"],
     "custom/arch": {
       "format": " "
     },
@@ -57,6 +57,11 @@
     "interval": 1, 
     "format": "󰍛 {used}Gb",
     "format-alt": "󰍛 {used:0.1f}Gb"
+    },
+	
+    "network": {
+    "interface": "enp10s0",
+    "format": " {ip}"
     },
 
 
