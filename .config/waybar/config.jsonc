@@ -61,9 +61,9 @@
 	
     "network": {
     "interface": "enp10s0",
-    "format": " {ip}"
+    "format": " {ipaddr}",
+    "format-disconnected": "❌ Offline"
     },
-
 
     "custom/window-name": {
       "format": "<b>{}</b>",
