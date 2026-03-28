@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sudo yazi
+yazi
