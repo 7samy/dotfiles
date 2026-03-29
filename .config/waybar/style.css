@@ -65,7 +65,7 @@ window#waybar {
   margin-right: 15px;
 }
 
-#network{
+#custom-vpn {
   font-family: Milker;
   font-size: 12px;
   border-radius: 10px;
@@ -77,6 +77,13 @@ window#waybar {
   margin-right: 15px;
 }
 
+#custom-vpn.connected {
+  color: rgba(166, 227, 161, 0.5); 
+}
+
+#custom-vpn.disconnected {
+  color: rgba(243, 139, 168, 0.5); 
+}
 /*--------------------------------------------------------------------------------------------------*/
 
 /* Left Modules */

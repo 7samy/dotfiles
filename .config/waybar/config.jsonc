@@ -3,7 +3,7 @@
     "height": 10,
     "modules-left": ["custom/arch", "memory", "custom/window-name"],
     "modules-center": ["hyprland/workspaces"],
-    "modules-right": ["network","pulseaudio","clock"],
+    "modules-right": ["custom/vpn", "pulseaudio", "clock"],
     "custom/arch": {
       "format": " "
     },
@@ -59,11 +59,14 @@
     "format-alt": "󰍛 {used:0.1f}Gb"
     },
 	
-    "network": {
-    "interface": "enp10s0",
-    "format": " {ipaddr}",
-    "format-disconnected": "❌ Offline"
-    },
+    "custom/vpn": {
+    "format": "{}",
+    "interval": 5,
+    "return-type": "json",
+    "exec": "/home/azu/.config/waybar/scripts/vpn-toggle.sh",
+    "on-click": "/home/azu/.config/waybar/scripts/vpn-toggle.sh toggle",
+    "tooltip": true
+},
 
     "custom/window-name": {
       "format": "<b>{}</b>",
