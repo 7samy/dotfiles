@@ -78,7 +78,7 @@ window#waybar {
 }
 
 #custom-vpn.connected {
-  color: rgba(166, 227, 161, 0.5); 
+  color: rgba(166, 227, 161, 0.4); 
 }
 
 #custom-vpn.disconnected {
