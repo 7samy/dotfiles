@@ -1,4 +1,3 @@
 #!/bin/bash
 
-kitty --title="nvim" nvim & 
-
+kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim

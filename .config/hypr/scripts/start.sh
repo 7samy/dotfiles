@@ -43,15 +43,21 @@ hyprctl dispatch movewindow d
 
 hyprctl dispatch focuswindow "title:^Left$"
 
-kitty --title="nvim" nvim &
+kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim
 
-# Applications
+
+
+# APPLICATIONS #
+
 flatpak run com.discordapp.Discord &
 steam & 
 zen-browser & 
 openrgb &
 
-# Audio
+
+
+# AUDIO #
+
 systemctl --user enable --now mpd.service
 sleep 2  # Give MPD time to start
 
