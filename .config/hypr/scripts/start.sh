@@ -49,7 +49,7 @@ kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim
 
 # APPLICATIONS #
 
-flatpak run com.discordapp.Discord &
+discord &
 steam & 
 zen-browser & 
 openrgb &
