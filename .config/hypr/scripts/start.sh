@@ -43,7 +43,7 @@ hyprctl dispatch movewindow d
 
 hyprctl dispatch focuswindow "title:^Left$"
 
-kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim
+kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim &
 
 
 
