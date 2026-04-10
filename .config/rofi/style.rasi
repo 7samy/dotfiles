@@ -97,7 +97,6 @@ element {
   cursor:                      pointer;
 }
 
-rofi
 element selected.normal {
   border-radius:               7px;
   background-color:            @color7;
