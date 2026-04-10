@@ -19,3 +19,4 @@ swww img "$selected_file" --transition-type fade --transition-step 10
 /home/azu/.config/waybar/scripts/waybar_rgba.sh
 /home/azu/.config/hypr/scripts/restart_waybar.sh
 /home/azu/.config/hypr/scripts/restart_nvim.sh
+/home/azu/.config/hypr/scripts/yazi_wal.sh
