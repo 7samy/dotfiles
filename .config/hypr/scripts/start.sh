@@ -53,6 +53,7 @@ discord &
 steam & 
 zen-browser & 
 openrgb &
+qs &
 
 
 

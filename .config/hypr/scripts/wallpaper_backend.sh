@@ -14,11 +14,9 @@ wal -n -i "$selected_file"
 wpg -s "$selected_file"
 swww img "$selected_file" --transition-type fade --transition-step 10
 
-pkill qs
-sleep 1
-qs &
-
 # ----- FOLGENDE SKRIPTE AUSFÜHREN ----- #
 /home/azu/.config/rofi/scripts/rofi_rgba.sh
 /home/azu/.config/hypr/scripts/restart_nvim.sh
 /home/azu/.config/hypr/scripts/yazi_wal.sh
+/home/azu/.config/quickshell/scripts/qs_restart.sh
+
