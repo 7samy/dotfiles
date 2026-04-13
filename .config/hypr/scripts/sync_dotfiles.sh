@@ -10,7 +10,6 @@ rsync -aq --delete ~/.config/mpd/ ~/dotfiles/.config/mpd/
 rsync -aq --delete ~/.config/neofetch/ ~/dotfiles/.config/neofetch/
 rsync -aq --delete ~/.config/nvim/ ~/dotfiles/.config/nvim/
 rsync -aq --delete ~/.config/rmpc/ ~/dotfiles/.config/rmpc/
-rsync -aq --delete ~/.config/rofi/ ~/dotfiles/.config/rofi/
 rsync -aq --delete ~/.config/swayimg/ ~/dotfiles/.config/swayimg/
 rsync -aq --delete ~/.config/wal/ ~/dotfiles/.config/wal/
 rsync -aq --delete ~/.config/waybar/ ~/dotfiles/.config/waybar/
