@@ -12,6 +12,7 @@ rsync -aq --delete ~/.config/nvim/ ~/dotfiles/.config/nvim/
 rsync -aq --delete ~/.config/rmpc/ ~/dotfiles/.config/rmpc/
 rsync -aq --delete ~/.config/swayimg/ ~/dotfiles/.config/swayimg/
 rsync -aq --delete ~/.config/wal/ ~/dotfiles/.config/wal/
+rsync -aq --delete ~/.config/quickshell/ ~/dotfiles/.config/quickshell/
 rsync -aq --delete ~/.config/waybar/ ~/dotfiles/.config/waybar/
 
 rsync -aq --delete ~/Pictures/Wallpaper/ ~/dotfiles/wallpaper/

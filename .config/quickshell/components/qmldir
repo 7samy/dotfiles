@@ -1,0 +1,17 @@
+singleton HyprlandData 1.0 HyprlandData.qml
+singleton WalColors 1.0 WalColors.qml
+singleton BarState 1.0 BarState.qml
+singleton AppLauncherState 1.0 AppLauncherState.qml
+singleton VpnState 1.0 VpnState.qml
+singleton AudioState 1.0 AudioState.qml
+AudioToggle 1.0 AudioToggle.qml
+Clock 1.0 Clock.qml
+Workspaces 1.0 Workspaces.qml
+ActiveWindow 1.0 ActiveWindow.qml
+AppLauncher 1.0 AppLauncher.qml
+VpnToggle 1.0 VpnToggle.qml
+SystemStats 1.0 SystemStats.qml
+SystemStatsPopup 1.0 SystemStatsPopup.qml
+StatRow 1.0 StatRow.qml
+KeyboardWidget 1.0 KeyboardWidget.qml
+VialPopup 1.0 VialPopup.qml
