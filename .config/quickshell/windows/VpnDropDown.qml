@@ -131,7 +131,7 @@ PanelWindow {
                 Row {
                     spacing: 8
                     Text { text: "󰍃"; color: WalColors.color4; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 13 }
-                    Text { text: VpnState.vpnCity !== "" ? VpnState.vpnCity + ", " + VpnState.vpnCountry : "—"; color: WalColors.color2; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12 }
+                    Text { text: VpnState.vpnCity !== "" ? VpnState.vpnCity + ", " + VpnState.vpnCountry : "—"; color: WalColors.color2; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 12; width: 50 }
                 }
                 Row {
                     spacing: 8
