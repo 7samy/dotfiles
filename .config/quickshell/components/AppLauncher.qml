@@ -237,7 +237,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.name
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
+                            font.pixelSize: 13
                             color: WalColors.color7
                         }
                     }
