@@ -1,7 +1,6 @@
 import Qt.labs.folderlistmodel
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 
@@ -10,10 +9,6 @@ Window {
 
     width: 1000
     height: 600
-    WlrLayerShell.keyboardFocus: WlrLayerShell.OnDemand
-    WlrLayerShell.layer: WlrLayerShell.Overlay
-    WlrLayerShell.namespace: "wallpaper-picker"
-    WlrLayerShell.anchor: WlrLayerShell.Center
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Escape)
             wallpaperPicker.visible = false;
