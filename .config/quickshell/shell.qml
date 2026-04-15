@@ -21,6 +21,12 @@ ShellRoot {
     }
 
     // HIER kommt das Fenster hin (außerhalb von Variants!)
+    Wallpaper {
+        id: wallpaperWindow
+
+        visible: false
+    }
+
     Variants {
         // Der Wallpaper-Block ist hier jetzt weg!
 
