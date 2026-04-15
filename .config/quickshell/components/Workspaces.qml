@@ -9,136 +9,223 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
-    // Cache: Titel/AppID -> Icon-Pfad
+    // Cache für gefundene Icons (Spielname -> Icon-Pfad)
     property var iconCache: ({})
     property var steamPath: ""
+    property var steamGameMap: ({})   // Spielname (klein) -> AppId
 
-    // Initialisierung: Steam-Pfad einmalig ermitteln
+    // Initialisierung: Steam-Pfad und alle Spiele einmalig laden
     Component.onCompleted: {
-        steamPath = findSteamPath()
-        console.log("Steam path:", steamPath)
+        findSteamPathAndGames()
     }
 
-    // Hilfsfunktion: synchronen Shell-Befehl ausführen und stdout zurückgeben
-    function runCmd(cmd) {
-        let proc = Process.create()
-        proc.command = ["sh", "-c", cmd]
-        let output = ""
-        let parser = StdioCollector.create()
-        parser.delimiter = "\n"
-        parser.onRead.connect(function(data) { output += data })
-        proc.stdout = parser
-        proc.running = true
-        proc.waitForFinished(-1)
-        return output.trim()
-    }
-
-    // Steam-Installationspfad finden
-    function findSteamPath() {
+    // Asynchrone Initialisierung
+    function findSteamPathAndGames() {
         let user = Qt.environmentVariables().USER
         let paths = [
             "/home/" + user + "/.local/share/Steam",
             "/home/" + user + "/.steam/steam"
         ]
-        for (let p of paths) {
-            if (runCmd("test -d " + p + " && echo 'yes'") === "yes") {
-                return p
+        let idx = 0
+        function tryNext() {
+            if (idx >= paths.length) {
+                console.log("Steam nicht gefunden")
+                return
             }
-        }
-        return ""
-    }
-
-    // Aus einem Fenstertitel die Steam-App-ID ermitteln
-    function getAppIdFromTitle(title) {
-        if (!steamPath || title === "") return ""
-        let manifestDir = steamPath + "/steamapps/"
-        // Einmalig alle Manifest-Dateien einlesen (wird pro Titel aufgerufen, aber durch Cache abgefangen)
-        let files = runCmd("ls " + manifestDir + "appmanifest_*.acf 2>/dev/null")
-        if (files === "") return ""
-        let manifests = files.split("\n")
-        for (let m of manifests) {
-            // Extrahiere App-ID aus Dateinamen
-            let match = m.match(/appmanifest_(\d+)\.acf/)
-            if (!match) continue
-            let appId = match[1]
-            // Lese den Spielnamen aus der Datei (nur einmal pro AppId cachen)
-            let name = runCmd("grep -m1 '\"name\"' " + m + " | cut -d'\"' -f4")
-            if (name !== "" && title.toLowerCase().indexOf(name.toLowerCase()) !== -1) {
-                return appId
-            }
-        }
-        return ""
-    }
-
-    // Icon-Pfad für eine Steam-App-ID finden
-    function getSteamIconPath(appId) {
-        if (!appId) return ""
-        // Suche in verschiedenen Größen (priorisiere 64x64 oder 48x48)
-        let sizes = ["64x64", "48x64", "128x128", "256x256", "32x32"]
-        for (let sz of sizes) {
-            let iconPath = "/home/" + Qt.environmentVariables().USER + "/.local/share/icons/hicolor/" + sz + "/apps/steam_icon_" + appId + ".png"
-            if (runCmd("test -f " + iconPath + " && echo 'yes'") === "yes") {
-                return "file://" + iconPath
-            }
-        }
-        // Fallback: im Steam-Verzeichnis nach .ico suchen (selten)
-        let icoPath = steamPath + "/games/steam_icon_" + appId + ".ico"
-        if (runCmd("test -f " + icoPath + " && echo 'yes'") === "yes") {
-            return "file://" + icoPath
-        }
-        return ""
-    }
-
-    // Hauptfunktion: Icon für ein Fenster ermitteln
-    function getCustomIconForWindow(winClass, winTitle) {
-        // Manuelle Ausnahmen (für nicht-Steam-Apps)
-        const titleMap = {
-            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png"
-        }
-        if (winTitle && titleMap[winTitle]) return titleMap[winTitle]
-
-        const classMap = {
-            "code-oss": "code-oss",
-            "code": "visual-studio-code",
-            "zen-alpha": "zen-browser",
-            "zen": "zen-browser",
-            "yazi": "yazi"
-        }
-        if (winClass && classMap[winClass]) return classMap[winClass]
-
-        // Steam selbst
-        if (winClass === "steam") {
-            return "steam"   // wird über image://icon/... aufgelöst
-        }
-
-        // Gamescope (Steam-Spiele)
-        if (winClass === "gamescope" && winTitle) {
-            let cacheKey = "gamescope_" + winTitle
-            if (iconCache[cacheKey]) return iconCache[cacheKey]
-
-            let appId = getAppIdFromTitle(winTitle)
-            if (appId) {
-                let iconPath = getSteamIconPath(appId)
-                if (iconPath) {
-                    iconCache[cacheKey] = iconPath
-                    return iconPath
+            let p = paths[idx]
+            let proc = Process.create()
+            proc.command = ["sh", "-c", "test -d " + p + " && echo 'exists'"]
+            proc.running = true
+            proc.onFinished.connect(() => {
+                let stdout = ""
+                let parser = StdioCollector.create()
+                parser.onRead.connect((data) => { stdout += data })
+                proc.stdout = parser
+                proc.running = true
+                proc.waitForFinished()
+                if (stdout.trim() === "exists") {
+                    steamPath = p
+                    console.log("Steam Pfad:", steamPath)
+                    loadSteamGames()
+                } else {
+                    idx++
+                    tryNext()
                 }
-            }
-            // Fallback: generisches Spiel-Icon (du kannst auch "steam" nehmen)
-            iconCache[cacheKey] = "steam"
-            return "steam"
+            })
         }
+        tryNext()
+    }
 
-        // Normale Desktop-Apps
+    // Lädt alle Steam-Spiele (AppId -> Name) in steamGameMap
+    function loadSteamGames() {
+        if (!steamPath) return
+        let manifestDir = steamPath + "/steamapps/"
+        let proc = Process.create()
+        proc.command = ["sh", "-c", "ls " + manifestDir + "appmanifest_*.acf 2>/dev/null"]
+        proc.running = true
+        proc.onFinished.connect(() => {
+            let stdout = ""
+            let parser = StdioCollector.create()
+            parser.onRead.connect((data) => { stdout += data })
+            proc.stdout = parser
+            proc.running = true
+            proc.waitForFinished()
+            let files = stdout.trim().split("\n")
+            for (let f of files) {
+                if (f === "") continue
+                let match = f.match(/appmanifest_(\d+)\.acf/)
+                if (!match) continue
+                let appId = match[1]
+                let nameProc = Process.create()
+                nameProc.command = ["grep", "-m1", '"name"', f]
+                nameProc.running = true
+                nameProc.onFinished.connect(() => {
+                    let nameOut = ""
+                    let nameParser = StdioCollector.create()
+                    nameParser.onRead.connect((data) => { nameOut += data })
+                    nameProc.stdout = nameParser
+                    nameProc.running = true
+                    nameProc.waitForFinished()
+                    let gameName = nameOut.split('"')[3]
+                    if (gameName) {
+                        steamGameMap[gameName.toLowerCase()] = appId
+                        console.log("Geladen:", gameName, "->", appId)
+                    }
+                })
+            }
+        })
+    }
+
+    // Sucht zu einem Fenstertitel die AppId (asynchron, aber mit Cache)
+    function findAppIdForTitle(title, callback) {
+        if (!title || !steamPath) {
+            callback("")
+            return
+        }
+        let lowerTitle = title.toLowerCase()
+        // Direkter Cache-Treffer?
+        if (iconCache[lowerTitle]) {
+            callback(iconCache[lowerTitle])
+            return
+        }
+        // Suche in der bereits geladenen Map
+        for (let gameName in steamGameMap) {
+            if (lowerTitle.indexOf(gameName) !== -1 || gameName.indexOf(lowerTitle) !== -1) {
+                let appId = steamGameMap[gameName]
+                iconCache[lowerTitle] = appId
+                callback(appId)
+                return
+            }
+        }
+        // Falls nichts gefunden, asynchron nochmal in den Manifesten suchen (langsam)
+        let manifestDir = steamPath + "/steamapps/"
+        let lsProc = Process.create()
+        lsProc.command = ["sh", "-c", "ls " + manifestDir + "appmanifest_*.acf"]
+        lsProc.running = true
+        lsProc.onFinished.connect(() => {
+            let out = ""
+            let p = StdioCollector.create()
+            p.onRead.connect((data) => { out += data })
+            lsProc.stdout = p
+            lsProc.running = true
+            lsProc.waitForFinished()
+            let files = out.trim().split("\n")
+            let found = ""
+            let remaining = files.length
+            if (remaining === 0) {
+                callback("")
+                return
+            }
+            for (let f of files) {
+                if (f === "") {
+                    remaining--
+                    if (remaining === 0) callback("")
+                    continue
+                }
+                let match = f.match(/appmanifest_(\d+)\.acf/)
+                if (!match) {
+                    remaining--
+                    if (remaining === 0) callback(found)
+                    continue
+                }
+                let appId = match[1]
+                let grepProc = Process.create()
+                grepProc.command = ["grep", "-m1", '"name"', f]
+                grepProc.running = true
+                grepProc.onFinished.connect(() => {
+                    let nameOut = ""
+                    let np = StdioCollector.create()
+                    np.onRead.connect((data) => { nameOut += data })
+                    grepProc.stdout = np
+                    grepProc.running = true
+                    grepProc.waitForFinished()
+                    let gameName = nameOut.split('"')[3]
+                    if (gameName && lowerTitle.indexOf(gameName.toLowerCase()) !== -1) {
+                        found = appId
+                        steamGameMap[gameName.toLowerCase()] = appId
+                    }
+                    remaining--
+                    if (remaining === 0) {
+                        if (found) iconCache[lowerTitle] = found
+                        callback(found)
+                    }
+                })
+            }
+        })
+    }
+
+    // Liefert den Icon-Pfad für eine AppId (synchron, nur Dateiprüfung)
+    function getIconPathForAppId(appId) {
+        if (!appId) return ""
+        let user = Qt.environmentVariables().USER
+        let sizes = ["64x64", "48x48", "128x128", "256x256", "32x32"]
+        for (let sz of sizes) {
+            let path = "/home/" + user + "/.local/share/icons/hicolor/" + sz + "/apps/steam_icon_" + appId + ".png"
+            let testProc = Process.create()
+            testProc.command = ["test", "-f", path]
+            testProc.running = true
+            testProc.waitForFinished()
+            if (testProc.exitCode === 0) {
+                return "file://" + path
+            }
+        }
+        return ""
+    }
+
+    // Zentrale Funktion: Liefert asynchron das Icon für ein Fenster
+    function resolveIcon(winClass, winTitle, callback) {
+        // Normale Apps
+        if (winClass === "steam") {
+            callback("steam")
+            return
+        }
+        if (winClass === "gamescope" && winTitle) {
+            findAppIdForTitle(winTitle, (appId) => {
+                if (appId) {
+                    let icon = getIconPathForAppId(appId)
+                    if (icon) {
+                        callback(icon)
+                        return
+                    }
+                }
+                callback("steam")
+            })
+            return
+        }
+        // Fallback für andere Apps
         if (winClass) {
             let entry = DesktopEntries.heuristicLookup(winClass)
-            if (entry && entry.icon) return entry.icon
-            return winClass.toLowerCase()
+            if (entry && entry.icon) {
+                callback(entry.icon)
+                return
+            }
+            callback(winClass.toLowerCase())
+            return
         }
-        return ""
+        callback("")
     }
 
-    // UI-Teil (unverändert, bis auf die Verwendung der obigen Funktion)
+    // UI - Deklarationen
     Rectangle {
         id: bg
         anchors.centerIn: parent
@@ -163,13 +250,23 @@ Item {
                 readonly property bool isFocused: modelData.id === Hyprland.focusedMonitor?.activeWorkspace?.id
                 readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
 
-                readonly property string resolvedIconId: {
-                    const win = biggestWindow
-                    if (!win) return ""
-                    return workspaceWidget.getCustomIconForWindow(win.class, win.title)
-                }
-
+                property string currentIcon: ""
                 property bool iconValid: false
+
+                // Wenn sich das größte Fenster ändert, neues Icon asynchron laden
+                onBiggestWindowChanged: {
+                    if (biggestWindow) {
+                        iconValid = false
+                        currentIcon = ""
+                        resolveIcon(biggestWindow.class, biggestWindow.title, (icon) => {
+                            currentIcon = icon
+                            iconValid = true
+                        })
+                    } else {
+                        currentIcon = ""
+                        iconValid = false
+                    }
+                }
 
                 width: 35 + (isFocused ? 20 : 0)
                 height: 40
@@ -201,17 +298,20 @@ Item {
                             id: dynamicIcon
                             anchors.fill: parent
                             source: {
-                                if (wsDelegate.resolvedIconId.startsWith("file://"))
-                                    return wsDelegate.resolvedIconId
-                                else if (wsDelegate.resolvedIconId !== "")
-                                    return "image://icon/" + wsDelegate.resolvedIconId
+                                if (currentIcon.startsWith("file://"))
+                                    return currentIcon
+                                else if (currentIcon !== "")
+                                    return "image://icon/" + currentIcon
                                 else
                                     return ""
                             }
                             sourceSize: Qt.size(48, 48)
                             fillMode: Image.PreserveAspectFit
                             onStatusChanged: {
-                                wsDelegate.iconValid = (status === Image.Ready)
+                                if (status === Image.Error) {
+                                    // Fallback auf Steam-Icon
+                                    currentIcon = "steam"
+                                }
                             }
                         }
 
@@ -228,8 +328,6 @@ Item {
                     anchors.fill: parent
                     onClicked: Hyprland.dispatch("workspace " + modelData.id)
                 }
-
-                onResolvedIconIdChanged: iconValid = false
             }
         }
     }
