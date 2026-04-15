@@ -9,6 +9,7 @@ Window {
 
     width: 1000
     height: 600
+    focus: true // wichtig für Keys.onPressed
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Escape)
             wallpaperPicker.visible = false;
@@ -54,7 +55,10 @@ Window {
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: {
-                    wallpaperSetter.arguments = [filePath];
+                    // fileUrl ist ein QString (z.B. "file:///home/azu/.../bild.jpg")
+                    let path = fileUrl.toString().replace(/^file:\/\//, "");
+                    path = decodeURIComponent(path); // Leerzeichen, Sonderzeichen korrekt dekodieren
+                    wallpaperSetter.command = ["swww", "img", path];
                     wallpaperSetter.start();
                     wallpaperPicker.visible = false;
                 }
@@ -74,7 +78,7 @@ Window {
     Process {
         id: wallpaperSetter
 
-        command: ["swww", "img"]
+        command: ["swww", "img"] // wird pro Klick mit Pfad ergänzt
     }
 
 }
