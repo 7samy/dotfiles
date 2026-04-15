@@ -1,26 +1,54 @@
+import "./components/"
+import "./windows"
+import QtQuick
 import Quickshell
 import Quickshell.Hyprland
-import QtQuick
-import "./windows"
-import "./components/"
 
 ShellRoot {
-    // GlobalShortcut aus Quickshell.Hyprland (benötigt Eintrag in hyprland.conf)
     GlobalShortcut {
         name: "toggle_launcher"
         onPressed: AppLauncherState.toggle()
     }
 
-    AppLauncherWindow {}
-
-    Variants {
-        model: Quickshell.screens.filter(s => s.name === "DP-2")
-        delegate: Item {
-            required property var modelData
-            MainBar { screen: modelData }
-            TriggerZone { screen: modelData }
-            VpnDropDown { screen: modelData }
-            AudioDropdown { screen: modelData }
+    GlobalShortcut {
+        name: "toggle_wallpaper"
+        onPressed: {
+            wallpaperWindow.visible = !wallpaperWindow.visible;
         }
     }
+
+    AppLauncherWindow {
+    }
+
+    // HIER kommt das Fenster hin (außerhalb von Variants!)
+    Variants {
+        // Der Wallpaper-Block ist hier jetzt weg!
+
+        model: Quickshell.screens.filter((s) => {
+            return s.name === "DP-2";
+        })
+
+        delegate: Item {
+            required property var modelData
+
+            MainBar {
+                screen: modelData
+            }
+
+            TriggerZone {
+                screen: modelData
+            }
+
+            VpnDropDown {
+                screen: modelData
+            }
+
+            AudioDropdown {
+                screen: modelData
+            }
+
+        }
+
+    }
+
 }
