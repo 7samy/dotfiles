@@ -100,7 +100,7 @@ Window {
             function setWallpaper() {
                 let path = fileUrl.toString().replace(/^file:\/\//, "");
                 path = decodeURIComponent(path);
-                let cmd = `swww img "${path}" && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim`;
+                let cmd = `swww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim`;
                 wallpaperSetter.command = ["sh", "-c", cmd];
                 wallpaperSetter.running = true;
                 wallpaperPicker.visible = false;
