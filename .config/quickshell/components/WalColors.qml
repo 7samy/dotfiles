@@ -6,10 +6,8 @@ pragma Singleton
 QtObject {
     id: root
 
-    // Signale
     signal colorsUpdated()
 
-    // Öffentliche Farb-Properties
     property string color0: "#1a1b26"
     property string color1: "#7aa2f7"
     property string color2: "#9ece6a"
@@ -55,7 +53,7 @@ QtObject {
                 root.color13 = colors?.color13 ?? "#c0caf5"
                 root.color14 = colors?.color14 ?? "#c0caf5"
                 root.color15 = colors?.color15 ?? "#c0caf5"
-                root.colorsUpdated()   // Signal auslösen
+                root.colorsUpdated()   
             }
         }
     }

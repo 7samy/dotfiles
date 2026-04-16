@@ -9,17 +9,14 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
-    // Cache für gefundene Icons (Spielname -> Icon-Pfad)
     property var iconCache: ({})
     property var steamPath: ""
-    property var steamGameMap: ({})   // Spielname (klein) -> AppId
+    property var steamGameMap: ({})  
 
-    // Initialisierung: Steam-Pfad und alle Spiele einmalig laden
     Component.onCompleted: {
         findSteamPathAndGames()
     }
 
-    // Asynchrone Initialisierung
     function findSteamPathAndGames() {
         let user = Qt.environmentVariables().USER
         let paths = [
@@ -56,7 +53,6 @@ Item {
         tryNext()
     }
 
-    // Lädt alle Steam-Spiele (AppId -> Name) in steamGameMap
     function loadSteamGames() {
         if (!steamPath) return
         let manifestDir = steamPath + "/steamapps/"
@@ -96,19 +92,16 @@ Item {
         })
     }
 
-    // Sucht zu einem Fenstertitel die AppId (asynchron, aber mit Cache)
     function findAppIdForTitle(title, callback) {
         if (!title || !steamPath) {
             callback("")
             return
         }
         let lowerTitle = title.toLowerCase()
-        // Direkter Cache-Treffer?
         if (iconCache[lowerTitle]) {
             callback(iconCache[lowerTitle])
             return
         }
-        // Suche in der bereits geladenen Map
         for (let gameName in steamGameMap) {
             if (lowerTitle.indexOf(gameName) !== -1 || gameName.indexOf(lowerTitle) !== -1) {
                 let appId = steamGameMap[gameName]
@@ -117,7 +110,6 @@ Item {
                 return
             }
         }
-        // Falls nichts gefunden, asynchron nochmal in den Manifesten suchen (langsam)
         let manifestDir = steamPath + "/steamapps/"
         let lsProc = Process.create()
         lsProc.command = ["sh", "-c", "ls " + manifestDir + "appmanifest_*.acf"]
@@ -174,7 +166,6 @@ Item {
         })
     }
 
-    // Liefert den Icon-Pfad für eine AppId (synchron, nur Dateiprüfung)
     function getIconPathForAppId(appId) {
         if (!appId) return ""
         let user = Qt.environmentVariables().USER
@@ -192,9 +183,7 @@ Item {
         return ""
     }
 
-    // Zentrale Funktion: Liefert asynchron das Icon für ein Fenster
     function resolveIcon(winClass, winTitle, callback) {
-        // Normale Apps
         if (winClass === "steam") {
             callback("steam")
             return
@@ -212,7 +201,6 @@ Item {
             })
             return
         }
-        // Fallback für andere Apps
         if (winClass) {
             let entry = DesktopEntries.heuristicLookup(winClass)
             if (entry && entry.icon) {
@@ -225,7 +213,6 @@ Item {
         callback("")
     }
 
-    // UI - Deklarationen
     Rectangle {
         id: bg
         anchors.centerIn: parent
@@ -253,7 +240,6 @@ Item {
                 property string currentIcon: ""
                 property bool iconValid: false
 
-                // Wenn sich das größte Fenster ändert, neues Icon asynchron laden
                 onBiggestWindowChanged: {
                     if (biggestWindow) {
                         iconValid = false
@@ -309,7 +295,6 @@ Item {
                             fillMode: Image.PreserveAspectFit
                             onStatusChanged: {
                                 if (status === Image.Error) {
-                                    // Fallback auf Steam-Icon
                                     currentIcon = "steam"
                                 }
                             }

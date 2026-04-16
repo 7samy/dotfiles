@@ -13,23 +13,20 @@ ShellRoot {
     GlobalShortcut {
         name: "toggle_wallpaper"
         onPressed: {
-            wallpaperWindow.visible = !wallpaperWindow.visible;
+            wallpaperPicker.visible = !wallpaperPicker.visible;
         }
     }
 
     AppLauncherWindow {
     }
 
-    // HIER kommt das Fenster hin (außerhalb von Variants!)
     Wallpaper {
-        id: wallpaperWindow
+        id: wallpaperPicker
 
         visible: false
     }
 
     Variants {
-        // Der Wallpaper-Block ist hier jetzt weg!
-
         model: Quickshell.screens.filter((s) => {
             return s.name === "DP-2";
         })
@@ -42,6 +39,10 @@ ShellRoot {
             }
 
             TriggerZone {
+                screen: modelData
+            }
+
+            WallpaperTriggerzone {
                 screen: modelData
             }
 

@@ -109,7 +109,6 @@ PanelWindow {
 
         }
 
-        // Neuzeichnen erzwingen bei Farbänderung
         Connections {
             function onColorsUpdated() {
                 mainPath.fillColor = "transparent";

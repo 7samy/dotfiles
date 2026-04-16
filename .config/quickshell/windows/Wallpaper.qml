@@ -1,7 +1,7 @@
 import "../components"
 import Qt.labs.folderlistmodel
 import QtQuick
-import QtQuick.Controls // ← wichtig für ScrollBar
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -11,20 +11,19 @@ Window {
     id: wallpaperPicker
 
     title: "wallpaper-picker"
-    width: 1000
-    height: 600
+    width: 1280
+    height: 720
     onVisibleChanged: {
         if (visible)
             wallpaperGrid.forceActiveFocus();
 
     }
 
-    // Haupthintergrund
     Rectangle {
         id: background
 
         anchors.fill: parent
-        color: WalColors.withAlpha(WalColors.color0, 0.7)
+        color: WalColors.withAlpha(WalColors.color0, 0.9)
         focus: true
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape)
@@ -32,7 +31,6 @@ Window {
 
         }
 
-        // Live-Update der Farbe (optional)
         Connections {
             function onColorsUpdated() {
                 background.color = "transparent";
@@ -59,7 +57,6 @@ Window {
         showDirs: false
     }
 
-    // Horizontal scrollender GridView
     GridView {
         id: wallpaperGrid
 
@@ -67,23 +64,43 @@ Window {
         anchors.margins: 10
         cellWidth: 500
         cellHeight: 350
-        flow: GridView.FlowTopToBottom // vertikal füllen, dann horizontal
-        // Maximal 3 Zeilen sichtbar, Rest horizontal scrollen
+        flow: GridView.FlowTopToBottom
         height: Math.min(parent.height - 40, 3 * (cellHeight + 5))
         model: wallpaperModel
-        clip: true
+        clip: false
         focus: true
+        Keys.onPressed: (event) => {
+            switch (event.key) {
+            case Qt.Key_J:
+                wallpaperGrid.moveCurrentIndexDown();
+                event.accepted = true;
+                break;
+            case Qt.Key_K:
+                wallpaperGrid.moveCurrentIndexUp();
+                event.accepted = true;
+                break;
+            case Qt.Key_H:
+                wallpaperGrid.moveCurrentIndexLeft();
+                event.accepted = true;
+                break;
+            case Qt.Key_L:
+                wallpaperGrid.moveCurrentIndexRight();
+                event.accepted = true;
+                break;
+            }
+        }
 
-        // Horizontaler Scrollbalken
         ScrollBar.horizontal: ScrollBar {
             policy: ScrollBar.AsNeeded
         }
 
         delegate: Item {
+            id: delegateItem
+
             function setWallpaper() {
                 let path = fileUrl.toString().replace(/^file:\/\//, "");
                 path = decodeURIComponent(path);
-                let cmd = `swww img "${path}" && wal -n -i "${path}" && wpg -s "${path}"`;
+                let cmd = `swww img "${path}" && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim`;
                 wallpaperSetter.command = ["sh", "-c", cmd];
                 wallpaperSetter.running = true;
                 wallpaperPicker.visible = false;
@@ -91,6 +108,8 @@ Window {
 
             width: wallpaperGrid.cellWidth
             height: wallpaperGrid.cellHeight
+            z: GridView.isCurrentItem ? 10 : 0
+            scale: GridView.isCurrentItem ? 1.03 : 1
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     setWallpaper();
@@ -106,14 +125,21 @@ Window {
                 anchors.margins: 10
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                opacity: (imageMouseArea.containsMouse || GridView.isCurrentItem) ? 0.7 : 1
+                opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 6
 
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
                     border.color: WalColors.withAlpha(WalColors.color2, 1)
-                    border.width: 2
-                    visible: parent.parent.GridView.isCurrentItem
+                    border.width: delegateItem.GridView.isCurrentItem ? 3 : 2
+                    visible: delegateItem.GridView.isCurrentItem
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                    }
+
                 }
 
             }
@@ -127,6 +153,14 @@ Window {
                     wallpaperGrid.currentIndex = index;
                     parent.setWallpaper();
                 }
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
             }
 
         }
