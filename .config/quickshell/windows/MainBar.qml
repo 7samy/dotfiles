@@ -1,17 +1,18 @@
-import Quickshell
+import "../components"
 import QtQuick
 import QtQuick.Shapes
-import "../components"
+import Quickshell
 
 PanelWindow {
     id: panelWindow
+
     required property var screen
+
     anchors.top: true
     anchors.left: true
     anchors.right: true
     implicitHeight: 40
     color: "transparent"
-
     exclusiveZone: BarState.barVisible ? 40 : 0
 
     margins {
@@ -22,19 +23,18 @@ PanelWindow {
                 duration: 400
                 easing.type: BarState.barVisible ? Easing.OutBack : Easing.InQuad
             }
+
         }
+
     }
 
     Item {
         id: rootContainer
+
         anchors.centerIn: parent
         width: 1920
         height: parent.height
-
-        opacity: BarState.barVisible ? 1.0 : 0.0
-        Behavior on opacity {
-            NumberAnimation { duration: 250 }
-        }
+        opacity: BarState.barVisible ? 1 : 0
 
         Shape {
             anchors.fill: parent
@@ -46,31 +46,82 @@ PanelWindow {
 
             ShapePath {
                 id: barShape
+
                 fillColor: WalColors.barFillColor
                 strokeColor: "transparent"
                 strokeWidth: 0
 
-                PathMove { x: 0; y: 0 }
-                PathArc { x: 20; y: 20; radiusX: 20; radiusY: 20 }
-                PathLine { x: 20; y: 20 }
-                PathArc { x: 40; y: 40; radiusX: 20; radiusY: 20; direction: PathArc.Counterclockwise }
-                PathLine { x: 1880; y: 40 }
-                PathArc { x: 1900; y: 20; radiusX: 20; radiusY: 20; direction: PathArc.Counterclockwise }
-                PathLine { x: 1900; y: 20 }
-                PathArc { x: 1920; y: 0; radiusX: 20; radiusY: 20 }
-                PathLine { x: 0; y: 0 }
+                PathMove {
+                    x: 0
+                    y: 0
+                }
+
+                PathArc {
+                    x: 20
+                    y: 20
+                    radiusX: 20
+                    radiusY: 20
+                }
+
+                PathLine {
+                    x: 20
+                    y: 20
+                }
+
+                PathArc {
+                    x: 40
+                    y: 40
+                    radiusX: 20
+                    radiusY: 20
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: 1880
+                    y: 40
+                }
+
+                PathArc {
+                    x: 1900
+                    y: 20
+                    radiusX: 20
+                    radiusY: 20
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: 1900
+                    y: 20
+                }
+
+                PathArc {
+                    x: 1920
+                    y: 0
+                    radiusX: 20
+                    radiusY: 20
+                }
+
+                PathLine {
+                    x: 0
+                    y: 0
+                }
+
             }
+
         }
 
         Connections {
-            target: WalColors
             function onBarFillColorChanged() {
-                barShape.fillColor = "transparent"
-                forceRedrawTimer.start()
+                barShape.fillColor = "transparent";
+                forceRedrawTimer.start();
             }
+
+            target: WalColors
         }
+
         Timer {
             id: forceRedrawTimer
+
             interval: 50
             onTriggered: barShape.fillColor = WalColors.barFillColor
         }
@@ -79,15 +130,19 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin: 35
             anchors.rightMargin: 35
-
             y: BarState.barVisible ? 0 : -5
-            Behavior on y { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
 
             Row {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 30
-                Text { text: "󰣇"; color: WalColors.color2; font.pixelSize: 24; verticalAlignment: Text.AlignVCenter }
+
+                Text {
+                    text: "󰣇"
+                    color: WalColors.color2
+                    font.pixelSize: 24
+                    verticalAlignment: Text.AlignVCenter
+                }
 
                 Rectangle {
                     width: 32
@@ -104,36 +159,69 @@ PanelWindow {
 
                     MouseArea {
                         id: launcherMouse
+
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            console.log("Launcher button clicked")
-                            AppLauncherState.toggle()
-                            console.log("Launcher visible:", AppLauncherState.launcherVisible)
+                            console.log("Launcher button clicked");
+                            AppLauncherState.toggle();
+                            console.log("Launcher visible:", AppLauncherState.launcherVisible);
                         }
                     }
+
                 }
 
-                ActiveWindow {}
+                ActiveWindow {
+                }
+
             }
 
-            Workspaces { anchors.centerIn: parent }
+            Workspaces {
+                anchors.centerIn: parent
+            }
 
             Row {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
-                spacing: 45
+                spacing: 40
 
                 Row {
                     spacing: 10
                     height: parent.height
-                    AudioToggle { barScreen: panelWindow.screen }
-                    VpnToggle { barScreen: panelWindow.screen }
+
+                    AudioToggle {
+                        barScreen: panelWindow.screen
+                    }
+
+                    VpnToggle {
+                        barScreen: panelWindow.screen
+                    }
+
                 }
 
-                Clock {}
+                Clock {
+                }
+
             }
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: 500
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
         }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+            }
+
+        }
+
     }
+
 }
