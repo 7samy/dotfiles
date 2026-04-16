@@ -47,7 +47,7 @@ PanelWindow {
             ShapePath {
                 id: barShape
 
-                fillColor: WalColors.barFillColor
+                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
                 strokeColor: "transparent"
                 strokeWidth: 0
 
