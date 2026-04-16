@@ -62,7 +62,7 @@ Window {
 
         anchors.fill: parent
         anchors.margins: 10
-        cellWidth: 500
+        cellWidth: 622
         cellHeight: 350
         flow: GridView.FlowTopToBottom
         height: Math.min(parent.height - 40, 3 * (cellHeight + 5))
@@ -109,7 +109,8 @@ Window {
             width: wallpaperGrid.cellWidth
             height: wallpaperGrid.cellHeight
             z: GridView.isCurrentItem ? 10 : 0
-            scale: GridView.isCurrentItem ? 1.03 : 1
+            scale: GridView.isCurrentItem ? 1.015 : 1
+            opacity: GridView.isCurrentItem ? 1 : 0.6
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     setWallpaper();
@@ -131,7 +132,7 @@ Window {
                     anchors.fill: parent
                     color: "transparent"
                     border.color: WalColors.withAlpha(WalColors.color2, 1)
-                    border.width: delegateItem.GridView.isCurrentItem ? 3 : 2
+                    border.width: delegateItem.GridView.isCurrentItem ? 2 : 2
                     visible: delegateItem.GridView.isCurrentItem
                 }
 

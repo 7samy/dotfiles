@@ -9,14 +9,17 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
+    // Cache für gefundene Icons (Spielname -> Icon-Pfad)
     property var iconCache: ({})
     property var steamPath: ""
-    property var steamGameMap: ({})  
+    property var steamGameMap: ({})   // Spielname (klein) -> AppId
 
+    // Initialisierung: Steam-Pfad und alle Spiele einmalig laden
     Component.onCompleted: {
         findSteamPathAndGames()
     }
 
+    // Asynchrone Initialisierung
     function findSteamPathAndGames() {
         let user = Qt.environmentVariables().USER
         let paths = [
@@ -53,6 +56,7 @@ Item {
         tryNext()
     }
 
+    // Lädt alle Steam-Spiele (AppId -> Name) in steamGameMap
     function loadSteamGames() {
         if (!steamPath) return
         let manifestDir = steamPath + "/steamapps/"
@@ -92,6 +96,7 @@ Item {
         })
     }
 
+    // Sucht zu einem Fenstertitel die AppId (asynchron, aber mit Cache)
     function findAppIdForTitle(title, callback) {
         if (!title || !steamPath) {
             callback("")
@@ -131,7 +136,7 @@ Item {
             for (let f of files) {
                 if (f === "") {
                     remaining--
-                    if (remaining === 0) callback("")
+                    if (remaining === 0) callback(found)
                     continue
                 }
                 let match = f.match(/appmanifest_(\d+)\.acf/)
@@ -213,6 +218,7 @@ Item {
         callback("")
     }
 
+    // UI - Deklarationen
     Rectangle {
         id: bg
         anchors.centerIn: parent
@@ -240,6 +246,7 @@ Item {
                 property string currentIcon: ""
                 property bool iconValid: false
 
+                // Wenn sich das größte Fenster ändert, neues Icon asynchron laden
                 onBiggestWindowChanged: {
                     if (biggestWindow) {
                         iconValid = false
@@ -263,6 +270,8 @@ Item {
                     anchors.centerIn: parent
                     width: isFocused ? 36 : 35
                     height: isFocused ? 36 : 35
+                    opacity: isFocused ? 1 : 0.2
+                    Behavior on opacity { NumberAnimation{ duration: 150}}
                     radius: 11
                     color: isFocused ? "#33ffffff" : "transparent"
 
@@ -295,6 +304,7 @@ Item {
                             fillMode: Image.PreserveAspectFit
                             onStatusChanged: {
                                 if (status === Image.Error) {
+                                    // Fallback auf Steam-Icon
                                     currentIcon = "steam"
                                 }
                             }
