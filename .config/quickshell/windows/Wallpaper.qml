@@ -1,5 +1,7 @@
+import "../components"
 import Qt.labs.folderlistmodel
 import QtQuick
+import QtQuick.Controls // ← wichtig für ScrollBar
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -8,9 +10,9 @@ import Quickshell.Widgets
 Window {
     id: wallpaperPicker
 
+    title: "wallpaper-picker"
     width: 1000
     height: 600
-    // Automatisch den Fokus auf das Grid setzen, wenn das Fenster sichtbar wird
     onVisibleChanged: {
         if (visible)
             wallpaperGrid.forceActiveFocus();
@@ -22,16 +24,31 @@ Window {
         id: background
 
         anchors.fill: parent
-        color: "#1e1e2e"
-        opacity: 0.9
-        radius: 10
-        // Damit das Fenster auf Escape reagiert
+        color: WalColors.withAlpha(WalColors.color0, 0.7)
         focus: true
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape)
                 wallpaperPicker.visible = false;
 
         }
+
+        // Live-Update der Farbe (optional)
+        Connections {
+            function onColorsUpdated() {
+                background.color = "transparent";
+                redrawTimer.start();
+            }
+
+            target: WalColors
+        }
+
+        Timer {
+            id: redrawTimer
+
+            interval: 10
+            onTriggered: background.color = WalColors.withAlpha(WalColors.color0, 0.9)
+        }
+
     }
 
     FolderListModel {
@@ -42,27 +59,30 @@ Window {
         showDirs: false
     }
 
+    // Horizontal scrollender GridView
     GridView {
         id: wallpaperGrid
 
         anchors.fill: parent
-        anchors.margins: 20
-        cellWidth: 200
-        cellHeight: 150
+        anchors.margins: 10
+        cellWidth: 500
+        cellHeight: 350
+        flow: GridView.FlowTopToBottom // vertikal füllen, dann horizontal
+        // Maximal 3 Zeilen sichtbar, Rest horizontal scrollen
+        height: Math.min(parent.height - 40, 3 * (cellHeight + 5))
         model: wallpaperModel
         clip: true
-        // Ermöglicht Navigation mit Pfeiltasten
         focus: true
 
-        delegate: Item {
-            // Zentrale Funktion zum Ausführen von swww
-            function setWallpaper() {
-                // Sobald der Prozess fertig ist (running wird false)
-                // HIER die Magie: Wir rufen die Funktion im Singleton auf
+        // Horizontaler Scrollbalken
+        ScrollBar.horizontal: ScrollBar {
+            policy: ScrollBar.AsNeeded
+        }
 
+        delegate: Item {
+            function setWallpaper() {
                 let path = fileUrl.toString().replace(/^file:\/\//, "");
                 path = decodeURIComponent(path);
-                // Wir führen wal aus und danach rufen wir eine Funktion in Quickshell auf
                 let cmd = `swww img "${path}" && wal -n -i "${path}" && wpg -s "${path}"`;
                 wallpaperSetter.command = ["sh", "-c", cmd];
                 wallpaperSetter.running = true;
@@ -71,7 +91,6 @@ Window {
 
             width: wallpaperGrid.cellWidth
             height: wallpaperGrid.cellHeight
-            // Reagiert auf Enter/Return wenn das Element markiert ist
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     setWallpaper();
@@ -84,20 +103,17 @@ Window {
 
                 source: fileUrl
                 anchors.fill: parent
-                anchors.margins: 5
+                anchors.margins: 10
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                // Highlight-Effekt bei Hover oder Tastatur-Fokus
                 opacity: (imageMouseArea.containsMouse || GridView.isCurrentItem) ? 0.7 : 1
 
-                // Rahmen um das aktuell mit der Tastatur gewählte Bild
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.color: "#89b4fa" // Catppuccin Blue
-                    border.width: 3
+                    border.color: WalColors.withAlpha(WalColors.color2, 1)
+                    border.width: 2
                     visible: parent.parent.GridView.isCurrentItem
-                    radius: 5
                 }
 
             }
@@ -118,8 +134,6 @@ Window {
     }
 
     Process {
-        // Das Command wird dynamisch im Script gesetzt
-
         id: wallpaperSetter
     }
 

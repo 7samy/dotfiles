@@ -110,8 +110,9 @@ PanelWindow {
 
         }
 
+        // NEUER Block: Erzwingt Neuzeichnen bei Farbänderung
         Connections {
-            function onBarFillColorChanged() {
+            function onColorsUpdated() {
                 barShape.fillColor = "transparent";
                 forceRedrawTimer.start();
             }
@@ -122,8 +123,8 @@ PanelWindow {
         Timer {
             id: forceRedrawTimer
 
-            interval: 50
-            onTriggered: barShape.fillColor = WalColors.barFillColor
+            interval: 10
+            onTriggered: barShape.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
         }
 
         Item {

@@ -1,19 +1,19 @@
+import "../components"
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
-import "../components"
 
 PanelWindow {
     id: dropdown
-    required property var screen
-    anchors.top: true
-    anchors.left: true
 
+    required property var screen
     readonly property real radius: 20
     readonly property real menuWidth: 220
 
+    anchors.top: true
+    anchors.left: true
     implicitWidth: menuWidth + (2 * radius)
     implicitHeight: 100
     color: "transparent"
@@ -24,23 +24,20 @@ PanelWindow {
         left: AudioState.dropdownX
     }
 
-    Process { id: setVolumeProcess }
+    Process {
+        id: setVolumeProcess
+    }
 
     Item {
         id: container
+
         width: parent.width
         height: AudioState.dropdownOpen ? 100 : 0
         clip: true
 
-        Behavior on height {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.InOutCubic
-            }
-        }
-
         Shape {
             id: backgroundShape
+
             width: parent.width
             height: 100
             anchors.top: parent.top
@@ -52,35 +49,87 @@ PanelWindow {
 
             ShapePath {
                 id: mainPath
-                fillColor: WalColors.barFillColor
+
+                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
                 strokeColor: "transparent"
                 strokeWidth: 0
 
-                PathMove { x: 0; y: 0 }
-                PathArc { x: radius; y: radius; radiusX: radius; radiusY: radius; direction: PathArc.Clockwise }
-                PathLine { x: radius; y: 100 - radius }
-                PathArc { x: radius + radius; y: 100; radiusX: radius; radiusY: radius; direction: PathArc.Counterclockwise }
-                PathLine { x: radius + menuWidth - radius; y: 100 }
-                PathArc { x: radius + menuWidth; y: 100 - radius; radiusX: radius; radiusY: radius; direction: PathArc.Counterclockwise }
-                PathLine { x: radius + menuWidth; y: radius }
-                PathArc { x: radius + menuWidth + radius; y: 0; radiusX: radius; radiusY: radius; direction: PathArc.Clockwise }
-                PathLine { x: 0; y: 0 }
+                PathMove {
+                    x: 0
+                    y: 0
+                }
+
+                PathArc {
+                    x: radius
+                    y: radius
+                    radiusX: radius
+                    radiusY: radius
+                    direction: PathArc.Clockwise
+                }
+
+                PathLine {
+                    x: radius
+                    y: 100 - radius
+                }
+
+                PathArc {
+                    x: radius + radius
+                    y: 100
+                    radiusX: radius
+                    radiusY: radius
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: radius + menuWidth - radius
+                    y: 100
+                }
+
+                PathArc {
+                    x: radius + menuWidth
+                    y: 100 - radius
+                    radiusX: radius
+                    radiusY: radius
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: radius + menuWidth
+                    y: radius
+                }
+
+                PathArc {
+                    x: radius + menuWidth + radius
+                    y: 0
+                    radiusX: radius
+                    radiusY: radius
+                    direction: PathArc.Clockwise
+                }
+
+                PathLine {
+                    x: 0
+                    y: 0
+                }
+
             }
+
         }
 
+        // NEU: Erzwingt Neuzeichnen bei Farbänderung
         Connections {
-            target: WalColors
-            function onBarFillColorChanged() {
-                mainPath.fillColor = "transparent"
-                forceRedrawTimer.start()
+            function onColorsUpdated() {
+                mainPath.fillColor = "transparent";
+                forceRedrawTimer.start();
             }
+
+            target: WalColors
         }
 
         Timer {
             id: forceRedrawTimer
-            interval: 50
-            repeat: false
-            onTriggered: mainPath.fillColor = WalColors.barFillColor
+
+            interval: 10
+            onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
         }
 
         Item {
@@ -89,6 +138,9 @@ PanelWindow {
             anchors.bottom: parent.bottom
 
             Column {
+                spacing: 6
+                topPadding: 8
+
                 anchors {
                     top: parent.top
                     left: parent.left
@@ -96,26 +148,27 @@ PanelWindow {
                     leftMargin: radius + 14
                     rightMargin: radius + 14
                 }
-                
-                // Hier wurden die Werte noch weiter verringert, 
-                // um alles weiter nach oben zu ziehen:
-                spacing: 6 
-                topPadding: 8
 
                 Row {
                     spacing: 8
                     width: parent.width
-
                 }
 
                 Slider {
                     id: volumeSlider
+
                     from: 0
                     to: 100
                     value: AudioState.volumePercent
                     width: parent.width
                     height: 24
                     z: 10
+                    onMoved: {
+                        AudioState.volumePercent = value;
+                        var frac = value / 100;
+                        setVolumeProcess.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", frac.toFixed(2)];
+                        setVolumeProcess.running = true;
+                    }
 
                     background: Rectangle {
                         x: volumeSlider.leftPadding
@@ -133,6 +186,7 @@ PanelWindow {
                             color: WalColors.color4
                             radius: 2
                         }
+
                     }
 
                     handle: Rectangle {
@@ -146,12 +200,6 @@ PanelWindow {
                         border.width: 2
                     }
 
-                    onMoved: {
-                        AudioState.volumePercent = value
-                        var frac = value / 100.0
-                        setVolumeProcess.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", frac.toFixed(2)]
-                        setVolumeProcess.running = true
-                    }
                 }
 
                 Rectangle {
@@ -166,16 +214,30 @@ PanelWindow {
                     font.pixelSize: 10
                     font.family: "JetBrainsMono Nerd Font"
                 }
+
             }
+
         }
 
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
             propagateComposedEvents: true
-            onPressed: (mouse) => mouse.accepted = false
+            onPressed: (mouse) => {
+                return mouse.accepted = false;
+            }
             onEntered: AudioState.menuHovered = true
             onExited: AudioState.menuHovered = false
         }
+
+        Behavior on height {
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.InOutCubic
+            }
+
+        }
+
     }
+
 }
