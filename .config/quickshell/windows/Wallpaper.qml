@@ -125,7 +125,7 @@ Window {
                 anchors.margins: 10
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 6
+                opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 1
 
                 Rectangle {
                     anchors.fill: parent
