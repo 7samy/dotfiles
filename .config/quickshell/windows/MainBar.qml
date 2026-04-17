@@ -191,6 +191,10 @@ PanelWindow {
                     spacing: 10
                     height: parent.height
 
+                    Stats {
+                        barScreen: panelWindow.screen
+                    }
+
                     AudioToggle {
                         barScreen: panelWindow.screen
                     }

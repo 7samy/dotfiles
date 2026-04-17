@@ -7,7 +7,7 @@ import Quickshell.Io
 Item {
     id: root
 
-    property string terminalCommand: "kitty"
+    property string terminalCommand: "kitty" // Dein Terminal
     property var allApps: []
     property var filteredApps: allApps.filter((app) => {
         return app.name.toLowerCase().includes(AppLauncherState.searchText.toLowerCase());
@@ -209,6 +209,7 @@ Item {
                             height: 32
                             anchors.verticalCenter: parent.verticalCenter
                             radius: 4
+                            color: WalColors.withAlpha(WalColors.color2, 0.1)
 
                             Image {
                                 id: appIcon

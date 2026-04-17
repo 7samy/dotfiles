@@ -54,10 +54,6 @@ ShellRoot {
                 screen: modelData
             }
 
-            Stats {
-                screen: modelData
-            }
-
         }
 
     }
