@@ -42,11 +42,11 @@ Item {
                     });
                     if (name && exec && !isBlacklisted)
                         apps.push({
-                            "name": name,
-                            "exec": exec,
-                            "icon": icon,
-                            "terminal": needsTerminal
-                        });
+                        "name": name,
+                        "exec": exec,
+                        "icon": icon,
+                        "terminal": needsTerminal
+                    });
 
                 }
             }
@@ -209,7 +209,6 @@ Item {
                             height: 32
                             anchors.verticalCenter: parent.verticalCenter
                             radius: 4
-                            color: WalColors.withAlpha(WalColors.color2, 0.1)
 
                             Image {
                                 id: appIcon
@@ -221,9 +220,9 @@ Item {
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
                                 onStatusChanged: {
-                                    if (status === Image.Error) {
+                                    if (status === Image.Error)
                                         fallback.visible = true;
-                                    }
+
                                 }
                             }
 

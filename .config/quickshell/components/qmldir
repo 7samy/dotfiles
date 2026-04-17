@@ -7,6 +7,7 @@ singleton AudioState 1.0 AudioState.qml
 AudioToggle 1.0 AudioToggle.qml
 Clock 1.0 Clock.qml
 Workspaces 1.0 Workspaces.qml
+Stats 1.0 Stats.qml
 ActiveWindow 1.0 ActiveWindow.qml
 AppLauncher 1.0 AppLauncher.qml
 VpnToggle 1.0 VpnToggle.qml
