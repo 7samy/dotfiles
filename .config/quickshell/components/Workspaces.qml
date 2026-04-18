@@ -9,216 +9,100 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
-    // Cache für gefundene Icons (Spielname -> Icon-Pfad)
     property var iconCache: ({})
-    property var steamPath: ""
-    property var steamGameMap: ({})   // Spielname (klein) -> AppId
+    property string steamPath: ""
+    property var steamGameMap: ({})
 
-    // Initialisierung: Steam-Pfad und alle Spiele einmalig laden
     Component.onCompleted: {
         findSteamPathAndGames()
     }
 
-    // Asynchrone Initialisierung
     function findSteamPathAndGames() {
         let user = Qt.environmentVariables().USER
         let paths = [
             "/home/" + user + "/.local/share/Steam",
             "/home/" + user + "/.steam/steam"
         ]
-        let idx = 0
-        function tryNext() {
-            if (idx >= paths.length) {
-                console.log("Steam nicht gefunden")
-                return
+        
+        // Einfacherer Check via Shell
+        let checkProc = Process.create()
+        checkProc.command = ["sh", "-c", `for p in ${paths.join(" ")}; do if [ -d "$p" ]; then echo "$p"; break; fi; done`]
+        
+        let output = ""
+        let collector = StdioCollector.create()
+        collector.onRead.connect(data => { output += data })
+        checkProc.stdout = collector
+        
+        checkProc.onFinished.connect(() => {
+            let found = output.trim()
+            if (found) {
+                steamPath = found
+                console.log("Steam Pfad gefunden:", steamPath)
+                loadSteamGames()
             }
-            let p = paths[idx]
-            let proc = Process.create()
-            proc.command = ["sh", "-c", "test -d " + p + " && echo 'exists'"]
-            proc.running = true
-            proc.onFinished.connect(() => {
-                let stdout = ""
-                let parser = StdioCollector.create()
-                parser.onRead.connect((data) => { stdout += data })
-                proc.stdout = parser
-                proc.running = true
-                proc.waitForFinished()
-                if (stdout.trim() === "exists") {
-                    steamPath = p
-                    console.log("Steam Pfad:", steamPath)
-                    loadSteamGames()
-                } else {
-                    idx++
-                    tryNext()
-                }
-            })
-        }
-        tryNext()
+        })
+        checkProc.running = true
     }
 
-    // Lädt alle Steam-Spiele (AppId -> Name) in steamGameMap
     function loadSteamGames() {
         if (!steamPath) return
         let manifestDir = steamPath + "/steamapps/"
+        
         let proc = Process.create()
-        proc.command = ["sh", "-c", "ls " + manifestDir + "appmanifest_*.acf 2>/dev/null"]
-        proc.running = true
+        // Extrahiert AppID und Name direkt paarweise aus allen .acf Dateien
+        proc.command = ["sh", "-c", `grep -hE '("appid"|"name")' ${manifestDir}appmanifest_*.acf | awk -F'寿' '{print $4}' | sed 'N;s/\\n/|/'`]
+        
+        let output = ""
+        let collector = StdioCollector.create()
+        collector.onRead.connect(data => { output += data })
+        proc.stdout = collector
+        
         proc.onFinished.connect(() => {
-            let stdout = ""
-            let parser = StdioCollector.create()
-            parser.onRead.connect((data) => { stdout += data })
-            proc.stdout = parser
-            proc.running = true
-            proc.waitForFinished()
-            let files = stdout.trim().split("\n")
-            for (let f of files) {
-                if (f === "") continue
-                let match = f.match(/appmanifest_(\d+)\.acf/)
-                if (!match) continue
-                let appId = match[1]
-                let nameProc = Process.create()
-                nameProc.command = ["grep", "-m1", '"name"', f]
-                nameProc.running = true
-                nameProc.onFinished.connect(() => {
-                    let nameOut = ""
-                    let nameParser = StdioCollector.create()
-                    nameParser.onRead.connect((data) => { nameOut += data })
-                    nameProc.stdout = nameParser
-                    nameProc.running = true
-                    nameProc.waitForFinished()
-                    let gameName = nameOut.split('"')[3]
-                    if (gameName) {
-                        steamGameMap[gameName.toLowerCase()] = appId
-                        console.log("Geladen:", gameName, "->", appId)
-                    }
-                })
-            }
-        })
-    }
-
-    // Sucht zu einem Fenstertitel die AppId (asynchron, aber mit Cache)
-    function findAppIdForTitle(title, callback) {
-        if (!title || !steamPath) {
-            callback("")
-            return
-        }
-        let lowerTitle = title.toLowerCase()
-        if (iconCache[lowerTitle]) {
-            callback(iconCache[lowerTitle])
-            return
-        }
-        for (let gameName in steamGameMap) {
-            if (lowerTitle.indexOf(gameName) !== -1 || gameName.indexOf(lowerTitle) !== -1) {
-                let appId = steamGameMap[gameName]
-                iconCache[lowerTitle] = appId
-                callback(appId)
-                return
-            }
-        }
-        let manifestDir = steamPath + "/steamapps/"
-        let lsProc = Process.create()
-        lsProc.command = ["sh", "-c", "ls " + manifestDir + "appmanifest_*.acf"]
-        lsProc.running = true
-        lsProc.onFinished.connect(() => {
-            let out = ""
-            let p = StdioCollector.create()
-            p.onRead.connect((data) => { out += data })
-            lsProc.stdout = p
-            lsProc.running = true
-            lsProc.waitForFinished()
-            let files = out.trim().split("\n")
-            let found = ""
-            let remaining = files.length
-            if (remaining === 0) {
-                callback("")
-                return
-            }
-            for (let f of files) {
-                if (f === "") {
-                    remaining--
-                    if (remaining === 0) callback(found)
-                    continue
+            let lines = output.trim().split("\n")
+            for (let line of lines) {
+                let parts = line.split("|")
+                if (parts.length === 2) {
+                    let id = parts[0]
+                    let name = parts[1].toLowerCase()
+                    steamGameMap[name] = id
                 }
-                let match = f.match(/appmanifest_(\d+)\.acf/)
-                if (!match) {
-                    remaining--
-                    if (remaining === 0) callback(found)
-                    continue
-                }
-                let appId = match[1]
-                let grepProc = Process.create()
-                grepProc.command = ["grep", "-m1", '"name"', f]
-                grepProc.running = true
-                grepProc.onFinished.connect(() => {
-                    let nameOut = ""
-                    let np = StdioCollector.create()
-                    np.onRead.connect((data) => { nameOut += data })
-                    grepProc.stdout = np
-                    grepProc.running = true
-                    grepProc.waitForFinished()
-                    let gameName = nameOut.split('"')[3]
-                    if (gameName && lowerTitle.indexOf(gameName.toLowerCase()) !== -1) {
-                        found = appId
-                        steamGameMap[gameName.toLowerCase()] = appId
-                    }
-                    remaining--
-                    if (remaining === 0) {
-                        if (found) iconCache[lowerTitle] = found
-                        callback(found)
-                    }
-                })
             }
+            console.log("Steam Spiele geladen:", Object.keys(steamGameMap).length)
         })
-    }
-
-    function getIconPathForAppId(appId) {
-        if (!appId) return ""
-        let user = Qt.environmentVariables().USER
-        let sizes = ["64x64", "48x48", "128x128", "256x256", "32x32"]
-        for (let sz of sizes) {
-            let path = "/home/" + user + "/.local/share/icons/hicolor/" + sz + "/apps/steam_icon_" + appId + ".png"
-            let testProc = Process.create()
-            testProc.command = ["test", "-f", path]
-            testProc.running = true
-            testProc.waitForFinished()
-            if (testProc.exitCode === 0) {
-                return "file://" + path
-            }
-        }
-        return ""
+        proc.running = true
     }
 
     function resolveIcon(winClass, winTitle, callback) {
-        if (winClass === "steam") {
+        if (!winClass) { callback(""); return; }
+        let lClass = winClass.toLowerCase()
+
+        if (lClass === "steam") {
             callback("steam")
             return
         }
-        if (winClass === "gamescope" && winTitle) {
-            findAppIdForTitle(winTitle, (appId) => {
-                if (appId) {
-                    let icon = getIconPathForAppId(appId)
-                    if (icon) {
-                        callback(icon)
-                        return
-                    }
+
+        if (lClass === "gamescope" && winTitle) {
+            let lowerTitle = winTitle.toLowerCase()
+            for (let gameName in steamGameMap) {
+                if (lowerTitle.includes(gameName)) {
+                    let appId = steamGameMap[gameName]
+                    let iconPath = `file:///home/${Qt.environmentVariables().USER}/.local/share/icons/hicolor/64x64/apps/steam_icon_${appId}.png`
+                    callback(iconPath)
+                    return
                 }
-                callback("steam")
-            })
-            return
-        }
-        if (winClass) {
-            let entry = DesktopEntries.heuristicLookup(winClass)
-            if (entry && entry.icon) {
-                callback(entry.icon)
-                return
             }
-            callback(winClass.toLowerCase())
+            callback("steam")
             return
         }
-        callback("")
+
+        let entry = DesktopEntries.heuristicLookup(winClass)
+        if (entry && entry.icon) {
+            callback(entry.icon)
+        } else {
+            callback(lClass)
+        }
     }
 
-    // UI - Deklarationen
     Rectangle {
         id: bg
         anchors.centerIn: parent
@@ -239,21 +123,18 @@ Item {
             model: Hyprland.workspaces
             delegate: Item {
                 id: wsDelegate
-                required property HyprlandWorkspace modelData
+                required property var modelData
                 readonly property bool isFocused: modelData.id === Hyprland.focusedMonitor?.activeWorkspace?.id
                 readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
 
                 property string currentIcon: ""
                 property bool iconValid: false
 
-                // Wenn sich das größte Fenster ändert, neues Icon asynchron laden
                 onBiggestWindowChanged: {
                     if (biggestWindow) {
-                        iconValid = false
-                        currentIcon = ""
                         resolveIcon(biggestWindow.class, biggestWindow.title, (icon) => {
                             currentIcon = icon
-                            iconValid = true
+                            iconValid = (icon !== "")
                         })
                     } else {
                         currentIcon = ""
@@ -266,55 +147,44 @@ Item {
                 Behavior on width { NumberAnimation { duration: 300 } }
 
                 Rectangle {
-                    id: iconBg
                     anchors.centerIn: parent
-                    width: isFocused ? 36 : 35
-                    height: isFocused ? 36 : 35
-                    opacity: isFocused ? 1 : 0.2
-                    Behavior on opacity { NumberAnimation{ duration: 150}}
-                    radius: 11
+                    width: isFocused ? 36 : 32
+                    height: width
+                    opacity: isFocused ? 1 : 0.4
+                    radius: 10
                     color: isFocused ? "#33ffffff" : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: isFocused ? 14 : 13
-                        color: isFocused ? "white" : WalColors.withAlpha(WalColors.color2, 0.6)
-                        text: biggestWindow ? "" : modelData.id.toString()
+                        font.pixelSize: 14
+                        color: isFocused ? "white" : WalColors.color2
+                        text: modelData.id.toString()
                         visible: !wsDelegate.iconValid
                     }
 
                     Item {
                         anchors.fill: parent
                         visible: wsDelegate.iconValid
-                        anchors.margins: isFocused ? 4 : 6
+                        anchors.margins: 4
 
                         Image {
                             id: dynamicIcon
                             anchors.fill: parent
                             source: {
-                                if (currentIcon.startsWith("file://"))
-                                    return currentIcon
-                                else if (currentIcon !== "")
-                                    return "image://icon/" + currentIcon
-                                else
-                                    return ""
+                                if (!currentIcon) return ""
+                                if (currentIcon.startsWith("file://")) return currentIcon
+                                return "image://icon/" + currentIcon
                             }
-                            sourceSize: Qt.size(48, 48)
+                            sourceSize: Qt.size(64, 64)
                             fillMode: Image.PreserveAspectFit
-                            onStatusChanged: {
-                                if (status === Image.Error) {
-                                    // Fallback auf Steam-Icon
-                                    currentIcon = "steam"
-                                }
-                            }
+                            onStatusChanged: if (status === Image.Error) currentIcon = "steam"
                         }
 
                         Desaturate {
                             anchors.fill: dynamicIcon
                             source: dynamicIcon
                             desaturation: isFocused ? 0.0 : 1.0
-                            opacity: isFocused ? 1.0 : 0.5
                         }
                     }
                 }
