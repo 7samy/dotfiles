@@ -23,7 +23,6 @@ Item {
         // Klassen-Mapping (wie ursprünglich)
         const classMap = {
             "code-oss": "code-oss",
-            "code": "visual-studio-code",
             "com.obsproject.Studio": "com.obsproject.Studio",
             "zen-alpha": "zen-browser",
             "zen": "zen-browser",
