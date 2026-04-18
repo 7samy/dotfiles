@@ -30,7 +30,7 @@ Rectangle {
         id: statsText
 
         anchors.centerIn: parent
-        text: "󱤟"
+        text: "󰆼"
         color: WalColors.color2
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 15
@@ -41,7 +41,7 @@ Rectangle {
         id: mouseArea
 
         anchors.fill: parent
-        hoverEnabled: enable
+        hoverEnabled: true
     }
 
 }
