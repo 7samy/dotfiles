@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
-import Quickshell.Io
 import Qt5Compat.GraphicalEffects
 
 Item {
@@ -9,98 +8,40 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
-    property var iconCache: ({})
-    property string steamPath: ""
-    property var steamGameMap: ({})
+    // ------------------------------------------------------------
+    // 1. Custom Icon Mapping: zuerst nach Fenstertitel, dann nach Klasse
+    // ------------------------------------------------------------
+    function getCustomIconForWindow(winClass, winTitle) {
+        // Titel-Mapping (priorisiert) – hier kannst du beliebig viele Einträge ergänzen
+        const titleMap = {
+            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
+            // weitere Titel z.B. "htop": "file:///home/azu/.config/quickshell/icons/htop.png",
+        };
+        if (winTitle && titleMap[winTitle])
+            return titleMap[winTitle];
 
-    Component.onCompleted: {
-        findSteamPathAndGames()
-    }
+        // Klassen-Mapping (wie ursprünglich)
+        const classMap = {
+            "code-oss": "code-oss",
+            "code": "visual-studio-code",
+            "com.obsproject.Studio": "com.obsproject.Studio",
+            "zen-alpha": "zen-browser",
+            "zen": "zen-browser",
+            "openrgb": "openrgb",
+            "obs-studio": "com.obsproject.Studio",
+            "yazi": "yazi",
+            "fzfwindows": "yazi"
+        };
+        if (winClass && classMap[winClass])
+            return classMap[winClass];
 
-    function findSteamPathAndGames() {
-        let user = Qt.environmentVariables().USER
-        let paths = [
-            "/home/" + user + "/.local/share/Steam",
-            "/home/" + user + "/.steam/steam"
-        ]
-        
-        // Einfacherer Check via Shell
-        let checkProc = Process.create()
-        checkProc.command = ["sh", "-c", `for p in ${paths.join(" ")}; do if [ -d "$p" ]; then echo "$p"; break; fi; done`]
-        
-        let output = ""
-        let collector = StdioCollector.create()
-        collector.onRead.connect(data => { output += data })
-        checkProc.stdout = collector
-        
-        checkProc.onFinished.connect(() => {
-            let found = output.trim()
-            if (found) {
-                steamPath = found
-                console.log("Steam Pfad gefunden:", steamPath)
-                loadSteamGames()
-            }
-        })
-        checkProc.running = true
-    }
-
-    function loadSteamGames() {
-        if (!steamPath) return
-        let manifestDir = steamPath + "/steamapps/"
-        
-        let proc = Process.create()
-        // Extrahiert AppID und Name direkt paarweise aus allen .acf Dateien
-        proc.command = ["sh", "-c", `grep -hE '("appid"|"name")' ${manifestDir}appmanifest_*.acf | awk -F'寿' '{print $4}' | sed 'N;s/\\n/|/'`]
-        
-        let output = ""
-        let collector = StdioCollector.create()
-        collector.onRead.connect(data => { output += data })
-        proc.stdout = collector
-        
-        proc.onFinished.connect(() => {
-            let lines = output.trim().split("\n")
-            for (let line of lines) {
-                let parts = line.split("|")
-                if (parts.length === 2) {
-                    let id = parts[0]
-                    let name = parts[1].toLowerCase()
-                    steamGameMap[name] = id
-                }
-            }
-            console.log("Steam Spiele geladen:", Object.keys(steamGameMap).length)
-        })
-        proc.running = true
-    }
-
-    function resolveIcon(winClass, winTitle, callback) {
-        if (!winClass) { callback(""); return; }
-        let lClass = winClass.toLowerCase()
-
-        if (lClass === "steam") {
-            callback("steam")
-            return
+        // Fallback: über DesktopEntries oder winClass
+        if (winClass) {
+            const entry = DesktopEntries.heuristicLookup(winClass);
+            if (entry && entry.icon) return entry.icon;
+            return winClass.toLowerCase();
         }
-
-        if (lClass === "gamescope" && winTitle) {
-            let lowerTitle = winTitle.toLowerCase()
-            for (let gameName in steamGameMap) {
-                if (lowerTitle.includes(gameName)) {
-                    let appId = steamGameMap[gameName]
-                    let iconPath = `file:///home/${Qt.environmentVariables().USER}/.local/share/icons/hicolor/64x64/apps/steam_icon_${appId}.png`
-                    callback(iconPath)
-                    return
-                }
-            }
-            callback("steam")
-            return
-        }
-
-        let entry = DesktopEntries.heuristicLookup(winClass)
-        if (entry && entry.icon) {
-            callback(entry.icon)
-        } else {
-            callback(lClass)
-        }
+        return "";
     }
 
     Rectangle {
@@ -123,68 +64,83 @@ Item {
             model: Hyprland.workspaces
             delegate: Item {
                 id: wsDelegate
-                required property var modelData
+                required property HyprlandWorkspace modelData
                 readonly property bool isFocused: modelData.id === Hyprland.focusedMonitor?.activeWorkspace?.id
                 readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
 
-                property string currentIcon: ""
-                property bool iconValid: false
-
-                onBiggestWindowChanged: {
-                    if (biggestWindow) {
-                        resolveIcon(biggestWindow.class, biggestWindow.title, (icon) => {
-                            currentIcon = icon
-                            iconValid = (icon !== "")
-                        })
-                    } else {
-                        currentIcon = ""
-                        iconValid = false
-                    }
+                // --------------------------------------------------------
+                // 2. resolvedIconId: liefert entweder einen Icon-Namen (für image://icon/)
+                //    oder eine file://-URL für ein eigenes PNG
+                // --------------------------------------------------------
+                readonly property string resolvedIconId: {
+                    const win = biggestWindow;
+                    if (!win) return "";
+                    const custom = workspaceWidget.getCustomIconForWindow(win.class, win.title);
+                    if (custom) return custom;   // kann file://... oder ein Icon-Name sein
+                    return "";
                 }
+
+                property bool iconValid: false
 
                 width: 35 + (isFocused ? 20 : 0)
                 height: 40
                 Behavior on width { NumberAnimation { duration: 300 } }
 
                 Rectangle {
+                    id: iconBg
                     anchors.centerIn: parent
-                    width: isFocused ? 36 : 32
-                    height: width
-                    opacity: isFocused ? 1 : 0.4
-                    radius: 10
+                    width: isFocused ? 36 : 35
+                    height: isFocused ? 36 : 35
+                    radius: 11
                     color: isFocused ? "#33ffffff" : "transparent"
 
+                    Behavior on width { NumberAnimation { duration: 300 } }
+                    Behavior on height { NumberAnimation { duration: 300 } }
+
+                    // Fallback-Text (wenn kein Icon geladen werden kann)
                     Text {
                         anchors.centerIn: parent
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: isFocused ? "white" : WalColors.color2
-                        text: modelData.id.toString()
+                        font.pixelSize: isFocused ? 14 : 13
+                        color: isFocused ? "white" : WalColors.withAlpha(WalColors.color2, 0.6)
+                        text: biggestWindow ? "" : modelData.id.toString()
                         visible: !wsDelegate.iconValid
+                        Behavior on font.pixelSize { NumberAnimation { duration: 300 } }
                     }
 
+                    // ----------------------------------------------------
+                    // 3. Dynamisches Icon – unterstützt file:// und image://icon/
+                    // ----------------------------------------------------
                     Item {
                         anchors.fill: parent
                         visible: wsDelegate.iconValid
-                        anchors.margins: 4
+                        anchors.margins: isFocused ? 4 : 6
+                        Behavior on anchors.margins { NumberAnimation { duration: 300 } }
 
                         Image {
                             id: dynamicIcon
                             anchors.fill: parent
                             source: {
-                                if (!currentIcon) return ""
-                                if (currentIcon.startsWith("file://")) return currentIcon
-                                return "image://icon/" + currentIcon
+                                if (wsDelegate.resolvedIconId.startsWith("file://"))
+                                    return wsDelegate.resolvedIconId;
+                                else if (wsDelegate.resolvedIconId !== "")
+                                    return "image://icon/" + wsDelegate.resolvedIconId;
+                                else
+                                    return "";
                             }
-                            sourceSize: Qt.size(64, 64)
+                            sourceSize: Qt.size(48, 48)
                             fillMode: Image.PreserveAspectFit
-                            onStatusChanged: if (status === Image.Error) currentIcon = "steam"
+                            smooth: true
+                            onStatusChanged: {
+                                wsDelegate.iconValid = (status === Image.Ready);
+                            }
                         }
 
                         Desaturate {
                             anchors.fill: dynamicIcon
                             source: dynamicIcon
                             desaturation: isFocused ? 0.0 : 1.0
+                            opacity: isFocused ? 1.0 : 0.5
                         }
                     }
                 }
@@ -193,6 +149,9 @@ Item {
                     anchors.fill: parent
                     onClicked: Hyprland.dispatch("workspace " + modelData.id)
                 }
+
+                // Wenn sich die Icon-ID ändert, setze das Gültigkeits-Flag zurück
+                onResolvedIconIdChanged: iconValid = false
             }
         }
     }

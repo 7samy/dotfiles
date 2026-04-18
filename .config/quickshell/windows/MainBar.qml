@@ -191,6 +191,10 @@ PanelWindow {
                     spacing: 10
                     height: parent.height
 
+                    PowerOff {
+                        barScreen: panelWindow.screen
+                    }
+
                     Stats {
                         barScreen: panelWindow.screen
                     }

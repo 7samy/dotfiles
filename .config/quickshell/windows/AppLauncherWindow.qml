@@ -29,7 +29,7 @@ Window {
         radius: 12
         color: WalColors.withAlpha(WalColors.color0, 0.8)
         border.width: 2
-        border.color: WalColors.withAlpha(WalColors.color2, 0.55)
+        border.color: WalColors.withAlpha(WalColors.color2, 0.2)
 
         AppLauncher {
             anchors.fill: parent

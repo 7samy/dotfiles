@@ -33,7 +33,7 @@ Window {
 
         Connections {
             function onColorsUpdated() {
-                background.color = "transparent";
+                background.color = WalColors.withAlpha(WalColors.color0, 0.9);
                 redrawTimer.start();
             }
 
@@ -69,6 +69,8 @@ Window {
         model: wallpaperModel
         clip: false
         focus: true
+        // Optimierter Vorlade-Buffer
+        cacheBuffer: 800
         Keys.onPressed: (event) => {
             switch (event.key) {
             case Qt.Key_J:
@@ -126,6 +128,8 @@ Window {
                 anchors.margins: 10
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
+                // Optimierte, feste Bildgröße
+                sourceSize: Qt.size(622, 350)
                 opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 1
 
                 Rectangle {
