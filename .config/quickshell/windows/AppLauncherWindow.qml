@@ -26,7 +26,7 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
+        radius: 2
         color: WalColors.withAlpha(WalColors.color0, 0.8)
         border.width: 2
         border.color: WalColors.withAlpha(WalColors.color2, 0.2)

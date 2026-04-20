@@ -125,10 +125,10 @@ Item {
         Rectangle {
             width: parent.width
             height: 50
-            color: WalColors.withAlpha(WalColors.color3, 0.55)
+            color: WalColors.withAlpha(WalColors.color7, 0.2)
             radius: 8
             border.width: 2
-            border.color: WalColors.withAlpha(WalColors.color2, 0.4)
+            border.color: WalColors.withAlpha(WalColors.color2, 0.3)
 
             TextInput {
                 id: searchInput
@@ -208,7 +208,7 @@ Item {
                             width: 32
                             height: 32
                             anchors.verticalCenter: parent.verticalCenter
-                            radius: 4
+                            radius: 6
                             color: WalColors.withAlpha(WalColors.color2, 0.1)
 
                             Image {

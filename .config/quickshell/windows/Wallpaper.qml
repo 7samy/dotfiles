@@ -8,45 +8,37 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 
 Window {
+    // ... Rest bleibt gleich
+
     id: wallpaperPicker
 
     title: "wallpaper-picker"
     width: 1280
     height: 720
     onVisibleChanged: {
-        if (visible)
+        if (visible) {
+            // Re-Binding setzen, falls es vorher durch einen imperativen
+            // Assign gebrochen wurde
+            background.color = Qt.binding(() => {
+                return WalColors.withAlpha(WalColors.color0, 0.9);
+            });
             wallpaperGrid.forceActiveFocus();
-
+        }
     }
 
     Rectangle {
+        // Connections + Timer entfernt – die haben das Binding gekillt
+
         id: background
 
         anchors.fill: parent
-        color: WalColors.withAlpha(WalColors.color0, 0.9)
+        color: WalColors.withAlpha(WalColors.color0, 0.9) // reaktives Binding – reicht!
         focus: true
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape)
                 wallpaperPicker.visible = false;
 
         }
-
-        Connections {
-            function onColorsUpdated() {
-                background.color = WalColors.withAlpha(WalColors.color0, 0.9);
-                redrawTimer.start();
-            }
-
-            target: WalColors
-        }
-
-        Timer {
-            id: redrawTimer
-
-            interval: 10
-            onTriggered: background.color = WalColors.withAlpha(WalColors.color0, 0.9)
-        }
-
     }
 
     FolderListModel {
@@ -135,8 +127,8 @@ Window {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.color: WalColors.withAlpha(WalColors.color2, 1)
-                    border.width: delegateItem.GridView.isCurrentItem ? 2 : 2
+                    border.color: WalColors.withAlpha(WalColors.color2, 0.5)
+                    border.width: delegateItem.GridView.isCurrentItem ? 1.8 : 2
                     visible: delegateItem.GridView.isCurrentItem
                 }
 

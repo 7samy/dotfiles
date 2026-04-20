@@ -8,7 +8,7 @@ QtObject {
 
     signal colorsUpdated()
 
-    property string color0: "#1a1b26"
+    property string color0: "#ffffff"
     property string color1: "#7aa2f7"
     property string color2: "#9ece6a"
     property string color3: "#e0af68"
