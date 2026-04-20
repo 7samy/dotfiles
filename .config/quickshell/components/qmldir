@@ -4,6 +4,7 @@ singleton BarState 1.0 BarState.qml
 singleton AppLauncherState 1.0 AppLauncherState.qml
 singleton VpnState 1.0 VpnState.qml
 singleton AudioState 1.0 AudioState.qml
+singleton OllamaState 1.0 OllamaState.qml
 AudioToggle 1.0 AudioToggle.qml
 Clock 1.0 Clock.qml
 Workspaces 1.0 Workspaces.qml
