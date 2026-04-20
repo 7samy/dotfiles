@@ -25,4 +25,8 @@ PanelWindow {
         }
     }
 
+
+    Component.onCompleted: {
+        console.log("WallpaperTriggerzone created: anchors left/right/bottom set, implicitHeight=", triggerZone.implicitHeight);
+    }
 }

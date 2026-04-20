@@ -8,8 +8,8 @@ Window {
     id: sidebarWindow
 
     width: 400
-    color: "transparent"
-    visible: OllamaState.isOpen
+    color: "#ffffff"
+    visible: true
     readonly property var screenGeometry: {
         if (Quickshell.screens.length > 0) {
             return Quickshell.screens[0].geometry
@@ -20,6 +20,10 @@ Window {
     x: screenGeometry ? screenGeometry.x + screenGeometry.width - width : 0
     y: screenGeometry ? screenGeometry.y : 0
     height: screenGeometry ? screenGeometry.height : 1080
+
+    Component.onCompleted: {
+        console.log("OllamaSidebar created: x=", sidebarWindow.x, "y=", sidebarWindow.y, "w=", sidebarWindow.width, "h=", sidebarWindow.height, "visible=", sidebarWindow.visible);
+    }
 
     // Wenn das Fenster sichtbar wird, Fokus anfordern
     onVisibleChanged: {
@@ -80,14 +84,6 @@ Window {
                     color: WalColors.withAlpha(WalColors.color8, 0.1)
                     radius: 4
                 }
-
-            }
-
-        }
-
-    }
-
-}
 
             }
 
