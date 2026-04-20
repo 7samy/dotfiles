@@ -17,12 +17,6 @@ ShellRoot {
         }
     }
 
-    // OPTIONAL: Ein Shortcut für Ollama
-    GlobalShortcut {
-        name: "toggle_ollama"
-        onPressed: OllamaState.toggle()
-    }
-
     AppLauncherWindow {
     }
 
@@ -33,14 +27,6 @@ ShellRoot {
     }
 
     Variants {
-        // OllamaTriggerZone {
-        //    screen: modelData
-        //}
-        // NEU: HIER KOMMT DEINE OLLAMA SIDEBAR HIN
-        //OllamaSidebar {
-        //   screen: modelData
-        // }
-
         model: Quickshell.screens.filter((s) => {
             return s.name === "DP-2";
         })
