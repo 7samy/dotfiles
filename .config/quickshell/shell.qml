@@ -27,7 +27,11 @@ ShellRoot {
 
     GlobalShortcut {
         name: "toggle_music_picker"
-        onPressed: MusicPickerState.toggle()
+        description: "Toggle Music Picker"
+        onPressed: {
+            console.log("Music Picker toggled");
+            MusicPickerState.toggle();
+        }
     }
 
     AppLauncherWindow {

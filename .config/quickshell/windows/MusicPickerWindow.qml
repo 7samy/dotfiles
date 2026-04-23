@@ -1,34 +1,29 @@
-import Quickshell
-import QtQuick
 import "../components"
+import QtQuick
+import Quickshell
 
 Window {
     id: pickerWindow
 
-    width: 500
+    readonly property var screenGeometry: {
+        if (Quickshell.screens.length > 0)
+            return Quickshell.screens[0].geometry;
+
+        return Qt.rect(0, 0, 1920, 1080);
+    }
+
+    title: "music_picker"
+    width: 1000
     height: 600
     color: "transparent"
     visible: MusicPickerState.pickerVisible
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-
-    readonly property var screenGeometry: {
-        if (Quickshell.screens.length > 0) {
-            return Quickshell.screens[0].geometry
-        }
-        return Qt.rect(0, 0, 1920, 1080)
-    }
-
     x: screenGeometry ? screenGeometry.x + (screenGeometry.width - width) / 2 : 100
     y: screenGeometry ? screenGeometry.y + (screenGeometry.height - height) / 2 : 100
-
-    Behavior on opacity {
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
-        }
+    opacity: visible ? 1 : 0
+    Component.onCompleted: {
+        focus = true;
     }
-
-    opacity: visible ? 1.0 : 0.0
 
     Rectangle {
         anchors.fill: parent
@@ -43,9 +38,15 @@ Window {
             focus: true
             Keys.onEscapePressed: MusicPickerState.close()
         }
+
     }
 
-    Component.onCompleted: {
-        focus = true
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutCubic
+        }
+
     }
+
 }

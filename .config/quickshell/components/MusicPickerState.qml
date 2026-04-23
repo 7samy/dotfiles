@@ -5,6 +5,7 @@ QtObject {
     id: root
     property bool pickerVisible: false
     property string searchText: ""
+    property string currentSongPath: ""
     
     function toggle() {
         pickerVisible = !pickerVisible
