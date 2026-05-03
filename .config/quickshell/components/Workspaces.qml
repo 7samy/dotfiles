@@ -12,6 +12,9 @@ Item {
     property var steamTitleMap: ({})     // game name → appId
     property var steamNormalizedMap: ({}) // normalized name → appId
     property var steamIconMap: ({})       // appId → local icon file path
+    property bool acfDone: false
+    property bool iconsDone: false
+    property bool mapsReady: acfDone && iconsDone   // ← re-added
 
     function normalizeTitle(title) {
         return title.replace(/[™®©]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -33,10 +36,12 @@ Item {
                 workspaceWidget.steamNormalizedMap[workspaceWidget.normalizeTitle(name)] = appId;
             }
         }
+        onExited: (exitCode, exitStatus) => {
+            workspaceWidget.acfDone = true;
+        }
     }
 
     // Scan librarycache dirs for the hash-named icon file (e.g. b6e290dd...jpg)
-    // These are the actual small square icons Steam uses for taskbars
     Process {
         id: iconScanner
         command: ["bash", "-c", [
@@ -57,10 +62,12 @@ Item {
                 workspaceWidget.steamIconMap[appId] = "file://" + path;
             }
         }
+        onExited: (exitCode, exitStatus) => {
+            workspaceWidget.iconsDone = true;
+        }
     }
 
     function getSteamIcon(appId) {
-        // Priority: hash icon → logo.png → header.jpg
         if (workspaceWidget.steamIconMap[appId])
             return workspaceWidget.steamIconMap[appId];
         return "file:///home/azu/.local/share/Steam/appcache/librarycache/" + appId + "/logo.png";
@@ -133,6 +140,7 @@ Item {
                 readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
 
                 readonly property string resolvedIconId: {
+                    const _ = workspaceWidget.mapsReady;   // ← re-evaluates when maps load
                     const win = biggestWindow;
                     if (!win) return "";
                     const custom = workspaceWidget.getCustomIconForWindow(win.class, win.title);
@@ -200,6 +208,9 @@ Item {
                                         source = src.replace("/logo.png", "/header.jpg");
                                     } else if (src.includes("/header.jpg")) {
                                         source = "image://icon/steam";
+                                    } else {
+                                        // All fallbacks exhausted (including the generic Steam icon) – give up
+                                        wsDelegate.iconValid = false;
                                     }
                                 }
                             }
