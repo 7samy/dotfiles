@@ -9,39 +9,42 @@ Item {
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
 
-    property var steamTitleMap: ({})     // game name → appId
-    property var steamNormalizedMap: ({}) // normalized name → appId
-    property var steamIconMap: ({})       // appId → local icon file path
+    property var steamTitleMap: ({})
+    property var steamNormalizedMap: ({})
+    property var steamIconMap: ({})
     property bool acfDone: false
     property bool iconsDone: false
-    property bool mapsReady: acfDone && iconsDone   // ← re-added
+    property bool mapsReady: acfDone && iconsDone
+
+    function safeSteamThemeIcon(name) {
+        var path = Quickshell.iconPath(name);
+        return path ? "file://" + path : "";
+    }
 
     function normalizeTitle(title) {
         return title.replace(/[™®©]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
     }
 
-    // Parse all ACF manifests to build title → appId map
+    // Parse ACF manifests
     Process {
         id: acfParser
         command: ["bash", "-c", "awk -F'\"' '/^\\t\"appid\"/{appid=$4} /^\\t\"name\"/{print appid \"|\" $4}' ~/.local/share/Steam/steamapps/appmanifest_*.acf"]
         running: true
         stdout: SplitParser {
             onRead: data => {
-                const idx = data.indexOf("|");
+                var idx = data.indexOf("|");
                 if (idx === -1) return;
-                const appId = data.substring(0, idx).trim();
-                const name = data.substring(idx + 1).trim();
+                var appId = data.substring(0, idx).trim();
+                var name = data.substring(idx + 1).trim();
                 if (!appId || !name) return;
                 workspaceWidget.steamTitleMap[name] = appId;
                 workspaceWidget.steamNormalizedMap[workspaceWidget.normalizeTitle(name)] = appId;
             }
         }
-        onExited: (exitCode, exitStatus) => {
-            workspaceWidget.acfDone = true;
-        }
+        onExited: (exitCode, exitStatus) => { workspaceWidget.acfDone = true; }
     }
 
-    // Scan librarycache dirs for the hash-named icon file (e.g. b6e290dd...jpg)
+    // Scan librarycache for hash icons
     Process {
         id: iconScanner
         command: ["bash", "-c", [
@@ -54,47 +57,50 @@ Item {
         running: true
         stdout: SplitParser {
             onRead: data => {
-                const idx = data.indexOf("|");
+                var idx = data.indexOf("|");
                 if (idx === -1) return;
-                const appId = data.substring(0, idx).trim();
-                const path = data.substring(idx + 1).trim();
+                var appId = data.substring(0, idx).trim();
+                var path = data.substring(idx + 1).trim();
                 if (!appId || !path) return;
                 workspaceWidget.steamIconMap[appId] = "file://" + path;
             }
         }
-        onExited: (exitCode, exitStatus) => {
-            workspaceWidget.iconsDone = true;
-        }
+        onExited: (exitCode, exitStatus) => { workspaceWidget.iconsDone = true; }
     }
 
     function getSteamIcon(appId) {
         if (workspaceWidget.steamIconMap[appId])
             return workspaceWidget.steamIconMap[appId];
-        return "file:///home/azu/.local/share/Steam/appcache/librarycache/" + appId + "/logo.png";
+        // No local hash icon – fall back to icon theme
+        var generic = workspaceWidget.safeSteamThemeIcon("steam");
+        return generic ? generic : "";
     }
 
     function getCustomIconForWindow(winClass, winTitle) {
-        const titleMap = {
+        var titleMap = {
             "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
         };
         if (winTitle && titleMap[winTitle])
             return titleMap[winTitle];
 
-        // Gamescope wraps games — class is "gamescope", title is the game name
+        // Gamescope
         if (winClass === "gamescope" && winTitle) {
-            let appId = workspaceWidget.steamTitleMap[winTitle];
+            var appId = workspaceWidget.steamTitleMap[winTitle];
             if (!appId)
                 appId = workspaceWidget.steamNormalizedMap[workspaceWidget.normalizeTitle(winTitle)];
-            if (appId) return getSteamIcon(appId);
+            if (!appId)
+                appId = workspaceWidget.findAppIdByTitleSubstring(winTitle);
+            if (appId) return workspaceWidget.getSteamIcon(appId);
+            return "steam";
         }
 
-        // Non-gamescope Proton/native Steam games
+        // steam_app_<id>
         if (winClass && winClass.startsWith("steam_app_")) {
-            const appId = winClass.replace("steam_app_", "");
-            return getSteamIcon(appId);
+            var appId = winClass.replace("steam_app_", "");
+            return workspaceWidget.getSteamIcon(appId);
         }
 
-        const classMap = {
+        var classMap = {
             "code-oss":              "code-oss",
             "com.obsproject.Studio": "com.obsproject.Studio",
             "zen-alpha":             "zen-browser",
@@ -108,11 +114,34 @@ Item {
             return classMap[winClass];
 
         if (winClass) {
-            const entry = DesktopEntries.heuristicLookup(winClass);
+            var entry = DesktopEntries.heuristicLookup(winClass);
             if (entry && entry.icon) return entry.icon;
             return winClass.toLowerCase();
         }
         return "";
+    }
+
+    function findAppIdByTitleSubstring(title) {
+        if (!title) return "";
+        var lowerTitle = title.toLowerCase();
+        var bestMatchId = "";
+        var bestMatchLen = 0;
+        for (var rawName in workspaceWidget.steamTitleMap) {
+            var lowerRaw = rawName.toLowerCase();
+            if (lowerTitle.includes(lowerRaw) && lowerRaw.length > bestMatchLen) {
+                bestMatchId = workspaceWidget.steamTitleMap[rawName];
+                bestMatchLen = lowerRaw.length;
+            }
+        }
+        if (!bestMatchId) {
+            for (var normName in workspaceWidget.steamNormalizedMap) {
+                if (lowerTitle.includes(normName) && normName.length > bestMatchLen) {
+                    bestMatchId = workspaceWidget.steamNormalizedMap[normName];
+                    bestMatchLen = normName.length;
+                }
+            }
+        }
+        return bestMatchId;
     }
 
     Rectangle {
@@ -140,10 +169,10 @@ Item {
                 readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
 
                 readonly property string resolvedIconId: {
-                    const _ = workspaceWidget.mapsReady;   // ← re-evaluates when maps load
-                    const win = biggestWindow;
+                    var _ = workspaceWidget.mapsReady;
+                    var win = biggestWindow;
                     if (!win) return "";
-                    const custom = workspaceWidget.getCustomIconForWindow(win.class, win.title);
+                    var custom = workspaceWidget.getCustomIconForWindow(win.class, win.title);
                     if (custom) return custom;
                     return "";
                 }
@@ -161,7 +190,6 @@ Item {
                     height: isFocused ? 36 : 35
                     radius: 11
                     color: isFocused ? "#33ffffff" : "transparent"
-
                     Behavior on width { NumberAnimation { duration: 300 } }
                     Behavior on height { NumberAnimation { duration: 300 } }
 
@@ -199,17 +227,17 @@ Item {
                                 if (status === Image.Ready) {
                                     wsDelegate.iconValid = true;
                                 } else if (status === Image.Error) {
-                                    const src = source.toString();
-                                    if (!src.includes("/logo.png") && !src.includes("/header.jpg") && !src.includes("image://")) {
-                                        // hash icon failed, try logo.png
-                                        const appId = src.replace("file:///home/azu/.local/share/Steam/appcache/librarycache/", "").split("/")[0];
-                                        source = "file:///home/azu/.local/share/Steam/appcache/librarycache/" + appId + "/logo.png";
-                                    } else if (src.includes("/logo.png")) {
-                                        source = src.replace("/logo.png", "/header.jpg");
-                                    } else if (src.includes("/header.jpg")) {
-                                        source = "image://icon/steam";
+                                    // Only attempt the fallback chain for Steam paths
+                                    var src = source.toString();
+                                    if (src.includes("librarycache") && !src.includes("/logo.png") && !src.includes("/header.jpg") && !src.includes("image://")) {
+                                        // Hash icon failed – try generic Steam icon from theme
+                                        var steamPath = workspaceWidget.safeSteamThemeIcon("steam");
+                                        if (steamPath) {
+                                            source = steamPath;
+                                        } else {
+                                            wsDelegate.iconValid = false;
+                                        }
                                     } else {
-                                        // All fallbacks exhausted (including the generic Steam icon) – give up
                                         wsDelegate.iconValid = false;
                                     }
                                 }
