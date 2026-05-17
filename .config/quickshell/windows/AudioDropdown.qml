@@ -183,7 +183,7 @@ PanelWindow {
                             width: volumeSlider.visualPosition * parent.width
                             height: parent.height
                             color: WalColors.color4
-                            radius: 2
+                            radius: 0
                         }
 
                     }
@@ -193,7 +193,7 @@ PanelWindow {
                         y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
                         width: 16
                         height: 16
-                        radius: 8
+                        radius: 16
                         color: WalColors.color4
                         border.color: WalColors.withAlpha(WalColors.color2, 0.5)
                         border.width: 2
