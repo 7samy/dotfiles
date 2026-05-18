@@ -32,7 +32,7 @@ PanelWindow {
         id: rootContainer
 
         anchors.centerIn: parent
-        width: 1920
+        width: screen.width / 1.333
         height: parent.height
         opacity: BarState.barVisible ? 1 : 0
 
@@ -57,45 +57,45 @@ PanelWindow {
                 }
 
                 PathArc {
-                    x: 20
-                    y: 20
+                    x: screen.width / 128
+                    y: screen.width / 128
                     radiusX: 20
                     radiusY: 20
                 }
 
                 PathLine {
-                    x: 20
-                    y: 20
+                    x: screen.width / 128
+                    y: screen.width / 128
                 }
 
                 PathArc {
-                    x: 40
-                    y: 40
-                    radiusX: 20
-                    radiusY: 20
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: 1880
-                    y: 40
-                }
-
-                PathArc {
-                    x: 1900
-                    y: 20
+                    x: screen.width / 64
+                    y: screen.width / 64
                     radiusX: 20
                     radiusY: 20
                     direction: PathArc.Counterclockwise
                 }
 
                 PathLine {
-                    x: 1900
-                    y: 20
+                    x: screen.width / 1.361
+                    y: screen.width / 64
                 }
 
                 PathArc {
-                    x: 1920
+                    x: screen.width / 1.347
+                    y: screen.width / 128
+                    radiusX: 20
+                    radiusY: 20
+                    direction: PathArc.Counterclockwise
+                }
+
+                PathLine {
+                    x: screen.width / 1.347
+                    y: screen.width / 128
+                }
+
+                PathArc {
+                    x: screen.width / 1.333
                     y: 0
                     radiusX: 20
                     radiusY: 20

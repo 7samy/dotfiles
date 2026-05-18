@@ -19,7 +19,7 @@ PanelWindow {
 
     margins {
         top: 40
-        left: VpnState.dropdownX - radius
+        left: screen.width / 1.305
     }
 
     Item {

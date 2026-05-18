@@ -5,21 +5,16 @@ import Quickshell
 Window {
     id: pickerWindow
 
-    readonly property var screenGeometry: {
-        if (Quickshell.screens.length > 0)
-            return Quickshell.screens[0].geometry;
-
-        return Qt.rect(0, 0, 1920, 1080);
-    }
+    readonly property var currentScreen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
 
     title: "music_picker"
-    width: 1000
-    height: 600
+    width: currentScreen ? currentScreen.width * 0.52 : 1000
+    height: currentScreen ? currentScreen.height * 0.56 : 600
     color: "transparent"
     visible: MusicPickerState.pickerVisible
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    x: screenGeometry ? screenGeometry.x + (screenGeometry.width - width) / 2 : 100
-    y: screenGeometry ? screenGeometry.y + (screenGeometry.height - height) / 2 : 100
+    x: currentScreen ? (currentScreen.width - width) / 2 : 100
+    y: currentScreen ? (currentScreen.height - height) / 2 : 100
     opacity: visible ? 1 : 0
     Component.onCompleted: {
         focus = true;

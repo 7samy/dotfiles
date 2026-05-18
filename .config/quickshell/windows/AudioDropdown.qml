@@ -21,7 +21,7 @@ PanelWindow {
 
     margins {
         top: 40
-        left: AudioState.dropdownX
+        left: screen.width / 1.33333
     }
 
     Process {
