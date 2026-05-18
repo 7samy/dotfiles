@@ -188,7 +188,7 @@ PanelWindow {
                 spacing: 40
 
                 Row {
-                    spacing: 10
+                    spacing: screen.width / 256
                     height: parent.height
 
                     PowerOff {
