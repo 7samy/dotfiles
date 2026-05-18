@@ -58,7 +58,7 @@ PanelWindow {
 
                 PathArc {
                     x: screen.width / 128
-                    y: screen.width / 128
+                    y: 20
                     radiusX: 20
                     radiusY: 20
                 }
