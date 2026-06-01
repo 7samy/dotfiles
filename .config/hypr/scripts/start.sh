@@ -43,6 +43,7 @@ discord &
 steam & 
 zen-browser & 
 openrgb &
+fcitx5 -d &
 
 # AUDIO #
 systemctl --user enable --now mpd.service
