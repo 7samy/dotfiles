@@ -48,7 +48,7 @@ ShellRoot {
 
     Variants {
         model: Quickshell.screens.filter((s) => {
-            return s.name === "DP-2";
+            return s.name === "DP-1";
         })
 
         delegate: Item {
