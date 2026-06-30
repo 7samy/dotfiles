@@ -94,7 +94,7 @@ Window {
             function setWallpaper() {
                 let path = fileUrl.toString().replace(/^file:\/\//, "");
                 path = decodeURIComponent(path);
-                let cmd = `swww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim; spicetify update`;
+                let cmd = `swww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim; spicetify apply --no-restart; nohup /home/azu/.config/hypr/scripts/wallpaper-spotify.sh "${path}" >/dev/null 2>&1 & disown`;
                 wallpaperSetter.command = ["sh", "-c", cmd];
                 wallpaperSetter.running = true;
                 wallpaperPicker.visible = false;

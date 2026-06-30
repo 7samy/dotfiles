@@ -1,0 +1,21 @@
+:root {{
+    --background-primary: {background};
+    --background-secondary: {color0};
+    --background-secondary-alt: {color0};
+    --background-tertiary: {color0};
+    --background-accent: {color2};
+    --background-floating: {color0};
+    --channeltextarea-background: {color1};
+    --text-normal: {foreground};
+    --text-muted: {color8};
+    --text-link: {color4};
+    --interactive-normal: {foreground};
+    --interactive-hover: {color7};
+    --interactive-active: {color6};
+    --header-primary: {foreground};
+    --header-secondary: {color8};
+    --background-modifier-hover: {color1};
+    --background-modifier-active: {color2};
+    --background-modifier-selected: {color2};
+    --brand-experiment: {color5};
+}}
