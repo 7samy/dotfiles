@@ -1,0 +1,22 @@
+# Pywal Template für Yazi (~/.config/wal/templates/theme.toml)
+
+[manager]
+cwd = {{ fg = "{color2}" }}
+border_symbol = "|"
+border_style  = {{ fg = "{color8}" }}
+hovered       = {{ fg = "{background}", bg = "{color4}", bold = true }}
+
+[status]
+separator_open  = ""
+separator_close = ""
+mode_normal = {{ bg = "{color4}", fg = "{background}", bold = true }}
+mode_select = {{ bg = "{color3}", fg = "{background}", bold = true }}
+mode_unset  = {{ bg = "{color1}", fg = "{background}", bold = true }}
+
+[filetype]
+rules = [
+	{{ mime = "image/*", fg = "{color6}" }},
+	{{ mime = "video/*", fg = "{color1}" }},
+	{{ mime = "audio/*", fg = "{color5}" }},
+	{{ name = "*/", fg = "{color4}" }},
+]
