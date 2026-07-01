@@ -1,0 +1,13 @@
+/* Steam Skin – Pywal Colors */
+:root {{
+    --bg-main: {background};
+    --bg-sidebar: {color0};
+    --bg-card: {color1};
+    --bg-hover: {color2};
+    --text-primary: {foreground};
+    --text-secondary: {color8};
+    --text-link: {color4};
+    --accent: {color5};
+    --accent-hover: {color6};
+    --border-color: {color0};
+}}
