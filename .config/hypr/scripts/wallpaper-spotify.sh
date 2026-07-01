@@ -6,6 +6,27 @@ wal -n -i "$path"
 wpg -s "$path"
 killall -SIGUSR1 nvim 2>/dev/null
 
+# --- Discord automatisch neu laden ---
+if pgrep -f "discord" > /dev/null; then
+    if command -v xdotool > /dev/null; then
+        # Versuche über xdotool (XWayland)
+        xdotool search --class "discord" key --window %@ ctrl+r 2>/dev/null || true
+    elif command -v hyprctl > /dev/null && command -v wtype > /dev/null && command -v jq > /dev/null; then
+        # Fallback für natives Wayland (Hyprland)
+        current=$(hyprctl activewindow -j | jq -r '.address')
+        discord_addr=$(hyprctl clients -j | jq -r '.[] | select(.class == "discord") | .address')
+        if [ -n "$discord_addr" ]; then
+            hyprctl dispatch focuswindow address:$discord_addr
+            sleep 0.1
+            wtype -M ctrl -k r -m ctrl
+            sleep 0.1
+            [ -n "$current" ] && hyprctl dispatch focuswindow address:$current
+        fi
+    else
+        echo "Weder xdotool noch wtype+hyprctl verfügbar – Discord wurde nicht neu geladen." >&2
+    fi
+fi
+
 # --- Spicetify / Spotify ---
 spicetify apply --no-restart
 pkill -f /opt/spotify/spotify

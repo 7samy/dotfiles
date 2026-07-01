@@ -1,21 +1,57 @@
+/**
+ * @name Pywal system24 Override
+ * @description Overrides system24 colors with Pywal
+ * @author Azu
+ * @version 1.0.0
+ */
+
 :root {{
-    --background-primary: {background};
-    --background-secondary: {color0};
-    --background-secondary-alt: {color0};
-    --background-tertiary: {color0};
-    --background-accent: {color2};
-    --background-floating: {color0};
-    --channeltextarea-background: {color1};
-    --text-normal: {foreground};
-    --text-muted: {color8};
-    --text-link: {color4};
-    --interactive-normal: {foreground};
-    --interactive-hover: {color7};
-    --interactive-active: {color6};
-    --header-primary: {foreground};
-    --header-secondary: {color8};
-    --background-modifier-hover: {color1};
-    --background-modifier-active: {color2};
-    --background-modifier-selected: {color2};
-    --brand-experiment: {color5};
+    /* Map Pywal palette to system24 variables */
+    /* Backgrounds – darkest to lightest */
+    --bg-4: {background};
+    --bg-3: {color0};
+    --bg-2: {color1};
+    --bg-1: {color2};
+
+    /* Text – brightest to muted */
+    --text-1: {foreground};
+    --text-2: {color7};
+    --text-3: {foreground};
+    --text-4: {color8};
+    --text-5: {color8};
+
+    /* Accent colors – use a highlight color */
+    --accent-1: {color4};
+    --accent-2: {color5};
+    --accent-3: {color4};
+    --accent-4: {color5};
+    --accent-5: {color6};
+
+    /* Hover / active */
+    --hover: {color1}44;   /* semi-transparent */
+    --active: {color2}66;
+
+    /* Borders */
+    --border-light: {color1}22;
+    --border: {color2}44;
+    --border-hover: {color5};
+
+    /* Status indicators – you can keep Pywal or original */
+    --online: {color6};
+    --dnd: {color1};
+    --idle: {color3};
+    --streaming: {color5};
+
+    /* Base colors (red, green, blue, etc.) – just reuse Pywal */
+    --red-1: {color1};   --red-2: {color1};   --red-3: {color1};   --red-4: {color1};   --red-5: {color1};
+    --green-1: {color6}; --green-2: {color6}; --green-3: {color6}; --green-4: {color6}; --green-5: {color6};
+    --blue-1: {color4};  --blue-2: {color4};  --blue-3: {color4};  --blue-4: {color4};  --blue-5: {color4};
+    --yellow-1: {color3};--yellow-2: {color3};--yellow-3: {color3};--yellow-4: {color3};--yellow-5: {color3};
+    --purple-1: {color5};--purple-2: {color5};--purple-3: {color5};--purple-4: {color5};--purple-5: {color5};
+
+    /* Optionally override the “mention” gradients */
+    --mention: linear-gradient(to right, {color5}44 40%, transparent);
+    --mention-hover: linear-gradient(to right, {color5}22 40%, transparent);
+    --reply: linear-gradient(to right, {foreground}22 40%, transparent);
+    --reply-hover: linear-gradient(to right, {foreground}11 40%, transparent);
 }}
