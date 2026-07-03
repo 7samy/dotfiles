@@ -159,6 +159,7 @@ Item {
                 color: WalColors.withAlpha(WalColors.color7, 0.3)
                 font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 14
+                font.weight: Font.Bold
                 visible: searchInput.text === ""
             }
 
