@@ -7,7 +7,8 @@ import Quickshell.Io
 Item {
     id: root
 
-    property string terminalCommand: "kitty" // Dein Terminal
+    property string terminalCommand: "kitty"
+    property string keyboardLayout: "de" // 👈 Change this to match your system (e.g. "de nodeadkeys")
     property var allApps: []
     property var filteredApps: allApps.filter((app) => {
         return app.name.toLowerCase().includes(AppLauncherState.searchText.toLowerCase());
@@ -30,11 +31,13 @@ Item {
             const blacklist = ["Fcitx", "Keyboard", "qt6", "qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uxterm", "xterm", "uuctl", "wpgtk", "xgps", "Wine", "Rofi", "Xfce", "Ark", "Blackmagic", "Cppcheck", "lstopo", "OpenJDK", "rmpc", "Electron", "Advanced Network", "Htop", "Base", "Calc", "Draw", "Impress", "Math"];
             for (let line of lines) {
                 const parts = line.split('|');
-                if (parts.length >= 3) {
+                if (parts.length >= 6) {
                     let name = parts[0].trim();
                     let exec = parts[1].trim();
                     let icon = parts[2] ? parts[2].trim() : "";
                     let needsTerminal = (parts[3] && parts[3].trim() === "true");
+                    let dbusActivatable = (parts[4] && parts[4].trim() === "true");
+                    let desktopId = parts[5].trim();
                     exec = exec.replace(/%[fFuUikcnvezt]/g, "").trim();
                     const fullNameInfo = (name + " " + exec).toLowerCase();
                     const isBlacklisted = blacklist.some((item) => {
@@ -42,22 +45,24 @@ Item {
                     });
                     if (name && exec && !isBlacklisted)
                         apps.push({
-                        "name": name,
-                        "exec": exec,
-                        "icon": icon,
-                        "terminal": needsTerminal
-                    });
+                            "name": name,
+                            "exec": exec,
+                            "icon": icon,
+                            "terminal": needsTerminal,
+                            "dbusActivatable": dbusActivatable,
+                            "desktopId": desktopId
+                        });
 
                 }
             }
             allApps = apps.filter((v, i, a) => {
                 return a.findIndex((t) => {
-                    return (t.name === v.name);
+                    return t.name === v.name;
                 }) === i;
             }).sort((a, b) => {
                 return a.name.localeCompare(b.name);
             });
-            console.log("Geladene Apps:", allApps.length);
+            console.log("Loaded apps:", allApps.length);
         } catch (e) {
             console.error("Error parsing applications:", e);
         }
@@ -69,15 +74,24 @@ Item {
 
         try {
             let command = [];
-            if (app.terminal)
-                command = [terminalCommand, "-e", "sh", "-c", app.exec + "; exec sh"];
-            else
-                command = ["sh", "-c", "setsid " + app.exec + " &"];
-            console.log("Starte:", app.name, "mit Befehl:", command);
+            if (app.dbusActivatable) {
+                // D‑Bus activated app: pass keyboard layout explicitly
+                command = ["env", "XKB_DEFAULT_LAYOUT=" + keyboardLayout, "gtk-launch", app.desktopId];
+            } else if (app.terminal) {
+                // Terminal app: set layout inside the shell
+                command = ["env", "XKB_DEFAULT_LAYOUT=" + keyboardLayout, terminalCommand, "-e", "sh", "-c", app.exec + "; exec sh"];
+            } else {
+                // Normal GUI app: setsid with layout
+                let args = app.exec.split(/\s+/).filter((a) => {
+                    return a;
+                });
+                command = ["env", "XKB_DEFAULT_LAYOUT=" + keyboardLayout, "setsid"].concat(args);
+            }
+            console.log("Launching:", app.name, "with command:", command);
             launcher.command = command;
             launcher.running = true;
         } catch (e) {
-            console.error("Fehler beim Starten von", app.name, ":", e);
+            console.error("Error launching", app.name, ":", e);
         }
         AppLauncherState.close();
     }
@@ -96,15 +110,17 @@ Item {
         id: appsProcess
 
         command: ["bash", "-c", "for f in /usr/share/applications/*.desktop; do \
-            grep -q '^Type=Application' \"$f\" || continue; \
-            grep -q '^NoDisplay=true' \"$f\" && continue; \
-            grep -q '^Hidden=true' \"$f\" && continue; \
-            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2); \
-            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2); \
-            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2); \
-            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2); \
-            echo \"$name|$exec|$icon|$terminal\"; \
-        done"]
+                grep -q '^Type=Application' \"$f\" || continue; \
+                grep -q '^NoDisplay=true' \"$f\" && continue; \
+                grep -q '^Hidden=true' \"$f\" && continue; \
+                name=$(grep -m1 '^Name=' \"$f\" | sed 's/^Name=//'); \
+                exec=$(grep -m1 '^Exec=' \"$f\" | sed 's/^Exec=//'); \
+                icon=$(grep -m1 '^Icon=' \"$f\" | sed 's/^Icon=//'); \
+                terminal=$(grep -m1 '^Terminal=' \"$f\" | sed 's/^Terminal=//'); \
+                dbus=$(grep -m1 '^DBusActivatable=' \"$f\" | sed 's/^DBusActivatable=//'); \
+                id=$(basename \"$f\" .desktop); \
+                echo \"$name|$exec|$icon|$terminal|$dbus|$id\"; \
+            done"]
 
         stdout: StdioCollector {
             id: appsOutput
@@ -115,6 +131,9 @@ Item {
     }
 
     Process {
+        // No environment property set → inherits all vars from the parent Quickshell process.
+        // We pass XKB_DEFAULT_LAYOUT explicitly in the command above.
+
         id: launcher
     }
 
