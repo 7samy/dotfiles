@@ -27,7 +27,7 @@ Item {
                 return l.trim();
             });
             const apps = [];
-            const blacklist = ["Keyboard", "qt6", "qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uxterm", "xterm", "uuctl", "wpgtk", "xgps", "Wine", "Rofi", "Xfce", "Ark", "Blackmagic", "Cppcheck", "lstopo", "OpenJDK", "rmpc", "Electron", "Advanced Network", "Htop", "Base", "Calc", "Draw", "Impress", "Math"];
+            const blacklist = ["qt6", "qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uxterm", "xterm", "uuctl", "wpgtk", "xgps", "Wine", "Rofi", "Xfce", "Ark", "Blackmagic", "Cppcheck", "lstopo", "OpenJDK", "rmpc", "Electron", "Advanced Network", "Htop", "Base", "Calc", "Draw", "Impress", "Math"];
             for (let line of lines) {
                 const parts = line.split('|');
                 if (parts.length >= 3) {
@@ -72,10 +72,16 @@ Item {
             if (app.terminal)
                 command = [terminalCommand, "-e", "sh", "-c", app.exec + "; exec sh"];
             else
-                command = ["sh", "-c", "setsid " + app.exec + " &"];
+                command = ["sh", "-c", app.exec];
             console.log("Starte:", app.name, "mit Befehl:", command);
-            launcher.command = command;
-            launcher.running = true;
+            // Quickshell.execDetached() startet den Prozess komplett
+            // losgelöst von Quickshell - er wird nicht getrackt und
+            // niemals von Quickshell gekillt, selbst wenn das
+            // Launcher-Fenster sofort danach zerstört wird. Das ersetzt
+            // den vorherigen Process{}+setsid-Ansatz, bei dem schwere
+            // Apps wie Discord teils gekillt wurden, bevor sie sich
+            // vollständig vom Elternprozess lösen konnten.
+            Quickshell.execDetached(command);
         } catch (e) {
             console.error("Fehler beim Starten von", app.name, ":", e);
         }
@@ -99,10 +105,10 @@ Item {
             grep -q '^Type=Application' \"$f\" || continue; \
             grep -q '^NoDisplay=true' \"$f\" && continue; \
             grep -q '^Hidden=true' \"$f\" && continue; \
-            name=$(grep -m1 '^Name=' \"$f\" | sed 's/^Name=//'); \
-            exec=$(grep -m1 '^Exec=' \"$f\" | sed 's/^Exec=//'); \
-            icon=$(grep -m1 '^Icon=' \"$f\" | sed 's/^Icon=//'); \
-            terminal=$(grep -m1 '^Terminal=' \"$f\" | sed 's/^Terminal=//'); \
+            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2); \
+            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2); \
+            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2); \
+            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2); \
             echo \"$name|$exec|$icon|$terminal\"; \
         done"]
 
@@ -112,10 +118,6 @@ Item {
             onStreamFinished: parseApplications()
         }
 
-    }
-
-    Process {
-        id: launcher
     }
 
     Column {
@@ -137,8 +139,8 @@ Item {
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 verticalAlignment: Text.AlignVCenter
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 13
+                font.family: "ArcadeClassic"
+                font.pixelSize: 16
                 color: WalColors.withAlpha(WalColors.color7, 0.5)
                 text: AppLauncherState.searchText
                 onTextChanged: AppLauncherState.searchText = text
@@ -157,9 +159,8 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Search..."
                 color: WalColors.withAlpha(WalColors.color7, 0.3)
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 14
-                font.weight: Font.Bold
+                font.family: "ArcadeClassic"
+                font.pixelSize: 16
                 visible: searchInput.text === ""
             }
 
