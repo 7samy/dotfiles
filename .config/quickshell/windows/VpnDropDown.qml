@@ -209,8 +209,9 @@ PanelWindow {
 
         Behavior on height {
             NumberAnimation {
-                duration: 300
-                easing.type: Easing.InOutCubic
+                duration: 400
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.44, 1.26, 0.54, 1, 1, 1]
             }
 
         }
