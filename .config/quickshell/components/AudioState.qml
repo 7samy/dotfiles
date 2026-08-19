@@ -4,38 +4,32 @@ import Quickshell.Services.Mpris
 pragma Singleton
 
 QtObject {
-    // Kein Player spielt -> lastActivePlayer beibehalten
-
     id: root
 
     // ==== Audio-Icon-Zustand ====
     property real iconCenterX: 0
     property bool dropdownOpen: false
     property bool buttonHovered: false
+    property bool dropdownHovered: false // NEU: Hover-Status des Dropdowns
     property bool muted: false
     property real volumePercent: 50
     // ==== MPRIS-Player ====
     property MprisPlayer lastActivePlayer: null
-    // ==== Aktiver Player (bevorzugt Musik-Player) ====
     readonly property MprisPlayer activePlayer: {
         const players = Mpris.players.values;
-        // 1. Wenn lastActivePlayer existiert und KEIN Browser ist, behalte ihn
         if (root.lastActivePlayer && players.indexOf(root.lastActivePlayer) !== -1 && !isBrowser(root.lastActivePlayer))
             return root.lastActivePlayer;
 
-        // 2. Suche einen spielenden Nicht-Browser-Player (MPD, Spotify, …)
         for (const p of players) {
             if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p))
                 return p;
 
         }
-        // 3. Sonst: ersten spielenden Player (auch Browser)
         for (const p of players) {
             if (p.playbackState === MprisPlaybackState.Playing)
                 return p;
 
         }
-        // 4. Fallback: lastActivePlayer oder erster Player
         if (root.lastActivePlayer && players.indexOf(root.lastActivePlayer) !== -1)
             return root.lastActivePlayer;
 
@@ -88,7 +82,7 @@ QtObject {
     }
     // ==== Soll Website-Icon anstelle des Covers angezeigt werden? ====
     readonly property bool showWebsiteIcon: hasPlayer && isBrowser(activePlayer)
-    // ==== Dropdown-Timer (als Property) ====
+    // ==== Dropdown-Timer ====
     property Timer hideTimer
 
     hideTimer: Timer {
@@ -105,7 +99,6 @@ QtObject {
         repeat: true
         onTriggered: {
             const players = Mpris.players.values;
-            // Bevorzuge spielenden Nicht-Browser-Player
             for (const p of players) {
                 if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {
                     if (root.lastActivePlayer !== p)
@@ -114,7 +107,6 @@ QtObject {
                     return ;
                 }
             }
-            // Sonst ersten spielenden Player (auch Browser)
             for (const p of players) {
                 if (p.playbackState === MprisPlaybackState.Playing) {
                     if (root.lastActivePlayer !== p)
@@ -147,6 +139,14 @@ QtObject {
         s = s.split(':')[0];
         s = s.replace(/^www\./, "");
         return s.toLowerCase();
+    }
+
+    // ==== Zentrale Hover-Statusverwaltung ====
+    function updateHoverTimer() {
+        if (!root.buttonHovered && !root.dropdownHovered)
+            hideTimer.start();
+        else
+            hideTimer.stop();
     }
 
     function togglePlay() {

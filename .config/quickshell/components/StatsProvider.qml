@@ -15,12 +15,59 @@ QtObject {
     property string gpuTemp: "--"
     property real diskPercent: 0
     property string diskText: "--"
-    // ==== Interne Zähler für CPU-Berechnung ====
+    // ==== Interne Zähler für CPU ====
     property int prevIdle: 0
     property int prevTotal: 0
     property bool firstCpuReading: true
-    // ==== Aktualisierungs-Timer ====
+    // ==== Timer ====
     property Timer updateTimer
+    // ==== RAM ====
+    property Process memProcess
+    // ==== CPU-Auslastung ====
+    property Process cpuStatProcess
+    // ==== CPU-Temperatur ====
+    property Process sensorsProcess
+
+    sensorsProcess: Process {
+        // Sucht spezifisch nach "Tctl" (dein AMD Sensor), nimmt den Wert und entfernt +, ° und C
+        command: ["sh", "-c", "sensors | grep 'Tctl' | head -n 1 | awk '{print $2}' | tr -d '+°C'"]
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                var out = data.trim();
+                if (out !== "")
+                    // Optional: Wenn du keine Kommastellen (z.B. 59.6) willst, nutze:
+                    // root.cpuTemp = Math.round(parseFloat(out)) + "°C";
+                    root.cpuTemp = out + "°C";
+                else
+                    root.cpuTemp = "--";
+            }
+        }
+
+    }
+
+    // ==== GPU ====
+    property Process gpuProcess
+    // ==== Disk ====
+    property Process dfProcess
+
+    // ==== Intervall-Steuerung ====
+    function update() {
+        memProcess.running = false;
+        cpuStatProcess.running = false;
+        sensorsProcess.running = false;
+        gpuProcess.running = false;
+        dfProcess.running = false;
+        memProcess.running = true;
+        cpuStatProcess.running = true;
+        sensorsProcess.running = true;
+        gpuProcess.running = true;
+        dfProcess.running = true;
+    }
+
+    Component.onCompleted: {
+        root.update();
+    }
 
     updateTimer: Timer {
         interval: 2000
@@ -29,17 +76,16 @@ QtObject {
         onTriggered: root.update()
     }
 
-    // ==== RAM ====
-    property Process memProcess
-
     memProcess: Process {
-        id: memProc
-
-        running: false
         command: ["sh", "-c", "grep -E 'MemTotal|MemAvailable' /proc/meminfo | awk '{print $2}' | paste -sd ' '"]
-        onExited: {
-            if (memProc.exitCode === 0 && memProc.stdout !== null && memProc.stdout.trim() !== "") {
-                var parts = memProc.stdout.trim().split(/\s+/);
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                var out = data.trim();
+                if (out === "")
+                    return ;
+
+                var parts = out.split(/\s+/);
                 if (parts.length >= 2) {
                     var total = parseInt(parts[0], 10);
                     var available = parseInt(parts[1], 10);
@@ -49,19 +95,19 @@ QtObject {
                 }
             }
         }
+
     }
 
-    // ==== CPU-Auslastung ====
-    property Process cpuStatProcess
-
     cpuStatProcess: Process {
-        id: cpuProc
-
-        running: false
         command: ["sh", "-c", "grep '^cpu ' /proc/stat | awk '{print $2, $3, $4, $5, $6, $7, $8, $9}'"]
-        onExited: {
-            if (cpuProc.exitCode === 0 && cpuProc.stdout !== null && cpuProc.stdout.trim() !== "") {
-                var parts = cpuProc.stdout.trim().split(/\s+/);
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                var out = data.trim();
+                if (out === "")
+                    return ;
+
+                var parts = out.split(/\s+/);
                 if (parts.length >= 8) {
                     var user = parseInt(parts[0], 10);
                     var nice = parseInt(parts[1], 10);
@@ -87,63 +133,44 @@ QtObject {
                 }
             }
         }
+
     }
-
-    // ==== CPU-Temperatur ====
-    property Process sensorsProcess
-
-    sensorsProcess: Process {
-        id: sensorsProc
-
-        running: false
-        command: ["sh", "-c", "sensors | grep -E 'Package id 0|Tctl|Tccd1' | head -1 | awk -F: '{print $2}' | sed 's/^[ \t]*//' | sed 's/[+°C].*//'"]
-        onExited: {
-            if (sensorsProc.exitCode === 0 && sensorsProc.stdout !== null && sensorsProc.stdout.trim() !== "")
-                root.cpuTemp = sensorsProc.stdout.trim() + "°C";
-            else
-                root.cpuTemp = "--";
-        }
-    }
-
-    // ==== GPU (AMD) ====
-    property Process gpuProcess
 
     gpuProcess: Process {
-        id: gpuProc
+        command: ["sh", "-c", "busy=$(cat /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | tail -1); temp=$(cat /sys/class/drm/card*/device/hwmon/hwmon*/temp1_input 2>/dev/null | tail -1); if [ -n \"$busy\" ]; then echo \"$busy $temp\"; else echo '-- --'; fi"]
 
-        running: false
-        command: ["sh", "-c", "busy=$(cat /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | head -1); temp=$(cat /sys/class/drm/card*/device/hwmon/hwmon*/temp1_input 2>/dev/null | head -1); if [ -n \"$busy\" ]; then echo \"$busy $temp\"; else echo '-- --'; fi"]
-        onExited: {
-            if (gpuProc.exitCode === 0 && gpuProc.stdout !== null && gpuProc.stdout.trim() !== "") {
-                var parts = gpuProc.stdout.trim().split(/\s+/);
+        stdout: SplitParser {
+            onRead: (data) => {
+                var out = data.trim();
+                if (out === "")
+                    return ;
+
+                var parts = out.split(/\s+/);
                 if (parts.length >= 1 && parts[0] !== "--")
                     root.gpuUsage = parts[0] + "%";
                 else
                     root.gpuUsage = "--";
-                if (parts.length >= 2 && parts[1] !== "0" && parts[1] !== "") {
+                if (parts.length >= 2 && parts[1] !== "0" && parts[1] !== "--" && parts[1] !== "") {
                     var tempC = Math.round(parseInt(parts[1], 10) / 1000);
                     root.gpuTemp = tempC + "°C";
                 } else {
                     root.gpuTemp = "--";
                 }
-            } else {
-                root.gpuUsage = "--";
-                root.gpuTemp = "--";
             }
         }
+
     }
 
-    // ==== Speicherplatz ====
-    property Process dfProcess
-
     dfProcess: Process {
-        id: dfProc
-
-        running: false
         command: ["sh", "-c", "df -h / | awk 'NR==2 {print $2, $3, $5}'"]
-        onExited: {
-            if (dfProc.exitCode === 0 && dfProc.stdout !== null && dfProc.stdout.trim() !== "") {
-                var parts = dfProc.stdout.trim().split(/\s+/);
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                var out = data.trim();
+                if (out === "")
+                    return ;
+
+                var parts = out.split(/\s+/);
                 if (parts.length >= 3) {
                     var total = parts[0];
                     var used = parts[1];
@@ -151,20 +178,9 @@ QtObject {
                     root.diskText = used + " / " + total + " (" + percent + "%)";
                     root.diskPercent = parseFloat(percent) || 0;
                 }
-            } else {
-                root.diskText = "--";
-                root.diskPercent = 0;
             }
         }
-    }
 
-    // ==== Aktualisierungsfunktion ====
-    function update() {
-        memProcess.running = true;
-        cpuStatProcess.running = true;
-        sensorsProcess.running = true;
-        gpuProcess.running = true;
-        dfProcess.running = true;
     }
 
 }

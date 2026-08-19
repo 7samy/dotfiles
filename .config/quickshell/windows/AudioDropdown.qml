@@ -35,15 +35,14 @@ PanelWindow {
         height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
-        // HoverHandler für das gesamte Dropdown – hält es offen
+        // HoverHandler für das gesamte Dropdown
         HoverHandler {
             onHoveredChanged: {
-                if (hovered) {
-                    AudioState.stopHideTimer();
+                AudioState.dropdownHovered = hovered;
+                if (hovered)
                     AudioState.dropdownOpen = true;
-                } else {
-                    AudioState.startHideTimer();
-                }
+
+                AudioState.updateHoverTimer();
             }
         }
 
@@ -196,7 +195,7 @@ PanelWindow {
                     visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                 }
 
-                // SVG-Icon für Browser (YouTube, Twitch, TikTok, Firefox, Chrome)
+                // Website-Icon (PNG)
                 Image {
                     anchors.centerIn: parent
                     width: coverSize * 0.5
@@ -207,7 +206,7 @@ PanelWindow {
                     smooth: true
                 }
 
-                // Fallback-Text (generisches Musik-Icon), wenn weder Cover noch SVG verfügbar
+                // Fallback-Text
                 Text {
                     anchors.centerIn: parent
                     visible: (AudioState.showWebsiteIcon && AudioState.websiteIconSource === "") || (!AudioState.showWebsiteIcon && AudioState.artUrl === "")
@@ -217,7 +216,7 @@ PanelWindow {
                     font.pixelSize: 28
                 }
 
-                // Kleiner Mittelpunkt – nur wenn das Cover sichtbar ist
+                // Kleiner Mittelpunkt
                 Rectangle {
                     anchors.centerIn: parent
                     width: 10
@@ -345,7 +344,7 @@ PanelWindow {
 
         }
 
-        // Timer für die Rotation des Albumcovers – läuft nur, wenn Cover sichtbar und Wiedergabe aktiv
+        // Timer für Rotation
         Timer {
             interval: 16
             repeat: true
