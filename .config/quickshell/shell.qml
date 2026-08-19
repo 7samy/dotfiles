@@ -39,7 +39,6 @@ ShellRoot {
 
     Wallpaper {
         id: wallpaperPicker
-
         visible: false
     }
 
@@ -78,8 +77,9 @@ ShellRoot {
                 screen: modelData
             }
 
+            StatsDropdown {
+                screen: modelData
+            }
         }
-
     }
-
 }

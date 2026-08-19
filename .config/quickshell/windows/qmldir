@@ -1,0 +1,9 @@
+AppLauncherWindow 1.0 AppLauncherWindow.qml
+Wallpaper 1.0 Wallpaper.qml
+MusicPickerWindow 1.0 MusicPickerWindow.qml
+MainBar 1.0 MainBar.qml
+TriggerZone 1.0 TriggerZone.qml
+WallpaperTriggerzone 1.0 WallpaperTriggerzone.qml
+VpnDropDown 1.0 VpnDropDown.qml
+AudioDropdown 1.0 AudioDropdown.qml
+StatsDropdown 1.0 StatsDropdown.qml
