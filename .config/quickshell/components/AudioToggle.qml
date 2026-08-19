@@ -6,13 +6,26 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    property var barScreen
+    readonly property real globalCenterX: windowX(root) + width / 2
+
+    function windowX(item) {
+        var x = 0;
+        var it = item;
+        while (it && it.parent) {
+            x += it.x;
+            it = it.parent;
+        }
+        return x;
+    }
 
     width: iconText.implicitWidth + 16
     height: parent.height
     color: "transparent"
-    Component.onCompleted: {
-        AudioState.dropdownX = 1910;
+
+    Binding {
+        target: AudioState
+        property: "iconCenterX"
+        value: root.globalCenterX
     }
 
     Process {
@@ -40,7 +53,7 @@ Rectangle {
         id: iconText
 
         anchors.centerIn: parent
-        text: AudioState.muted ? "󰖁" : (AudioState.volumePercent > 50 ? "" : "")
+        text: AudioState.muted ? "󰖁" : (AudioState.volumePercent > 50 ? "" : "")
         color: AudioState.muted ? "#f0b8b8" : WalColors.color2
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 14
@@ -61,13 +74,27 @@ Rectangle {
 
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         onClicked: {
             AudioState.muted = !AudioState.muted;
             muteProcess.running = true;
         }
-        onEntered: AudioState.buttonHovered = true
-        onExited: AudioState.buttonHovered = false
-        cursorShape: Qt.PointingHandCursor
+        onEntered: {
+            hideTimer.stop();
+            AudioState.buttonHovered = true;
+            AudioState.dropdownOpen = true;
+        }
+        onExited: {
+            AudioState.buttonHovered = false;
+            hideTimer.start();
+        }
+    }
+
+    Timer {
+        id: hideTimer
+
+        interval: 200
+        onTriggered: AudioState.dropdownOpen = false
     }
 
 }

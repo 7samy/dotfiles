@@ -191,13 +191,13 @@ PanelWindow {
                     spacing: 8
                     height: parent.height
 
+                    AudioToggle {
+                    }
+
                     PowerOff {
                     }
 
                     Stats {
-                    }
-
-                    AudioToggle {
                     }
 
                     VpnToggle {

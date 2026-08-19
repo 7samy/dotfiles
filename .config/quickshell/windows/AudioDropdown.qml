@@ -1,45 +1,43 @@
 import "../components"
+import Qt5Compat.GraphicalEffects
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Shapes
 import Quickshell
-import Quickshell.Io
 
 PanelWindow {
     id: dropdown
 
     required property var screen
-    readonly property real radius: 20
+    readonly property real cornerRadius: 20
     readonly property real menuWidth: 220
+    readonly property real edgePadding: 8
+    readonly property real coverSize: 120
 
-    anchors.top: true
-    anchors.left: true
-    implicitWidth: menuWidth + (2 * radius)
-    implicitHeight: 100
+    implicitWidth: menuWidth + 2 * cornerRadius
+    implicitHeight: content.implicitHeight + 24
     color: "transparent"
     exclusiveZone: -1
+    anchors.top: true
+    anchors.left: true
 
     margins {
         top: 40
-        left: screen.width / 1.33333
-    }
-
-    Process {
-        id: setVolumeProcess
+        left: {
+            const desired = AudioState.iconCenterX - implicitWidth / 2;
+            return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
+        }
     }
 
     Item {
         id: container
 
         width: parent.width
-        height: AudioState.dropdownOpen ? 100 : 0
+        height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
         Shape {
-            id: backgroundShape
-
             width: parent.width
-            height: 100
+            height: dropdown.implicitHeight
             anchors.top: parent.top
             smooth: true
             antialiasing: true
@@ -60,49 +58,49 @@ PanelWindow {
                 }
 
                 PathArc {
-                    x: radius
-                    y: radius
-                    radiusX: radius
-                    radiusY: radius
+                    x: cornerRadius
+                    y: cornerRadius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Clockwise
                 }
 
                 PathLine {
-                    x: radius
-                    y: 100 - radius
+                    x: cornerRadius
+                    y: dropdown.implicitHeight - cornerRadius
                 }
 
                 PathArc {
-                    x: radius + radius
-                    y: 100
-                    radiusX: radius
-                    radiusY: radius
+                    x: 2 * cornerRadius
+                    y: dropdown.implicitHeight
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
                 }
 
                 PathLine {
-                    x: radius + menuWidth - radius
-                    y: 100
+                    x: cornerRadius + menuWidth - cornerRadius
+                    y: dropdown.implicitHeight
                 }
 
                 PathArc {
-                    x: radius + menuWidth
-                    y: 100 - radius
-                    radiusX: radius
-                    radiusY: radius
+                    x: cornerRadius + menuWidth
+                    y: dropdown.implicitHeight - cornerRadius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
                 }
 
                 PathLine {
-                    x: radius + menuWidth
-                    y: radius
+                    x: cornerRadius + menuWidth
+                    y: cornerRadius
                 }
 
                 PathArc {
-                    x: radius + menuWidth + radius
+                    x: cornerRadius + menuWidth + cornerRadius
                     y: 0
-                    radiusX: radius
-                    radiusY: radius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Clockwise
                 }
 
@@ -118,100 +116,182 @@ PanelWindow {
         Connections {
             function onColorsUpdated() {
                 mainPath.fillColor = "transparent";
-                forceRedrawTimer.start();
+                redrawTimer.start();
             }
 
             target: WalColors
         }
 
         Timer {
-            id: forceRedrawTimer
+            id: redrawTimer
 
             interval: 10
             onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
         }
 
-        Item {
-            width: parent.width
-            height: 100
-            anchors.bottom: parent.bottom
+        Column {
+            id: content
 
-            Column {
-                spacing: 6
-                topPadding: 8
+            spacing: 12
+            topPadding: 16
 
-                anchors {
-                    top: parent.top
-                    left: parent.left
-                    right: parent.right
-                    leftMargin: radius + 14
-                    rightMargin: radius + 14
+            anchors {
+                top: parent.top
+                horizontalCenter: parent.horizontalCenter
+            }
+
+            Item {
+                width: coverSize
+                height: coverSize
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "#111111"
                 }
 
-                Row {
-                    spacing: 8
-                    width: parent.width
-                }
+                Image {
+                    id: coverImg
 
-                Slider {
-                    id: volumeSlider
-
-                    from: 0
-                    to: 100
-                    value: AudioState.volumePercent
-                    width: parent.width
-                    height: 24
-                    z: 10
-                    onMoved: {
-                        AudioState.volumePercent = value;
-                        var frac = value / 100;
-                        setVolumeProcess.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", frac.toFixed(2)];
-                        setVolumeProcess.running = true;
-                    }
-
-                    background: Rectangle {
-                        x: volumeSlider.leftPadding
-                        y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                        implicitWidth: volumeSlider.width
-                        implicitHeight: 4
-                        width: volumeSlider.availableWidth
-                        height: implicitHeight
-                        radius: 2
-                        color: WalColors.withAlpha(WalColors.color2, 0.3)
-
-                        Rectangle {
-                            width: volumeSlider.visualPosition * parent.width
-                            height: parent.height
-                            color: WalColors.color4
-                            radius: 0
-                        }
-
-                    }
-
-                    handle: Rectangle {
-                        x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
-                        y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                        width: 16
-                        height: 16
-                        radius: 16
-                        color: WalColors.color4
-                        border.color: WalColors.withAlpha(WalColors.color2, 0.5)
-                        border.width: 2
-                    }
-
+                    anchors.centerIn: parent
+                    width: coverSize * 0.82
+                    height: width
+                    source: MusicState.artUrl
+                    fillMode: Image.PreserveAspectCrop
+                    visible: false
                 }
 
                 Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: WalColors.withAlpha(WalColors.color7, 0.15)
+                    id: maskShape
+
+                    width: coverImg.width
+                    height: coverImg.height
+                    radius: width / 2
+                    visible: false
+                    anchors.centerIn: parent
+                }
+
+                OpacityMask {
+                    anchors.centerIn: parent
+                    width: coverImg.width
+                    height: coverImg.height
+                    source: coverImg
+                    maskSource: maskShape
+                    visible: MusicState.artUrl !== ""
+
+                    RotationAnimation {
+                        target: parent
+                        property: "rotation"
+                        from: 0
+                        to: 360
+                        duration: 8000
+                        loops: Animation.Infinite
+                        running: MusicState.isPlaying
+                    }
+
                 }
 
                 Text {
-                    text: "󰓃  Default Audio Sink"
-                    color: WalColors.withAlpha(WalColors.color2, 0.6)
-                    font.pixelSize: 10
+                    anchors.centerIn: parent
+                    visible: MusicState.artUrl === ""
+                    text: "󰝚"
+                    color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 28
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 10
+                    height: 10
+                    radius: 5
+                    color: WalColors.color0
+                    visible: MusicState.artUrl !== ""
+                }
+
+            }
+
+            Text {
+                width: menuWidth - 28
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: MusicState.hasPlayer ? MusicState.title : "Kein Player aktiv"
+                color: WalColors.color2
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 13
+                elide: Text.ElideRight
+            }
+
+            Text {
+                width: menuWidth - 28
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: MusicState.artist
+                color: WalColors.color4
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                visible: text !== ""
+            }
+
+            Row {
+                spacing: 24
+                anchors.horizontalCenter: parent.horizontalCenter
+                bottomPadding: 12
+
+                Text {
+                    text: "󰒮"
+                    color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 18
+
+                    MouseArea {
+                        id: prevMouse
+
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: MusicState.previous()
+                    }
+
+                }
+
+                Text {
+                    text: MusicState.isPlaying ? "󰏤" : "󰐊"
+                    color: playMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 20
+
+                    MouseArea {
+                        id: playMouse
+
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: MusicState.togglePlay()
+                    }
+
+                }
+
+                Text {
+                    text: "󰒭"
+                    color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 18
+
+                    MouseArea {
+                        id: nextMouse
+
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: MusicState.next()
+                    }
+
                 }
 
             }
@@ -221,12 +301,8 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            propagateComposedEvents: true
-            onPressed: (mouse) => {
-                return mouse.accepted = false;
-            }
-            onEntered: AudioState.menuHovered = true
-            onExited: AudioState.menuHovered = false
+            onEntered: AudioState.dropdownOpen = true
+            onExited: AudioState.dropdownOpen = false
         }
 
         Behavior on height {
