@@ -8,31 +8,23 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 
 Window {
-    // ... Rest bleibt gleich
-
     id: wallpaperPicker
 
     title: "wallpaper-picker"
     width: 2560
     height: 1440
+    color: "transparent"
     onVisibleChanged: {
-        if (visible) {
-            // Re-Binding setzen, falls es vorher durch einen imperativen
-            // Assign gebrochen wurde
-            background.color = Qt.binding(() => {
-                return WalColors.withAlpha(WalColors.color0, 0.9);
-            });
+        if (visible)
             wallpaperGrid.forceActiveFocus();
-        }
+
     }
 
     Rectangle {
-        // Connections + Timer entfernt – die haben das Binding gekillt
-
         id: background
 
         anchors.fill: parent
-        color: transparent // reaktives Binding – reicht!
+        color: "transparent"
         focus: true
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape)
@@ -52,39 +44,39 @@ Window {
     GridView {
         id: wallpaperGrid
 
-        anchors.fill: parent
-        anchors.margins: 30
-        cellWidth: 250
-        cellHeight: 500
-        flow: GridView.FlowTopToBottom
+        anchors.centerIn: parent
+        cellWidth: 660
+        cellHeight: 380
+        width: cellWidth * 2
+        height: cellHeight * 3
+        flow: GridView.FlowLeftToRight
         model: wallpaperModel
-        clip: false
+        clip: true
         focus: true
-        // Optimierter Vorlade-Buffer
         cacheBuffer: 800
         Keys.onPressed: (event) => {
             switch (event.key) {
             case Qt.Key_J:
+            case Qt.Key_Down:
                 wallpaperGrid.moveCurrentIndexDown();
                 event.accepted = true;
                 break;
             case Qt.Key_K:
+            case Qt.Key_Up:
                 wallpaperGrid.moveCurrentIndexUp();
                 event.accepted = true;
                 break;
             case Qt.Key_H:
+            case Qt.Key_Left:
                 wallpaperGrid.moveCurrentIndexLeft();
                 event.accepted = true;
                 break;
             case Qt.Key_L:
+            case Qt.Key_Right:
                 wallpaperGrid.moveCurrentIndexRight();
                 event.accepted = true;
                 break;
             }
-        }
-
-        ScrollBar.horizontal: ScrollBar {
-            policy: ScrollBar.AsNeeded
         }
 
         delegate: Item {
@@ -115,19 +107,20 @@ Window {
                 id: img
 
                 source: fileUrl
-                anchors.fill: parent
-                anchors.margins: 10
+                width: 640
+                height: 360
+                anchors.centerIn: parent
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                // Optimierte, feste Bildgröße
-                sourceSize: Qt.size(622, 350)
+                sourceSize: Qt.size(640, 360)
                 opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 1
 
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    border.color: WalColors.withAlpha(WalColors.color2, 0.5)
-                    border.width: delegateItem.GridView.isCurrentItem ? 1.8 : 2
+                    // Hier ist das transparente Weiß (#80 ist der Alpha-Wert für 50% Transparenz)
+                    border.color: delegateItem.GridView.isCurrentItem ? "#80FFFFFF" : "transparent"
+                    border.width: delegateItem.GridView.isCurrentItem ? 3 : 0
                     visible: delegateItem.GridView.isCurrentItem
                 }
 

@@ -84,39 +84,8 @@ QtObject {
     readonly property bool showWebsiteIcon: hasPlayer && isBrowser(activePlayer)
     // ==== Dropdown-Timer ====
     property Timer hideTimer
-
-    hideTimer: Timer {
-        interval: 200
-        onTriggered: root.dropdownOpen = false
-    }
-
     // ==== Timer zur Aktualisierung des lastActivePlayer ====
     property Timer playerUpdateTimer
-
-    playerUpdateTimer: Timer {
-        interval: 500
-        running: true
-        repeat: true
-        onTriggered: {
-            const players = Mpris.players.values;
-            for (const p of players) {
-                if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {
-                    if (root.lastActivePlayer !== p)
-                        root.lastActivePlayer = p;
-
-                    return ;
-                }
-            }
-            for (const p of players) {
-                if (p.playbackState === MprisPlaybackState.Playing) {
-                    if (root.lastActivePlayer !== p)
-                        root.lastActivePlayer = p;
-
-                    return ;
-                }
-            }
-        }
-    }
 
     // ==== Browser-Erkennung ====
     function isBrowser(player) {
@@ -173,6 +142,36 @@ QtObject {
 
     function stopHideTimer() {
         hideTimer.stop();
+    }
+
+    hideTimer: Timer {
+        interval: 400
+        onTriggered: root.dropdownOpen = false
+    }
+
+    playerUpdateTimer: Timer {
+        interval: 500
+        running: true
+        repeat: true
+        onTriggered: {
+            const players = Mpris.players.values;
+            for (const p of players) {
+                if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {
+                    if (root.lastActivePlayer !== p)
+                        root.lastActivePlayer = p;
+
+                    return ;
+                }
+            }
+            for (const p of players) {
+                if (p.playbackState === MprisPlaybackState.Playing) {
+                    if (root.lastActivePlayer !== p)
+                        root.lastActivePlayer = p;
+
+                    return ;
+                }
+            }
+        }
     }
 
 }

@@ -10,9 +10,10 @@ PanelWindow {
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 260
     readonly property real edgePadding: 8
+    readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: content.implicitHeight + 24
+    implicitHeight: container.height // Physisches Schrumpfen auf 0, verhindert Geisterfenster
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -26,27 +27,32 @@ PanelWindow {
         }
     }
 
+    // Globale MouseArea für verlässlichen Hover (lässt Klicks durch)
+    MouseArea {
+        anchors.fill: parent
+        anchors.topMargin: 6
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        onContainsMouseChanged: {
+            if (containsMouse) {
+                StatsState.stopHideTimer();
+                StatsState.dropdownOpen = true;
+            } else {
+                StatsState.startHideTimer();
+            }
+        }
+    }
+
     Item {
         id: container
 
         width: parent.width
-        height: StatsState.dropdownOpen ? dropdown.implicitHeight : 0
+        height: StatsState.dropdownOpen ? dropdown.maxMenuHeight : 0
         clip: true
-
-        HoverHandler {
-            onHoveredChanged: {
-                if (hovered) {
-                    StatsState.stopHideTimer();
-                    StatsState.dropdownOpen = true;
-                } else {
-                    StatsState.startHideTimer();
-                }
-            }
-        }
 
         Shape {
             width: parent.width
-            height: dropdown.implicitHeight
+            height: dropdown.maxMenuHeight
             anchors.top: parent.top
             smooth: true
             antialiasing: true
@@ -76,12 +82,12 @@ PanelWindow {
 
                 PathLine {
                     x: cornerRadius
-                    y: dropdown.implicitHeight - cornerRadius
+                    y: dropdown.maxMenuHeight - cornerRadius
                 }
 
                 PathArc {
                     x: 2 * cornerRadius
-                    y: dropdown.implicitHeight
+                    y: dropdown.maxMenuHeight
                     radiusX: cornerRadius
                     radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
@@ -89,12 +95,12 @@ PanelWindow {
 
                 PathLine {
                     x: cornerRadius + menuWidth - cornerRadius
-                    y: dropdown.implicitHeight
+                    y: dropdown.maxMenuHeight
                 }
 
                 PathArc {
                     x: cornerRadius + menuWidth
-                    y: dropdown.implicitHeight - cornerRadius
+                    y: dropdown.maxMenuHeight - cornerRadius
                     radiusX: cornerRadius
                     radiusY: cornerRadius
                     direction: PathArc.Counterclockwise

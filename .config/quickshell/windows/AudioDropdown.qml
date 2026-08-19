@@ -12,9 +12,10 @@ PanelWindow {
     readonly property real menuWidth: 220
     readonly property real edgePadding: 8
     readonly property real coverSize: 120
+    readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: content.implicitHeight + 24
+    implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -32,23 +33,12 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
+        height: AudioState.dropdownOpen ? dropdown.maxMenuHeight : 0
         clip: true
-
-        // HoverHandler für das gesamte Dropdown
-        HoverHandler {
-            onHoveredChanged: {
-                AudioState.dropdownHovered = hovered;
-                if (hovered)
-                    AudioState.dropdownOpen = true;
-
-                AudioState.updateHoverTimer();
-            }
-        }
 
         Shape {
             width: parent.width
-            height: dropdown.implicitHeight
+            height: dropdown.maxMenuHeight
             anchors.top: parent.top
             smooth: true
             antialiasing: true
@@ -78,12 +68,12 @@ PanelWindow {
 
                 PathLine {
                     x: cornerRadius
-                    y: dropdown.implicitHeight - cornerRadius
+                    y: dropdown.maxMenuHeight - cornerRadius
                 }
 
                 PathArc {
                     x: 2 * cornerRadius
-                    y: dropdown.implicitHeight
+                    y: dropdown.maxMenuHeight
                     radiusX: cornerRadius
                     radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
@@ -91,12 +81,12 @@ PanelWindow {
 
                 PathLine {
                     x: cornerRadius + menuWidth - cornerRadius
-                    y: dropdown.implicitHeight
+                    y: dropdown.maxMenuHeight
                 }
 
                 PathArc {
                     x: cornerRadius + menuWidth
-                    y: dropdown.implicitHeight - cornerRadius
+                    y: dropdown.maxMenuHeight - cornerRadius
                     radiusX: cornerRadius
                     radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
@@ -183,7 +173,6 @@ PanelWindow {
                     anchors.centerIn: parent
                 }
 
-                // Albumcover (rotierende Schallplatte) – nur für Nicht-Browser-Player
                 OpacityMask {
                     id: coverMask
 
@@ -195,7 +184,6 @@ PanelWindow {
                     visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                 }
 
-                // Website-Icon (PNG)
                 Image {
                     anchors.centerIn: parent
                     width: coverSize * 0.5
@@ -206,7 +194,6 @@ PanelWindow {
                     smooth: true
                 }
 
-                // Fallback-Text
                 Text {
                     anchors.centerIn: parent
                     visible: (AudioState.showWebsiteIcon && AudioState.websiteIconSource === "") || (!AudioState.showWebsiteIcon && AudioState.artUrl === "")
@@ -216,7 +203,6 @@ PanelWindow {
                     font.pixelSize: 28
                 }
 
-                // Kleiner Mittelpunkt
                 Rectangle {
                     anchors.centerIn: parent
                     width: 10
@@ -256,22 +242,23 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 bottomPadding: 12
 
+                // Zurück-Button
                 Text {
                     text: "󰒮"
-                    color: prevHoverHandler.hovered ? WalColors.color4 : WalColors.color2
+                    color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 18
-                    scale: prevHoverHandler.hovered ? 1.3 : 1
+                    scale: prevMouse.containsMouse ? 1.3 : 1
                     transformOrigin: Item.Center
 
-                    HoverHandler {
-                        id: prevHoverHandler
+                    MouseArea {
+                        id: prevMouse
 
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                        onTapped: AudioState.previous()
+                        onClicked: AudioState.previous()
                     }
 
                     Behavior on scale {
@@ -284,22 +271,23 @@ PanelWindow {
 
                 }
 
+                // Play / Pause-Button
                 Text {
                     text: AudioState.isPlaying ? "󰏤" : "󰐊"
-                    color: playHoverHandler.hovered ? WalColors.color4 : WalColors.color2
+                    color: playMouse.containsMouse ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 20
-                    scale: playHoverHandler.hovered ? 1.3 : 1
+                    scale: playMouse.containsMouse ? 1.3 : 1
                     transformOrigin: Item.Center
 
-                    HoverHandler {
-                        id: playHoverHandler
+                    MouseArea {
+                        id: playMouse
 
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                        onTapped: AudioState.togglePlay()
+                        onClicked: AudioState.togglePlay()
                     }
 
                     Behavior on scale {
@@ -312,22 +300,23 @@ PanelWindow {
 
                 }
 
+                // Weiter-Button
                 Text {
                     text: "󰒭"
-                    color: nextHoverHandler.hovered ? WalColors.color4 : WalColors.color2
+                    color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 18
-                    scale: nextHoverHandler.hovered ? 1.3 : 1
+                    scale: nextMouse.containsMouse ? 1.3 : 1
                     transformOrigin: Item.Center
 
-                    HoverHandler {
-                        id: nextHoverHandler
+                    MouseArea {
+                        id: nextMouse
 
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                        onTapped: AudioState.next()
+                        onClicked: AudioState.next()
                     }
 
                     Behavior on scale {
@@ -344,7 +333,6 @@ PanelWindow {
 
         }
 
-        // Timer für Rotation
         Timer {
             interval: 16
             repeat: true
@@ -367,6 +355,18 @@ PanelWindow {
 
         }
 
+    }
+
+    // Haupt-MouseArea für das gesamte Menü – jetzt ÜBER allen anderen Elementen
+    MouseArea {
+        anchors.fill: parent
+        anchors.topMargin: 6
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        onContainsMouseChanged: {
+            AudioState.dropdownHovered = containsMouse;
+            AudioState.updateHoverTimer();
+        }
     }
 
 }
