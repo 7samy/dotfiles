@@ -16,8 +16,26 @@ QtObject {
     property real volumePercent: 50
     // ==== MPRIS-Player ====
     property MprisPlayer lastActivePlayer: null
+    // ==== Aktiver Player (bevorzugt Musik-Player) ====
     readonly property MprisPlayer activePlayer: {
         const players = Mpris.players.values;
+        // 1. Wenn lastActivePlayer existiert und KEIN Browser ist, behalte ihn
+        if (root.lastActivePlayer && players.indexOf(root.lastActivePlayer) !== -1 && !isBrowser(root.lastActivePlayer))
+            return root.lastActivePlayer;
+
+        // 2. Suche einen spielenden Nicht-Browser-Player (MPD, Spotify, …)
+        for (const p of players) {
+            if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p))
+                return p;
+
+        }
+        // 3. Sonst: ersten spielenden Player (auch Browser)
+        for (const p of players) {
+            if (p.playbackState === MprisPlaybackState.Playing)
+                return p;
+
+        }
+        // 4. Fallback: lastActivePlayer oder erster Player
         if (root.lastActivePlayer && players.indexOf(root.lastActivePlayer) !== -1)
             return root.lastActivePlayer;
 
@@ -27,9 +45,19 @@ QtObject {
     readonly property bool isPlaying: hasPlayer && activePlayer.playbackState === MprisPlaybackState.Playing
     readonly property string title: hasPlayer ? (activePlayer.trackTitle ?? "") : ""
     readonly property string artist: hasPlayer ? (activePlayer.trackArtist ?? "") : ""
-    readonly property string artUrl: hasPlayer ? (activePlayer.trackArtUrl ?? "") : ""
-    // ==== Website-Icon (Vorrang für Browser) ====
-    readonly property string websiteIcon: {
+    readonly property string artUrl: {
+        if (!hasPlayer)
+            return "";
+
+        var url = activePlayer.trackArtUrl ?? "";
+        if (!url && activePlayer.metadata && activePlayer.metadata["mpris:artUrl"])
+            url = activePlayer.metadata["mpris:artUrl"];
+
+        console.log("DEBUG artUrl:", url, "Player:", activePlayer.identity);
+        return url;
+    }
+    // ==== Website-Icon-Quelle (PNG) ====
+    readonly property string websiteIconSource: {
         if (!hasPlayer)
             return "";
 
@@ -38,29 +66,27 @@ QtObject {
             domain = extractDomain(activePlayer.metadata["xesam:url"]);
         else if (activePlayer.trackId)
             domain = extractDomain(activePlayer.trackId);
-        // YouTube erkennen (inkl. youtu.be, youtube-nocookie, music.youtube)
+        console.log("DEBUG domain:", domain);
+        var basePath = "file:///home/azu/.config/quickshell/resources/icons/";
         if (domain.includes("youtube") || domain.includes("youtu.be"))
-            return "\uf167"; // YouTube
+            return basePath + "youtube.png";
 
-        // Twitch
         if (domain.includes("twitch"))
-            return "\uf1e8"; // Twitch
+            return basePath + "twitch.png";
 
-        // TikTok
         if (domain.includes("tiktok"))
-            return "\ue07b"; // TikTok
+            return basePath + "tiktok.png";
 
-        // Fallback: Player-Icon
         var identity = activePlayer.identity.toLowerCase();
         if (identity.includes("zen") || identity.includes("firefox"))
-            return "\uf269";
- // Firefox
+            return basePath + "firefox.png";
+
         if (identity.includes("chrome") || identity.includes("chromium"))
-            return "\uf268";
- // Chrome
-        return "󰝚"; // generisches Musik-Icon
+            return basePath + "chrome.png";
+
+        return "";
     }
-    // ==== Soll das Website-Icon anstelle des Covers angezeigt werden? ====
+    // ==== Soll Website-Icon anstelle des Covers angezeigt werden? ====
     readonly property bool showWebsiteIcon: hasPlayer && isBrowser(activePlayer)
     // ==== Dropdown-Timer (als Property) ====
     property Timer hideTimer
@@ -70,7 +96,7 @@ QtObject {
         onTriggered: root.dropdownOpen = false
     }
 
-    // ==== Timer zur Aktualisierung des lastActivePlayer (als Property) ====
+    // ==== Timer zur Aktualisierung des lastActivePlayer ====
     property Timer playerUpdateTimer
 
     playerUpdateTimer: Timer {
@@ -79,6 +105,16 @@ QtObject {
         repeat: true
         onTriggered: {
             const players = Mpris.players.values;
+            // Bevorzuge spielenden Nicht-Browser-Player
+            for (const p of players) {
+                if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {
+                    if (root.lastActivePlayer !== p)
+                        root.lastActivePlayer = p;
+
+                    return ;
+                }
+            }
+            // Sonst ersten spielenden Player (auch Browser)
             for (const p of players) {
                 if (p.playbackState === MprisPlaybackState.Playing) {
                     if (root.lastActivePlayer !== p)
@@ -100,19 +136,15 @@ QtObject {
         return identity.includes("firefox") || identity.includes("zen") || identity.includes("chrome") || identity.includes("chromium") || desktopEntry.includes("firefox") || desktopEntry.includes("zen") || desktopEntry.includes("chrome") || desktopEntry.includes("chromium");
     }
 
-    // ==== Domain aus URL extrahieren (robust) ====
+    // ==== Domain aus URL extrahieren ====
     function extractDomain(url) {
         if (!url)
             return "";
 
         var s = url.toString();
-        // Protokoll entfernen
         s = s.replace(/^https?:\/\//, "");
-        // Pfad/Query entfernen
         s = s.split('/')[0];
-        // Port entfernen
         s = s.split(':')[0];
-        // Optional www. entfernen
         s = s.replace(/^www\./, "");
         return s.toLowerCase();
     }

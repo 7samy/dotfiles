@@ -35,6 +35,7 @@ PanelWindow {
         height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
+        // HoverHandler für das gesamte Dropdown – hält es offen
         HoverHandler {
             onHoveredChanged: {
                 if (hovered) {
@@ -166,7 +167,7 @@ PanelWindow {
                     id: coverImg
 
                     anchors.centerIn: parent
-                    width: coverSize * 0.82
+                    width: coverSize * 0.9
                     height: width
                     source: AudioState.artUrl
                     fillMode: Image.PreserveAspectCrop
@@ -183,7 +184,7 @@ PanelWindow {
                     anchors.centerIn: parent
                 }
 
-                // Albumcover als Schallplatte – nur wenn KEIN Browser-Player aktiv ist
+                // Albumcover (rotierende Schallplatte) – nur für Nicht-Browser-Player
                 OpacityMask {
                     id: coverMask
 
@@ -195,16 +196,28 @@ PanelWindow {
                     visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                 }
 
-                // Website-Icon oder generisches Musik-Icon
+                // SVG-Icon für Browser (YouTube, Twitch, TikTok, Firefox, Chrome)
+                Image {
+                    anchors.centerIn: parent
+                    width: coverSize * 0.5
+                    height: width
+                    source: AudioState.showWebsiteIcon ? AudioState.websiteIconSource : ""
+                    visible: AudioState.showWebsiteIcon && AudioState.websiteIconSource !== ""
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                }
+
+                // Fallback-Text (generisches Musik-Icon), wenn weder Cover noch SVG verfügbar
                 Text {
                     anchors.centerIn: parent
-                    visible: AudioState.showWebsiteIcon || AudioState.artUrl === ""
-                    text: AudioState.showWebsiteIcon ? AudioState.websiteIcon : "󰝚"
+                    visible: (AudioState.showWebsiteIcon && AudioState.websiteIconSource === "") || (!AudioState.showWebsiteIcon && AudioState.artUrl === "")
+                    text: "󰝚"
                     color: WalColors.color4
-                    font.family: AudioState.showWebsiteIcon ? "Font Awesome 6 Brands" : "JetBrainsMono Nerd Font"
+                    font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 28
                 }
 
+                // Kleiner Mittelpunkt – nur wenn das Cover sichtbar ist
                 Rectangle {
                     anchors.centerIn: parent
                     width: 10
@@ -332,6 +345,7 @@ PanelWindow {
 
         }
 
+        // Timer für die Rotation des Albumcovers – läuft nur, wenn Cover sichtbar und Wiedergabe aktiv
         Timer {
             interval: 16
             repeat: true
