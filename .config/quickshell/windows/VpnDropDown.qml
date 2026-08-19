@@ -7,36 +7,45 @@ PanelWindow {
     id: dropdown
 
     required property var screen
-    readonly property real radius: 20
-    // Dynamische Größen basierend auf dem Screen
-    readonly property real menuWidth: screen.width * 0.104
-    readonly property real boxHeight: screen.height * 0.111
-    readonly property real fullHeight: screen.height * 0.137
+    // --- Layout-Konstanten ---------------------------------------------
+    readonly property real cornerRadius: 20
+    readonly property real menuWidth: 200
+    readonly property real edgePadding: 8 // Mindestabstand zum Bildschirmrand
+    readonly property real contentBottomPadding: 16
 
-    anchors.top: true
-    anchors.left: true
-    implicitWidth: menuWidth + (2 * radius)
-    implicitHeight: boxHeight
+    // --- Dynamische Größe -------------------------------------------------
+    // Breite/Höhe leiten sich direkt aus dem Inhalt ab (infoColumn), damit
+    // Fenstergröße und Hintergrund-Shape nie wieder auseinanderlaufen wie
+    // vorher (120 vs. 148 → Content ohne Hintergrund).
+    implicitWidth: menuWidth + 2 * cornerRadius
+    implicitHeight: infoColumn.implicitHeight + contentBottomPadding
     color: "transparent"
     exclusiveZone: -1
+    anchors.top: true
+    anchors.left: true
 
     margins {
         top: 40
-        left: VpnState.dropdownX !== undefined ? VpnState.dropdownX : 0
+        // Zentriert das Menü unter dem VPN-Icon, geclampt an die
+        // Bildschirmränder damit es nie abgeschnitten aus dem Screen ragt.
+        left: {
+            const desired = VpnState.iconCenterX - implicitWidth / 2;
+            return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
+        }
     }
 
     Item {
         id: container
 
         width: parent.width
-        height: VpnState.dropdownOpen ? fullHeight : 0
+        height: VpnState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
         Shape {
             id: backgroundShape
 
             width: parent.width
-            height: boxHeight
+            height: dropdown.implicitHeight
             anchors.top: parent.top
             smooth: true
             antialiasing: true
@@ -57,49 +66,49 @@ PanelWindow {
                 }
 
                 PathArc {
-                    x: radius
-                    y: radius
-                    radiusX: radius
-                    radiusY: radius
+                    x: cornerRadius
+                    y: cornerRadius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Clockwise
                 }
 
                 PathLine {
-                    x: radius
-                    y: boxHeight - radius
+                    x: cornerRadius
+                    y: backgroundShape.height - cornerRadius
                 }
 
                 PathArc {
-                    x: radius + radius
-                    y: boxHeight
-                    radiusX: radius
-                    radiusY: radius
+                    x: 2 * cornerRadius
+                    y: backgroundShape.height
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
                 }
 
                 PathLine {
-                    x: radius + menuWidth - radius
-                    y: boxHeight
+                    x: cornerRadius + menuWidth - cornerRadius
+                    y: backgroundShape.height
                 }
 
                 PathArc {
-                    x: radius + menuWidth
-                    y: boxHeight - radius
-                    radiusX: radius
-                    radiusY: radius
+                    x: cornerRadius + menuWidth
+                    y: backgroundShape.height - cornerRadius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Counterclockwise
                 }
 
                 PathLine {
-                    x: radius + menuWidth
-                    y: radius
+                    x: cornerRadius + menuWidth
+                    y: cornerRadius
                 }
 
                 PathArc {
-                    x: radius + menuWidth + radius
+                    x: cornerRadius + menuWidth + cornerRadius
                     y: 0
-                    radiusX: radius
-                    radiusY: radius
+                    radiusX: cornerRadius
+                    radiusY: cornerRadius
                     direction: PathArc.Clockwise
                 }
 
@@ -112,6 +121,10 @@ PanelWindow {
 
         }
 
+        // Workaround: Qt Quick Shapes rendert eine reine
+        // ShapePath.fillColor-Änderung nicht immer zuverlässig neu.
+        // Kurz auf "transparent" setzen und einen Frame später zurücksetzen
+        // erzwingt das Neuzeichnen.
         Connections {
             function onColorsUpdated() {
                 mainPath.fillColor = "transparent";
@@ -128,87 +141,56 @@ PanelWindow {
             onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
         }
 
-        Item {
-            width: parent.width
-            height: fullHeight
-            anchors.bottom: parent.bottom
+        Column {
+            id: infoColumn
 
-            Column {
-                spacing: 8
-                topPadding: 12
+            spacing: 8
+            topPadding: 12
 
-                anchors {
-                    top: parent.top
-                    left: parent.left
-                    right: parent.right
-                    leftMargin: radius + 14
-                    rightMargin: radius + 14
-                }
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                leftMargin: cornerRadius + 14
+                rightMargin: cornerRadius + 14
+            }
 
-                Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: WalColors.withAlpha(WalColors.color7, 0.15)
-                }
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: WalColors.withAlpha(WalColors.color7, 0.15)
+            }
 
-                Row {
+            Repeater {
+                model: [{
+                    "icon": "󰇧",
+                    "value": VpnState.vpnCountry !== "" ? VpnState.vpnCountry : "—"
+                }, {
+                    "icon": "󰖟",
+                    "value": VpnState.vpnOrg !== "" ? VpnState.vpnOrg : "—"
+                }, {
+                    "icon": "󰩟",
+                    "value": VpnState.vpnIp !== "" ? VpnState.vpnIp : "—"
+                }]
+
+                delegate: Row {
+                    required property var modelData
+
                     spacing: 8
 
                     Text {
-                        text: "󰇧"
+                        text: modelData.icon
                         color: WalColors.color4
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 13
                     }
 
                     Text {
-                        text: VpnState.vpnCountry
+                        text: modelData.value
                         color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
-                        width: parent.width - 30
-                        elide: Text.ElideRight
-                    }
-
-                }
-
-                Row {
-                    spacing: 8
-
-                    Text {
-                        text: "󰖟"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                    }
-
-                    Text {
-                        text: VpnState.vpnOrg !== "" ? VpnState.vpnOrg : "—"
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: parent.width - 30
-                        elide: Text.ElideRight
-                    }
-
-                }
-
-                Row {
-                    spacing: 8
-
-                    Text {
-                        text: "󰩟"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                    }
-
-                    Text {
-                        text: VpnState.vpnIp !== "" ? VpnState.vpnIp : "—"
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: parent.width - 30
+                        width: 150
                         elide: Text.ElideRight
                     }
 

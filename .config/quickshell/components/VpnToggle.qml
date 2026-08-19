@@ -5,23 +5,40 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    // Aktualisiert die Dropdown-Position dynamisch
-    function updateDropdownX() {
-        var absolutePos = root.mapToItem(null, 0, 0);
-        // Zieht die halbe Breite des Dropdowns ab (hier ca. 120, basierend auf Standard-1080p),
-        // damit es mittig sitzt. Diesen Wert "120" kannst du bei Bedarf anpassen.
-        VpnState.dropdownX = absolutePos.x + (root.width / 2) - 120;
+    readonly property string vpnConnectionName: "proton"
+    readonly property real globalCenterX: windowX(root) + width / 2
+
+    // Läuft die Parent-Kette hoch bis zum Fenster-Root (parent === null)
+    // und summiert dabei die x-Offsets. Im Gegensatz zu mapToItem() sind
+    // das alles normale QML-Property-Reads (item.x, item.parent), die der
+    // Binding-Engine als Abhängigkeit bekannt sind – die Property aktualisiert
+    // sich also automatisch, sobald sich irgendein Vorfahre bewegt
+    // (z.B. wenn der Row-Positioner seine Kinder layoutet).
+    function windowX(item) {
+        var x = 0;
+        var it = item;
+        while (it && it.parent) {
+            x += it.x;
+            it = it.parent;
+        }
+        return x;
     }
 
     width: vpnText.implicitWidth + 16
     height: parent.height
     color: "transparent"
-    onXChanged: updateDropdownX()
-    onWidthChanged: updateDropdownX()
     Component.onCompleted: {
-        updateDropdownX();
         statusProcess.running = true;
         geoProcess.running = true;
+    }
+
+    // Binding statt onCompleted+onChanged: wird sofort UND bei jeder
+    // Änderung von globalCenterX neu ausgewertet, kein Race-Condition-Risiko
+    // beim ersten Layout-Pass.
+    Binding {
+        target: VpnState
+        property: "iconCenterX"
+        value: root.globalCenterX
     }
 
     Timer {
@@ -34,12 +51,10 @@ Rectangle {
     Process {
         id: statusProcess
 
-        command: ["bash", "-c", "nmcli connection show --active | grep -q 'proton' && echo 'on' || echo 'off'"]
+        command: ["bash", "-c", `nmcli connection show --active | grep -q '${root.vpnConnectionName}' && echo on || echo off`]
 
         stdout: StdioCollector {
-            onStreamFinished: {
-                VpnState.connected = text.trim() === "on";
-            }
+            onStreamFinished: VpnState.connected = text.trim() === "on"
         }
 
     }
@@ -47,17 +62,18 @@ Rectangle {
     Process {
         id: geoProcess
 
-        command: ["bash", "-c", "curl -s http://ip-api.com/json"]
+        command: ["curl", "-s", "http://ip-api.com/json"]
 
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    var data = JSON.parse(text.trim());
+                    const data = JSON.parse(text.trim());
                     VpnState.vpnCity = data.city ?? "";
                     VpnState.vpnCountry = data.country ?? "";
                     VpnState.vpnOrg = data.isp ?? "";
                     VpnState.vpnIp = data.query ?? "";
                 } catch (e) {
+                    console.warn("VpnToggle: Geo-Lookup konnte nicht geparst werden:", e);
                 }
             }
         }
@@ -67,11 +83,11 @@ Rectangle {
     Process {
         id: toggleProcess
 
-        command: VpnState.connected ? ["nmcli", "connection", "down", "proton"] : ["nmcli", "connection", "up", "proton"]
+        command: VpnState.connected ? ["nmcli", "connection", "down", root.vpnConnectionName] : ["nmcli", "connection", "up", root.vpnConnectionName]
         onRunningChanged: {
             if (!running) {
                 statusProcess.running = true;
-                geoRefreshTimer.start();
+                geoRefreshTimer.restart();
             }
         }
     }
@@ -80,7 +96,6 @@ Rectangle {
         id: geoRefreshTimer
 
         interval: 2000
-        repeat: false
         onTriggered: geoProcess.running = true
     }
 
@@ -145,7 +160,6 @@ Rectangle {
         id: hideTimer
 
         interval: 200
-        repeat: false
         onTriggered: VpnState.dropdownOpen = false
     }
 

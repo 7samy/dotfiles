@@ -14,6 +14,7 @@ ActiveWindow 1.0 ActiveWindow.qml
 AppLauncher 1.0 AppLauncher.qml
 MusicPicker 1.0 MusicPicker.qml
 VpnToggle 1.0 VpnToggle.qml
+VpnDropDown 1.0 VpnDropDown.qml
 SystemStats 1.0 SystemStats.qml
 SystemStatsPopup 1.0 SystemStatsPopup.qml
 StatRow 1.0 StatRow.qml

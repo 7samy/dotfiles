@@ -188,23 +188,19 @@ PanelWindow {
                 spacing: 40
 
                 Row {
-                    spacing: screen.width / 256
+                    spacing: 8
                     height: parent.height
 
                     PowerOff {
-                        barScreen: panelWindow.screen
                     }
 
                     Stats {
-                        barScreen: panelWindow.screen
                     }
 
                     AudioToggle {
-                        barScreen: panelWindow.screen
                     }
 
                     VpnToggle {
-                        barScreen: panelWindow.screen
                     }
 
                 }
