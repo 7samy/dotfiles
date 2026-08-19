@@ -13,8 +13,8 @@ Window {
     id: wallpaperPicker
 
     title: "wallpaper-picker"
-    width: 1280
-    height: 720
+    width: 2560
+    height: 1440
     onVisibleChanged: {
         if (visible) {
             // Re-Binding setzen, falls es vorher durch einen imperativen
@@ -32,7 +32,7 @@ Window {
         id: background
 
         anchors.fill: parent
-        color: WalColors.withAlpha(WalColors.color0, 0.9) // reaktives Binding – reicht!
+        color: transparent // reaktives Binding – reicht!
         focus: true
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape)
@@ -53,11 +53,10 @@ Window {
         id: wallpaperGrid
 
         anchors.fill: parent
-        anchors.margins: 10
-        cellWidth: 622
-        cellHeight: 350
+        anchors.margins: 30
+        cellWidth: 250
+        cellHeight: 500
         flow: GridView.FlowTopToBottom
-        height: Math.min(parent.height - 40, 3 * (cellHeight + 5))
         model: wallpaperModel
         clip: false
         focus: true

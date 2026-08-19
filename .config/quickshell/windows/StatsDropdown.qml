@@ -143,7 +143,7 @@ PanelWindow {
 
             spacing: 8
             topPadding: 16
-            bottomPadding: 16
+            bottomPadding: 10
             leftPadding: 20
             rightPadding: 20
 
@@ -152,26 +152,17 @@ PanelWindow {
                 left: parent.left
             }
 
-            // Überschrift
-            Text {
-                text: "System"
-                color: WalColors.color2
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 14
-                font.bold: true
-                bottomPadding: 4
-            }
-
             // RAM
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
                     text: "RAM"
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
@@ -186,13 +177,14 @@ PanelWindow {
             // CPU-Auslastung
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
                     text: "CPU"
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
@@ -207,13 +199,14 @@ PanelWindow {
             // CPU-Temperatur
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
-                    text: "CPU Temp"
+                    text: "CPU "
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
@@ -228,13 +221,14 @@ PanelWindow {
             // GPU-Auslastung
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
                     text: "GPU"
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
@@ -249,13 +243,14 @@ PanelWindow {
             // GPU-Temperatur
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
-                    text: "GPU Temp"
+                    text: "GPU "
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
@@ -270,13 +265,14 @@ PanelWindow {
             // Speicher
             Row {
                 spacing: 10
+                leftPadding: 20
 
                 Text {
                     text: "SSD"
                     color: WalColors.color4
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    width: 80
+                    width: 55
                 }
 
                 Text {
