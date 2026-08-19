@@ -5,20 +5,19 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    property var barScreen
-
+    // Aktualisiert die Dropdown-Position dynamisch
     function updateDropdownX() {
-        var barWidth = 1920;
-        var screenOffset = (barScreen.width - barWidth) / 2;
-        var symbolCenterX = screenOffset + barWidth - 35 - root.width / 2;
-        VpnState.dropdownX = symbolCenterX - 210;
-        console.log("dropdownX:", VpnState.dropdownX);
+        var absolutePos = root.mapToItem(null, 0, 0);
+        // Zieht die halbe Breite des Dropdowns ab (hier ca. 120, basierend auf Standard-1080p),
+        // damit es mittig sitzt. Diesen Wert "120" kannst du bei Bedarf anpassen.
+        VpnState.dropdownX = absolutePos.x + (root.width / 2) - 120;
     }
 
     width: vpnText.implicitWidth + 16
     height: parent.height
     color: "transparent"
     onXChanged: updateDropdownX()
+    onWidthChanged: updateDropdownX()
     Component.onCompleted: {
         updateDropdownX();
         statusProcess.running = true;
@@ -95,6 +94,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: 10
+        border.width: 1
         color: WalColors.withAlpha(WalColors.color2, 1)
         opacity: mouseArea.containsMouse ? 0.15 : 0
 
@@ -111,10 +111,10 @@ Rectangle {
         id: vpnText
 
         anchors.centerIn: parent
-        text: VpnState.connected ? "" : ""
+        text: VpnState.connected ? "󰦝" : "󱦚"
         color: VpnState.connected ? "#b8e0b8" : "#f0b8b8"
         font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 14
+        font.pixelSize: 15
         scale: mouseArea.containsMouse ? 1.3 : 1
 
         Behavior on scale {
@@ -132,13 +132,13 @@ Rectangle {
 
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         onClicked: toggleProcess.running = true
         onEntered: {
             hideTimer.stop();
             VpnState.dropdownOpen = true;
         }
         onExited: hideTimer.start()
-        cursorShape: Qt.PointingHandCursor
     }
 
     Timer {

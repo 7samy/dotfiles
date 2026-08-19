@@ -8,32 +8,35 @@ PanelWindow {
 
     required property var screen
     readonly property real radius: 20
-    readonly property real menuWidth: 200
+    // Dynamische Größen basierend auf dem Screen
+    readonly property real menuWidth: screen.width * 0.104
+    readonly property real boxHeight: screen.height * 0.111
+    readonly property real fullHeight: screen.height * 0.137
 
     anchors.top: true
     anchors.left: true
     implicitWidth: menuWidth + (2 * radius)
-    implicitHeight: 148
+    implicitHeight: boxHeight
     color: "transparent"
     exclusiveZone: -1
 
     margins {
         top: 40
-        left: screen.width / 1.305
+        left: VpnState.dropdownX !== undefined ? VpnState.dropdownX : 0
     }
 
     Item {
         id: container
 
         width: parent.width
-        height: VpnState.dropdownOpen ? 148 : 0
+        height: VpnState.dropdownOpen ? fullHeight : 0
         clip: true
 
         Shape {
             id: backgroundShape
 
             width: parent.width
-            height: 148
+            height: boxHeight
             anchors.top: parent.top
             smooth: true
             antialiasing: true
@@ -63,12 +66,12 @@ PanelWindow {
 
                 PathLine {
                     x: radius
-                    y: 148 - radius
+                    y: boxHeight - radius
                 }
 
                 PathArc {
                     x: radius + radius
-                    y: 148
+                    y: boxHeight
                     radiusX: radius
                     radiusY: radius
                     direction: PathArc.Counterclockwise
@@ -76,12 +79,12 @@ PanelWindow {
 
                 PathLine {
                     x: radius + menuWidth - radius
-                    y: 148
+                    y: boxHeight
                 }
 
                 PathArc {
                     x: radius + menuWidth
-                    y: 148 - radius
+                    y: boxHeight - radius
                     radiusX: radius
                     radiusY: radius
                     direction: PathArc.Counterclockwise
@@ -127,7 +130,7 @@ PanelWindow {
 
         Item {
             width: parent.width
-            height: 148
+            height: fullHeight
             anchors.bottom: parent.bottom
 
             Column {
@@ -142,25 +145,6 @@ PanelWindow {
                     rightMargin: radius + 14
                 }
 
-                Row {
-                    spacing: 8
-
-                    Text {
-                        color: VpnState.connected ? "#b8e0b8" : "#f0b8b8"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 16
-                    }
-
-                    Text {
-                        text: VpnState.connected ? "Connected" : "Disconnected"
-                        color: VpnState.connected ? "#b8e0b8" : "#f0b8b8"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                        font.bold: true
-                    }
-
-                }
-
                 Rectangle {
                     width: parent.width
                     height: 1
@@ -171,18 +155,18 @@ PanelWindow {
                     spacing: 8
 
                     Text {
-                        text: "󰍃"
+                        text: "󰇧"
                         color: WalColors.color4
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 13
                     }
 
                     Text {
-                        text: VpnState.vpnCity !== "" ? VpnState.vpnCity + ", " + VpnState.vpnCountry : "—"
+                        text: VpnState.vpnCountry
                         color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
-                        width: 150
+                        width: parent.width - 30
                         elide: Text.ElideRight
                     }
 
@@ -203,8 +187,8 @@ PanelWindow {
                         color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
+                        width: parent.width - 30
                         elide: Text.ElideRight
-                        width: 150
                     }
 
                 }
@@ -213,7 +197,7 @@ PanelWindow {
                     spacing: 8
 
                     Text {
-                        text: "󰇧"
+                        text: "󰩟"
                         color: WalColors.color4
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 13
@@ -224,8 +208,8 @@ PanelWindow {
                         color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
+                        width: parent.width - 30
                         elide: Text.ElideRight
-                        width: 150
                     }
 
                 }
