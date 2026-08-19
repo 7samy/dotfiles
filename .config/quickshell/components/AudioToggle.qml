@@ -80,21 +80,14 @@ Rectangle {
             muteProcess.running = true;
         }
         onEntered: {
-            hideTimer.stop();
+            AudioState.stopHideTimer();
             AudioState.buttonHovered = true;
             AudioState.dropdownOpen = true;
         }
         onExited: {
             AudioState.buttonHovered = false;
-            hideTimer.start();
+            AudioState.startHideTimer();
         }
-    }
-
-    Timer {
-        id: hideTimer
-
-        interval: 200
-        onTriggered: AudioState.dropdownOpen = false
     }
 
 }

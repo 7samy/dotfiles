@@ -35,6 +35,17 @@ PanelWindow {
         height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered) {
+                    AudioState.stopHideTimer();
+                    AudioState.dropdownOpen = true;
+                } else {
+                    AudioState.startHideTimer();
+                }
+            }
+        }
+
         Shape {
             width: parent.width
             height: dropdown.implicitHeight
@@ -157,7 +168,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     width: coverSize * 0.82
                     height: width
-                    source: MusicState.artUrl
+                    source: AudioState.artUrl
                     fillMode: Image.PreserveAspectCrop
                     visible: false
                 }
@@ -172,32 +183,25 @@ PanelWindow {
                     anchors.centerIn: parent
                 }
 
+                // Albumcover als Schallplatte – nur wenn KEIN Browser-Player aktiv ist
                 OpacityMask {
+                    id: coverMask
+
                     anchors.centerIn: parent
                     width: coverImg.width
                     height: coverImg.height
                     source: coverImg
                     maskSource: maskShape
-                    visible: MusicState.artUrl !== ""
-
-                    RotationAnimation {
-                        target: parent
-                        property: "rotation"
-                        from: 0
-                        to: 360
-                        duration: 8000
-                        loops: Animation.Infinite
-                        running: MusicState.isPlaying
-                    }
-
+                    visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                 }
 
+                // Website-Icon oder generisches Musik-Icon
                 Text {
                     anchors.centerIn: parent
-                    visible: MusicState.artUrl === ""
-                    text: "󰝚"
+                    visible: AudioState.showWebsiteIcon || AudioState.artUrl === ""
+                    text: AudioState.showWebsiteIcon ? AudioState.websiteIcon : "󰝚"
                     color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
+                    font.family: AudioState.showWebsiteIcon ? "Font Awesome 6 Brands" : "JetBrainsMono Nerd Font"
                     font.pixelSize: 28
                 }
 
@@ -207,7 +211,7 @@ PanelWindow {
                     height: 10
                     radius: 5
                     color: WalColors.color0
-                    visible: MusicState.artUrl !== ""
+                    visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                 }
 
             }
@@ -216,7 +220,7 @@ PanelWindow {
                 width: menuWidth - 28
                 anchors.horizontalCenter: parent.horizontalCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: MusicState.hasPlayer ? MusicState.title : "Kein Player aktiv"
+                text: AudioState.hasPlayer ? AudioState.title : "Kein Player aktiv"
                 color: WalColors.color2
                 font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 13
@@ -227,7 +231,7 @@ PanelWindow {
                 width: menuWidth - 28
                 anchors.horizontalCenter: parent.horizontalCenter
                 horizontalAlignment: Text.AlignHCenter
-                text: MusicState.artist
+                text: AudioState.artist
                 color: WalColors.color4
                 font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 11
@@ -242,54 +246,84 @@ PanelWindow {
 
                 Text {
                     text: "󰒮"
-                    color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    color: prevHoverHandler.hovered ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 18
+                    scale: prevHoverHandler.hovered ? 1.3 : 1
+                    transformOrigin: Item.Center
 
-                    MouseArea {
-                        id: prevMouse
+                    HoverHandler {
+                        id: prevHoverHandler
 
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: MusicState.previous()
+                    }
+
+                    TapHandler {
+                        onTapped: AudioState.previous()
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 150
+                            easing.type: Easing.OutCubic
+                        }
+
                     }
 
                 }
 
                 Text {
-                    text: MusicState.isPlaying ? "󰏤" : "󰐊"
-                    color: playMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    text: AudioState.isPlaying ? "󰏤" : "󰐊"
+                    color: playHoverHandler.hovered ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 20
+                    scale: playHoverHandler.hovered ? 1.3 : 1
+                    transformOrigin: Item.Center
 
-                    MouseArea {
-                        id: playMouse
+                    HoverHandler {
+                        id: playHoverHandler
 
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: MusicState.togglePlay()
+                    }
+
+                    TapHandler {
+                        onTapped: AudioState.togglePlay()
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 150
+                            easing.type: Easing.OutCubic
+                        }
+
                     }
 
                 }
 
                 Text {
                     text: "󰒭"
-                    color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                    color: nextHoverHandler.hovered ? WalColors.color4 : WalColors.color2
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 18
+                    scale: nextHoverHandler.hovered ? 1.3 : 1
+                    transformOrigin: Item.Center
 
-                    MouseArea {
-                        id: nextMouse
+                    HoverHandler {
+                        id: nextHoverHandler
 
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: MusicState.next()
+                    }
+
+                    TapHandler {
+                        onTapped: AudioState.next()
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 150
+                            easing.type: Easing.OutCubic
+                        }
+
                     }
 
                 }
@@ -298,11 +332,18 @@ PanelWindow {
 
         }
 
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: AudioState.dropdownOpen = true
-            onExited: AudioState.dropdownOpen = false
+        Timer {
+            interval: 16
+            repeat: true
+            running: AudioState.isPlaying && AudioState.dropdownOpen && coverMask.visible
+            onTriggered: {
+                if (coverMask.visible) {
+                    coverMask.rotation += 0.75;
+                    if (coverMask.rotation >= 360)
+                        coverMask.rotation -= 360;
+
+                }
+            }
         }
 
         Behavior on height {
