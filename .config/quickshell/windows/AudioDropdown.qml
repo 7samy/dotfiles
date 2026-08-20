@@ -15,7 +15,7 @@ PanelWindow {
     readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: container.height
+    implicitHeight: maxMenuHeight
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -358,13 +358,11 @@ PanelWindow {
     }
 
     // Haupt-MouseArea für das gesamte Menü – jetzt ÜBER allen anderen Elementen
-    MouseArea {
-        anchors.fill: parent
-        anchors.topMargin: 6
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        onContainsMouseChanged: {
-            AudioState.dropdownHovered = containsMouse;
+    HoverHandler {
+        id: dropdownHover
+
+        onHoveredChanged: {
+            AudioState.dropdownHovered = hovered;
             AudioState.updateHoverTimer();
         }
     }

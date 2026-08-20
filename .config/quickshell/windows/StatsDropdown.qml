@@ -13,7 +13,9 @@ PanelWindow {
     readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: container.height // Physisches Schrumpfen auf 0, verhindert Geisterfenster
+    implicitHeight: dropdown.maxMenuHeight // Feste Fensterhöhe -> Keine Compositor-Skalierungsfehler!
+    // Fenster bleibt so lange sichtbar, wie es offen ist oder die Schließ-Animation läuft
+    visible: StatsState.dropdownOpen || animWrapper.y > -dropdown.maxMenuHeight
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -24,22 +26,6 @@ PanelWindow {
         left: {
             const desired = StatsState.dropdownX - implicitWidth / 2;
             return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
-        }
-    }
-
-    // Globale MouseArea für verlässlichen Hover (lässt Klicks durch)
-    MouseArea {
-        anchors.fill: parent
-        anchors.topMargin: 6
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        onContainsMouseChanged: {
-            if (containsMouse) {
-                StatsState.stopHideTimer();
-                StatsState.dropdownOpen = true;
-            } else {
-                StatsState.startHideTimer();
-            }
         }
     }
 
@@ -126,166 +112,166 @@ PanelWindow {
 
             }
 
-        }
+            Connections {
+                function onColorsUpdated() {
+                    mainPath.fillColor = "transparent";
+                    redrawTimer.start();
+                }
 
-        Connections {
-            function onColorsUpdated() {
-                mainPath.fillColor = "transparent";
-                redrawTimer.start();
+                target: WalColors
             }
 
-            target: WalColors
-        }
+            Timer {
+                id: redrawTimer
 
-        Timer {
-            id: redrawTimer
-
-            interval: 10
-            onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
-        }
-
-        Column {
-            id: content
-
-            spacing: 8
-            topPadding: 16
-            bottomPadding: 10
-            leftPadding: 20
-            rightPadding: 20
-
-            anchors {
-                top: parent.top
-                left: parent.left
+                interval: 10
+                onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
             }
 
-            // RAM
-            Row {
-                spacing: 10
+            Column {
+                id: content
+
+                spacing: 8
+                topPadding: 16
+                bottomPadding: 10
                 leftPadding: 20
+                rightPadding: 20
 
-                Text {
-                    text: "RAM"
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
+                anchors {
+                    top: parent.top
+                    left: parent.left
                 }
 
-                Text {
-                    text: StatsProvider.ramText !== "" ? StatsProvider.ramText : "--"
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
+                // RAM
+                Row {
+                    spacing: 10
+                    leftPadding: 20
+
+                    Text {
+                        text: "RAM"
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
+
+                    Text {
+                        text: StatsProvider.ramText !== "" ? StatsProvider.ramText : "--"
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
+
                 }
 
-            }
+                // CPU-Auslastung
+                Row {
+                    spacing: 10
+                    leftPadding: 20
 
-            // CPU-Auslastung
-            Row {
-                spacing: 10
-                leftPadding: 20
+                    Text {
+                        text: "CPU"
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
 
-                Text {
-                    text: "CPU"
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
+                    Text {
+                        text: StatsProvider.cpuPercent + "%"
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
+
                 }
 
-                Text {
-                    text: StatsProvider.cpuPercent + "%"
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
+                // CPU-Temperatur
+                Row {
+                    spacing: 10
+                    leftPadding: 20
+
+                    Text {
+                        text: "CPU "
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
+
+                    Text {
+                        text: StatsProvider.cpuTemp
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
+
                 }
 
-            }
+                // GPU-Auslastung
+                Row {
+                    spacing: 10
+                    leftPadding: 20
 
-            // CPU-Temperatur
-            Row {
-                spacing: 10
-                leftPadding: 20
+                    Text {
+                        text: "GPU"
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
 
-                Text {
-                    text: "CPU "
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
+                    Text {
+                        text: StatsProvider.gpuUsage
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
+
                 }
 
-                Text {
-                    text: StatsProvider.cpuTemp
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
+                // GPU-Temperatur
+                Row {
+                    spacing: 10
+                    leftPadding: 20
+
+                    Text {
+                        text: "GPU "
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
+
+                    Text {
+                        text: StatsProvider.gpuTemp
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
+
                 }
 
-            }
+                // Speicher
+                Row {
+                    spacing: 10
+                    leftPadding: 20
 
-            // GPU-Auslastung
-            Row {
-                spacing: 10
-                leftPadding: 20
+                    Text {
+                        text: "SSD"
+                        color: WalColors.color4
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        width: 55
+                    }
 
-                Text {
-                    text: "GPU"
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
-                }
+                    Text {
+                        text: StatsProvider.diskText !== "" ? StatsProvider.diskText : "--"
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                    }
 
-                Text {
-                    text: StatsProvider.gpuUsage
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                }
-
-            }
-
-            // GPU-Temperatur
-            Row {
-                spacing: 10
-                leftPadding: 20
-
-                Text {
-                    text: "GPU "
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
-                }
-
-                Text {
-                    text: StatsProvider.gpuTemp
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                }
-
-            }
-
-            // Speicher
-            Row {
-                spacing: 10
-                leftPadding: 20
-
-                Text {
-                    text: "SSD"
-                    color: WalColors.color4
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    width: 55
-                }
-
-                Text {
-                    text: StatsProvider.diskText !== "" ? StatsProvider.diskText : "--"
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
                 }
 
             }

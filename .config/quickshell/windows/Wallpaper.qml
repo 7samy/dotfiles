@@ -11,8 +11,8 @@ Window {
     id: wallpaperPicker
 
     title: "wallpaper-picker"
-    width: 2560
-    height: 1440
+    width: 3000
+    height: 2000
     color: "transparent"
     onVisibleChanged: {
         if (visible)
