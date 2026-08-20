@@ -1,7 +1,6 @@
 import "../components"
 import Qt5Compat.GraphicalEffects
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 
 PanelWindow {
@@ -12,10 +11,9 @@ PanelWindow {
     readonly property real menuWidth: 220
     readonly property real edgePadding: 8
     readonly property real coverSize: 120
-    readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: maxMenuHeight
+    implicitHeight: content.implicitHeight + 24
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -33,101 +31,14 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: AudioState.dropdownOpen ? dropdown.maxMenuHeight : 0
+        height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
-        Shape {
-            width: parent.width
-            height: dropdown.maxMenuHeight
+        RoundedDropShape {
             anchors.top: parent.top
-            smooth: true
-            antialiasing: true
-            layer.enabled: true
-            layer.smooth: true
-            layer.samples: 16
-
-            ShapePath {
-                id: mainPath
-
-                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
-                strokeColor: "transparent"
-                strokeWidth: 0
-
-                PathMove {
-                    x: 0
-                    y: 0
-                }
-
-                PathArc {
-                    x: cornerRadius
-                    y: cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: cornerRadius
-                    y: dropdown.maxMenuHeight - cornerRadius
-                }
-
-                PathArc {
-                    x: 2 * cornerRadius
-                    y: dropdown.maxMenuHeight
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth - cornerRadius
-                    y: dropdown.maxMenuHeight
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth
-                    y: dropdown.maxMenuHeight - cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth
-                    y: cornerRadius
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth + cornerRadius
-                    y: 0
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: 0
-                    y: 0
-                }
-
-            }
-
-        }
-
-        Connections {
-            function onColorsUpdated() {
-                mainPath.fillColor = "transparent";
-                redrawTimer.start();
-            }
-
-            target: WalColors
-        }
-
-        Timer {
-            id: redrawTimer
-
-            interval: 10
-            onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
+            cornerRadius: dropdown.cornerRadius
+            menuWidth: dropdown.menuWidth
+            menuHeight: dropdown.implicitHeight
         }
 
         Column {
@@ -262,9 +173,8 @@ PanelWindow {
                     }
 
                     Behavior on scale {
-                        NumberAnimation {
-                            duration: 150
-                            easing.type: Easing.OutCubic
+                        Anim {
+                            duration: Appearance.anim.durations.fast
                         }
 
                     }
@@ -291,9 +201,8 @@ PanelWindow {
                     }
 
                     Behavior on scale {
-                        NumberAnimation {
-                            duration: 150
-                            easing.type: Easing.OutCubic
+                        Anim {
+                            duration: Appearance.anim.durations.fast
                         }
 
                     }
@@ -320,9 +229,8 @@ PanelWindow {
                     }
 
                     Behavior on scale {
-                        NumberAnimation {
-                            duration: 150
-                            easing.type: Easing.OutCubic
+                        Anim {
+                            duration: Appearance.anim.durations.fast
                         }
 
                     }
@@ -348,16 +256,14 @@ PanelWindow {
         }
 
         Behavior on height {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.InOutCubic
+            Anim {
             }
 
         }
 
     }
 
-    // Haupt-MouseArea für das gesamte Menü – jetzt ÜBER allen anderen Elementen
+    // Haupt-Hover für das gesamte Menü
     HoverHandler {
         id: dropdownHover
 

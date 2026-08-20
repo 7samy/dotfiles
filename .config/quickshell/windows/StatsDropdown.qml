@@ -1,6 +1,5 @@
 import "../components"
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 
 PanelWindow {
@@ -10,12 +9,9 @@ PanelWindow {
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 260
     readonly property real edgePadding: 8
-    readonly property real maxMenuHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: dropdown.maxMenuHeight // Feste Fensterhöhe -> Keine Compositor-Skalierungsfehler!
-    // Fenster bleibt so lange sichtbar, wie es offen ist oder die Schließ-Animation läuft
-    visible: StatsState.dropdownOpen || animWrapper.y > -dropdown.maxMenuHeight
+    implicitHeight: content.implicitHeight + 24 // Feste Fensterhöhe -> keine Compositor-Skalierungsfehler
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -33,255 +29,170 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: StatsState.dropdownOpen ? dropdown.maxMenuHeight : 0
+        height: StatsState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
-        Shape {
-            width: parent.width
-            height: dropdown.maxMenuHeight
+        RoundedDropShape {
             anchors.top: parent.top
-            smooth: true
-            antialiasing: true
-            layer.enabled: true
-            layer.smooth: true
-            layer.samples: 16
+            cornerRadius: dropdown.cornerRadius
+            menuWidth: dropdown.menuWidth
+            menuHeight: dropdown.implicitHeight
+        }
 
-            ShapePath {
-                id: mainPath
+        Column {
+            id: content
 
-                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
-                strokeColor: "transparent"
-                strokeWidth: 0
+            spacing: 8
+            topPadding: 16
+            bottomPadding: 10
+            leftPadding: 20
+            rightPadding: 20
 
-                PathMove {
-                    x: 0
-                    y: 0
-                }
-
-                PathArc {
-                    x: cornerRadius
-                    y: cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: cornerRadius
-                    y: dropdown.maxMenuHeight - cornerRadius
-                }
-
-                PathArc {
-                    x: 2 * cornerRadius
-                    y: dropdown.maxMenuHeight
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth - cornerRadius
-                    y: dropdown.maxMenuHeight
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth
-                    y: dropdown.maxMenuHeight - cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth
-                    y: cornerRadius
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth + cornerRadius
-                    y: 0
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: 0
-                    y: 0
-                }
-
+            anchors {
+                top: parent.top
+                left: parent.left
             }
 
-            Connections {
-                function onColorsUpdated() {
-                    mainPath.fillColor = "transparent";
-                    redrawTimer.start();
-                }
-
-                target: WalColors
-            }
-
-            Timer {
-                id: redrawTimer
-
-                interval: 10
-                onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
-            }
-
-            Column {
-                id: content
-
-                spacing: 8
-                topPadding: 16
-                bottomPadding: 10
+            // RAM
+            Row {
+                spacing: 10
                 leftPadding: 20
-                rightPadding: 20
 
-                anchors {
-                    top: parent.top
-                    left: parent.left
+                Text {
+                    text: "RAM"
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
                 }
 
-                // RAM
-                Row {
-                    spacing: 10
-                    leftPadding: 20
-
-                    Text {
-                        text: "RAM"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
-
-                    Text {
-                        text: StatsProvider.ramText !== "" ? StatsProvider.ramText : "--"
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
-
+                Text {
+                    text: StatsProvider.ramText !== "" ? StatsProvider.ramText : "--"
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
                 }
 
-                // CPU-Auslastung
-                Row {
-                    spacing: 10
-                    leftPadding: 20
+            }
 
-                    Text {
-                        text: "CPU"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
+            // CPU-Auslastung
+            Row {
+                spacing: 10
+                leftPadding: 20
 
-                    Text {
-                        text: StatsProvider.cpuPercent + "%"
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
-
+                Text {
+                    text: "CPU"
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
                 }
 
-                // CPU-Temperatur
-                Row {
-                    spacing: 10
-                    leftPadding: 20
-
-                    Text {
-                        text: "CPU "
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
-
-                    Text {
-                        text: StatsProvider.cpuTemp
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
-
+                Text {
+                    text: StatsProvider.cpuPercent + "%"
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
                 }
 
-                // GPU-Auslastung
-                Row {
-                    spacing: 10
-                    leftPadding: 20
+            }
 
-                    Text {
-                        text: "GPU"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
+            // CPU-Temperatur
+            Row {
+                spacing: 10
+                leftPadding: 20
 
-                    Text {
-                        text: StatsProvider.gpuUsage
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
-
+                Text {
+                    text: "CPU "
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
                 }
 
-                // GPU-Temperatur
-                Row {
-                    spacing: 10
-                    leftPadding: 20
-
-                    Text {
-                        text: "GPU "
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
-
-                    Text {
-                        text: StatsProvider.gpuTemp
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
-
+                Text {
+                    text: StatsProvider.cpuTemp
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
                 }
 
-                // Speicher
-                Row {
-                    spacing: 10
-                    leftPadding: 20
+            }
 
-                    Text {
-                        text: "SSD"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        width: 55
-                    }
+            // GPU-Auslastung
+            Row {
+                spacing: 10
+                leftPadding: 20
 
-                    Text {
-                        text: StatsProvider.diskText !== "" ? StatsProvider.diskText : "--"
-                        color: WalColors.color2
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                    }
+                Text {
+                    text: "GPU"
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
+                }
 
+                Text {
+                    text: StatsProvider.gpuUsage
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                }
+
+            }
+
+            // GPU-Temperatur
+            Row {
+                spacing: 10
+                leftPadding: 20
+
+                Text {
+                    text: "GPU "
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
+                }
+
+                Text {
+                    text: StatsProvider.gpuTemp
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                }
+
+            }
+
+            // Speicher
+            Row {
+                spacing: 10
+                leftPadding: 20
+
+                Text {
+                    text: "SSD"
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    width: 55
+                }
+
+                Text {
+                    text: StatsProvider.diskText !== "" ? StatsProvider.diskText : "--"
+                    color: WalColors.color2
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
                 }
 
             }
 
         }
 
+        HoverHandler {
+            onHoveredChanged: StatsState.dropdownOpen = hovered
+        }
+
         Behavior on height {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.InOutCubic
+            Anim {
             }
 
         }

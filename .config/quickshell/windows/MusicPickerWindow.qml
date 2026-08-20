@@ -8,12 +8,12 @@ Window {
     readonly property var currentScreen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
 
     title: "music_picker"
-    width: currentScreen ? currentScreen.width * 0.52 : 1000
+    width: currentScreen ? currentScreen.width * 0.52 : 800
     height: currentScreen ? currentScreen.height * 0.56 : 600
     color: "transparent"
     visible: MusicPickerState.pickerVisible
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    x: currentScreen ? (currentScreen.width - width) / 2 : 100
+    x: currentScreen ? (currentScreen.width - width) / 2 : 60
     y: currentScreen ? (currentScreen.height - height) / 2 : 100
     opacity: visible ? 1 : 0
     Component.onCompleted: {

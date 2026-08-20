@@ -1,6 +1,5 @@
 import "../components"
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 
 PanelWindow {
@@ -14,9 +13,6 @@ PanelWindow {
     readonly property real contentBottomPadding: 16
 
     // --- Dynamische Größe -------------------------------------------------
-    // Breite/Höhe leiten sich direkt aus dem Inhalt ab (infoColumn), damit
-    // Fenstergröße und Hintergrund-Shape nie wieder auseinanderlaufen wie
-    // vorher (120 vs. 148 → Content ohne Hintergrund).
     implicitWidth: menuWidth + 2 * cornerRadius
     implicitHeight: infoColumn.implicitHeight + contentBottomPadding
     color: "transparent"
@@ -41,90 +37,13 @@ PanelWindow {
         height: VpnState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
-        Shape {
-            id: backgroundShape
-
-            width: parent.width
-            height: dropdown.implicitHeight
+        RoundedDropShape {
             anchors.top: parent.top
-            smooth: true
-            antialiasing: true
-            layer.enabled: true
-            layer.smooth: true
-            layer.samples: 16
-
-            ShapePath {
-                id: mainPath
-
-                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
-                strokeColor: "transparent"
-                strokeWidth: 0
-
-                PathMove {
-                    x: 0
-                    y: 0
-                }
-
-                PathArc {
-                    x: cornerRadius
-                    y: cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: cornerRadius
-                    y: backgroundShape.height - cornerRadius
-                }
-
-                PathArc {
-                    x: 2 * cornerRadius
-                    y: backgroundShape.height
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth - cornerRadius
-                    y: backgroundShape.height
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth
-                    y: backgroundShape.height - cornerRadius
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                PathLine {
-                    x: cornerRadius + menuWidth
-                    y: cornerRadius
-                }
-
-                PathArc {
-                    x: cornerRadius + menuWidth + cornerRadius
-                    y: 0
-                    radiusX: cornerRadius
-                    radiusY: cornerRadius
-                    direction: PathArc.Clockwise
-                }
-
-                PathLine {
-                    x: 0
-                    y: 0
-                }
-
-            }
-
+            cornerRadius: dropdown.cornerRadius
+            menuWidth: dropdown.menuWidth
+            menuHeight: dropdown.implicitHeight
         }
 
-        // Workaround: Qt Quick Shapes rendert eine reine
-        // ShapePath.fillColor-Änderung nicht immer zuverlässig neu.
-        // Kurz auf "transparent" setzen und einen Frame später zurücksetzen
-        // erzwingt das Neuzeichnen.
         Connections {
             function onColorsUpdated() {
                 mainPath.fillColor = "transparent";
@@ -200,18 +119,12 @@ PanelWindow {
 
         }
 
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: VpnState.dropdownOpen = true
-            onExited: VpnState.dropdownOpen = false
+        HoverHandler {
+            onHoveredChanged: VpnState.dropdownOpen = hovered
         }
 
         Behavior on height {
-            NumberAnimation {
-                duration: 400
-                easing.type: Easing.bezierCubic
-                easing.bezierCurve: [0.22, 1, 0.36, 1]
+            Anim {
             }
 
         }
