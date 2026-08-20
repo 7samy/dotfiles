@@ -77,9 +77,11 @@ Item {
     }
 
     function getCustomIconForWindow(winClass, winTitle) {
-        var titleMap = {
-            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
-        };
+    var titleMap = {
+        "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
+        "wallpaper-picker": "file:///home/azu/.config/quickshell/resources/icons/Senjogahara.png",
+        "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/icons8-minecraft-96.png" // Korrigiert (file:///)
+    };
         if (winTitle && titleMap[winTitle])
             return titleMap[winTitle];
 

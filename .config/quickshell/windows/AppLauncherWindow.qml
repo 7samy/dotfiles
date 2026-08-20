@@ -12,6 +12,7 @@ Window {
         return Qt.rect(0, 0, 1920, 1080);
     }
 
+    title: "applauncher"
     width: 450
     height: 500
     color: "transparent"

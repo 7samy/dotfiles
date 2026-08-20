@@ -31,8 +31,6 @@ fi
 spicetify apply --no-restart
 pkill -f /opt/spotify/spotify
 sleep 1
-setsid spotify </dev/null >/dev/null 2>&1 &
-disown
 
 # --- Zen Browser ---
 ZEN_PREFS="/home/azu/.config/zen/s3945da8.Default (release)/prefs.js"

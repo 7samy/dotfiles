@@ -55,7 +55,6 @@ Window {
         clip: true
         focus: true
         cacheBuffer: 800
-        // --- NEU: Startwerte für die Animation abhängig von der Fenster-Sichtbarkeit ---
         scale: wallpaperPicker.visible ? 1 : 0.8
         opacity: wallpaperPicker.visible ? 1 : 0
         Keys.onPressed: (event) => {
@@ -86,7 +85,7 @@ Window {
         Behavior on scale {
             NumberAnimation {
                 duration: 350
-                easing.type: Easing.OutBack // Erzeugt einen leichten Bounce-Effekt
+                easing.type: Easing.OutBack
             }
 
         }
@@ -114,7 +113,9 @@ Window {
             width: wallpaperGrid.cellWidth
             height: wallpaperGrid.cellHeight
             z: GridView.isCurrentItem ? 10 : 0
-            scale: GridView.isCurrentItem ? 1.015 : 1
+            // Werte für Scale und Opacity (jetzt mit Animation unten)
+            scale: GridView.isCurrentItem ? 1.03 : 1
+            // Etwas verstärkt, damit man es gut sieht
             opacity: GridView.isCurrentItem ? 1 : 0.6
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -133,15 +134,12 @@ Window {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 sourceSize: Qt.size(640, 360)
-                opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 1
-                // --- HIER: Das Bild an den Ecken abrunden ---
                 layer.enabled: true
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 20
                     color: "transparent"
-                    // Hier ist das transparente Weiß (#80 ist der Alpha-Wert für 50% Transparenz)
                     border.color: delegateItem.GridView.isCurrentItem ? Qt.rgba(1, 1, 1, 0.25) : "transparent"
                     border.width: delegateItem.GridView.isCurrentItem ? 2 : 0
                     visible: delegateItem.GridView.isCurrentItem
@@ -152,11 +150,10 @@ Window {
                     maskSource: Rectangle {
                         width: img.width
                         height: img.height
-                        radius: 20 // Selber Radius wie dein Rahmen unten!
+                        radius: 20
                     }
 
                 }
-                // --------------------------------------------
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -177,6 +174,24 @@ Window {
                     parent.setWallpaper();
                 }
             }
+
+            // --- NEU: Behaviors für das ausgewählte Element ---
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+            // -------------------------------------------------
 
         }
 
