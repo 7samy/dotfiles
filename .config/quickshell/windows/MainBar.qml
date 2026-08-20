@@ -210,10 +210,13 @@ PanelWindow {
 
             }
 
-            Behavior on y {
+            Behavior on height {
                 NumberAnimation {
-                    duration: 500
-                    easing.type: Easing.OutCubic
+                    // 1. Die Dauer aus dem Singleton abrufen
+                    duration: Theme.anim.durations.slow
+                    // 2. Die Motion-Kurve aus dem Singleton anwenden (optional, aber empfohlen)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Theme.anim.curves.standard
                 }
 
             }
@@ -222,7 +225,11 @@ PanelWindow {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 250
+                // Nutze die Dauer aus deinem Singleton (z. B. normal oder slow)
+                duration: Theme.anim.durations.slow
+                // Füge die Motion-Kurve hinzu für einen weicheren Fade-Effekt
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Theme.anim.curves.standard
             }
 
         }

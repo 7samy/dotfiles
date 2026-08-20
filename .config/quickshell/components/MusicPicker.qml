@@ -144,9 +144,9 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: 50
+            height: 40
             color: WalColors.withAlpha(WalColors.color7, 0.2)
-            radius: 8
+            radius: 12
             border.width: 2
             border.color: WalColors.withAlpha(WalColors.color2, 0.3)
 
@@ -173,26 +173,14 @@ Item {
 
         }
 
-        Rectangle {
-            width: parent.width
-            height: 20
-            color: "transparent"
-
-            Text {
-                text: root.filteredSongs.length + " / " + root.allSongs.length + " songs"
-                color: WalColors.withAlpha(WalColors.color7, 0.6)
-                font.pixelSize: 12
-                font.family: "Monospace"
-            }
-
-        }
-
         ListView {
             id: songList
 
             width: parent.width
-            height: parent.height - 86
+            height: parent.height - 60
+            topMargin: 10
             clip: true
+            spacing: 12
             currentIndex: 0
             focus: true
             model: root.filteredSongs
@@ -201,13 +189,13 @@ Item {
                 id: songItem
 
                 width: parent.width
-                height: 40
+                height: 45
                 color: songList.currentIndex === index ? WalColors.withAlpha(WalColors.color2, 0.4) : "transparent"
-                radius: 4
+                radius: 3
                 // Nur die ersten 20 sichtbaren Einträge fordern initial ein
                 // Cover an - über die Queue, kein Timer-basiertes Rennen mehr.
                 Component.onCompleted: {
-                    if (index < 20)
+                    if (index < root.allSongs.length)
                         root.requestCover(modelData);
 
                 }
@@ -226,8 +214,8 @@ Item {
                     spacing: 10
 
                     Rectangle {
-                        width: 32
-                        height: 32
+                        width: 40
+                        height: 40
                         anchors.verticalCenter: parent.verticalCenter
                         radius: 4
                         color: WalColors.withAlpha(WalColors.color1, 0.5)
@@ -241,8 +229,8 @@ Item {
                             asynchronous: true
                             cache: false
                             visible: status === Image.Ready
-                            sourceSize.width: 32
-                            sourceSize.height: 32
+                            sourceSize.width: 40
+                            sourceSize.height: 40
                             // Rein deklarativ an den Cache gebunden - aktualisiert
                             // sich automatisch, egal welches Delegate gerade
                             // welchen Index/Pfad zeigt (kein manuelles Suchen

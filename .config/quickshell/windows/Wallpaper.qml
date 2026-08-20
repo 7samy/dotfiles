@@ -1,5 +1,6 @@
 import "../components"
 import Qt.labs.folderlistmodel
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import Quickshell
@@ -45,8 +46,8 @@ Window {
         id: wallpaperGrid
 
         anchors.centerIn: parent
-        cellWidth: 660
-        cellHeight: 380
+        cellWidth: 630
+        cellHeight: 350
         width: cellWidth * 2
         height: cellHeight * 3
         flow: GridView.FlowLeftToRight
@@ -54,6 +55,9 @@ Window {
         clip: true
         focus: true
         cacheBuffer: 800
+        // --- NEU: Startwerte für die Animation abhängig von der Fenster-Sichtbarkeit ---
+        scale: wallpaperPicker.visible ? 1 : 0.8
+        opacity: wallpaperPicker.visible ? 1 : 0
         Keys.onPressed: (event) => {
             switch (event.key) {
             case Qt.Key_J:
@@ -77,6 +81,22 @@ Window {
                 event.accepted = true;
                 break;
             }
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 350
+                easing.type: Easing.OutBack // Erzeugt einen leichten Bounce-Effekt
+            }
+
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.OutCubic
+            }
+
         }
 
         delegate: Item {
@@ -107,22 +127,36 @@ Window {
                 id: img
 
                 source: fileUrl
-                width: 640
-                height: 360
+                width: 600
+                height: 320
                 anchors.centerIn: parent
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 sourceSize: Qt.size(640, 360)
                 opacity: (imageMouseArea.containsMouse || delegateItem.GridView.isCurrentItem) ? 1 : 1
+                // --- HIER: Das Bild an den Ecken abrunden ---
+                layer.enabled: true
 
                 Rectangle {
                     anchors.fill: parent
+                    radius: 20
                     color: "transparent"
                     // Hier ist das transparente Weiß (#80 ist der Alpha-Wert für 50% Transparenz)
-                    border.color: delegateItem.GridView.isCurrentItem ? "#80FFFFFF" : "transparent"
-                    border.width: delegateItem.GridView.isCurrentItem ? 3 : 0
+                    border.color: delegateItem.GridView.isCurrentItem ? Qt.rgba(1, 1, 1, 0.25) : "transparent"
+                    border.width: delegateItem.GridView.isCurrentItem ? 2 : 0
                     visible: delegateItem.GridView.isCurrentItem
                 }
+
+                layer.effect: OpacityMask {
+
+                    maskSource: Rectangle {
+                        width: img.width
+                        height: img.height
+                        radius: 20 // Selber Radius wie dein Rahmen unten!
+                    }
+
+                }
+                // --------------------------------------------
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -142,14 +176,6 @@ Window {
                     wallpaperGrid.currentIndex = index;
                     parent.setWallpaper();
                 }
-            }
-
-            Behavior on scale {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
-                }
-
             }
 
         }
