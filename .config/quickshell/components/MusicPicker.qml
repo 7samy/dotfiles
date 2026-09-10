@@ -176,11 +176,11 @@ Item {
         ListView {
             id: songList
 
-            width: parent.width
+            width: parent.width - 100
             height: parent.height - 60
             topMargin: 10
             clip: true
-            spacing: 12
+            spacing: 17
             currentIndex: 0
             focus: true
             model: root.filteredSongs
@@ -188,10 +188,10 @@ Item {
             delegate: Rectangle {
                 id: songItem
 
-                width: parent.width
-                height: 45
+                width: parent.width - 100
+                height: 53
                 color: songList.currentIndex === index ? WalColors.withAlpha(WalColors.color2, 0.4) : "transparent"
-                radius: 3
+                radius: 5
                 // Nur die ersten 20 sichtbaren Einträge fordern initial ein
                 // Cover an - über die Queue, kein Timer-basiertes Rennen mehr.
                 Component.onCompleted: {
@@ -242,7 +242,7 @@ Item {
                             anchors.centerIn: parent
                             text: "♪"
                             color: WalColors.withAlpha(WalColors.color7, 0.4)
-                            font.pixelSize: 14
+                            font.pixelSize: 12
                             visible: smallCover.status !== Image.Ready
                         }
 
@@ -252,7 +252,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData
                         color: WalColors.color7
-                        font.pixelSize: 13
+                        font.pixelSize: 12
                         font.family: "Monospace"
                         elide: Text.ElideRight
                         width: parent.width - 42

@@ -21,9 +21,7 @@ Window {
     Rectangle {
         anchors.fill: parent
         color: WalColors.withAlpha(WalColors.color0, 0.7)
-        radius: 4
-        border.width: 2
-        border.color: WalColors.withAlpha(WalColors.color2, 0.35)
+        radius: 12
 
         MusicPicker {
             anchors.fill: parent
