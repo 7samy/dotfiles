@@ -8,8 +8,8 @@ Window {
     readonly property var currentScreen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
 
     title: "music_picker"
-    width: currentScreen ? currentScreen.width * 0.52 : 600
-    height: currentScreen ? currentScreen.height * 0.56 : 400
+    width: currentScreen.width
+    height: currentScreen.height
     color: "transparent"
     visible: MusicPickerState.pickerVisible
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
@@ -21,7 +21,7 @@ Window {
     Rectangle {
         anchors.fill: parent
         color: WalColors.withAlpha(WalColors.color0, 0.7)
-        radius: 12
+        radius: 8
 
         MusicPicker {
             anchors.fill: parent

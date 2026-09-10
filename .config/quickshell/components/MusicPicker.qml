@@ -144,7 +144,7 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: 40
+            height: 44
             color: WalColors.withAlpha(WalColors.color7, 0.2)
             radius: 12
             border.width: 2
@@ -158,7 +158,7 @@ Item {
                 anchors.rightMargin: 16
                 verticalAlignment: Text.AlignVCenter
                 font.family: "Monospace"
-                font.pixelSize: 14
+                font.pixelSize: 13
                 color: WalColors.withAlpha(WalColors.color7, 0.8)
                 text: MusicPickerState.searchText
                 onTextChanged: MusicPickerState.searchText = text
@@ -176,8 +176,8 @@ Item {
         ListView {
             id: songList
 
-            width: parent.width - 100
-            height: parent.height - 60
+            width: parent.width
+            height: parent.height
             topMargin: 10
             clip: true
             spacing: 17
@@ -188,7 +188,7 @@ Item {
             delegate: Rectangle {
                 id: songItem
 
-                width: parent.width - 100
+                width: parent.width
                 height: 53
                 color: songList.currentIndex === index ? WalColors.withAlpha(WalColors.color2, 0.4) : "transparent"
                 radius: 5
