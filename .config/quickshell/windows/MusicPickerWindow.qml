@@ -1,15 +1,27 @@
 import "../components"
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 
 Window {
     id: pickerWindow
 
-    readonly property var currentScreen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    readonly property var currentScreen: {
+        const focused = Hyprland.focusedMonitor;
+        if (focused) {
+            const match = Quickshell.screens.find((s) => {
+                return s.name === focused.name;
+            });
+            if (match)
+                return match;
+
+        }
+        return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
+    }
 
     title: "music_picker"
-    width: currentScreen.width
-    height: currentScreen.height
+    width: currentScreen ? currentScreen.width * 0.1563 : 0
+    height: currentScreen ? currentScreen.height * 0.4167 : 0
     color: "transparent"
     visible: MusicPickerState.pickerVisible
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
