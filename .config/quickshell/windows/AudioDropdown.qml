@@ -45,7 +45,7 @@ PanelWindow {
         Column {
             id: content
 
-            spacing: 12
+            spacing: 6
             topPadding: 16
 
             anchors {
@@ -60,9 +60,16 @@ PanelWindow {
                 readonly property real ringThickness: 3
                 readonly property real outerSize: coverSize + 2 * (ringPadding + ringThickness)
                 readonly property real ringRadius: outerSize / 2 - ringThickness / 2
-                readonly property real trackLength: AudioState.length > 0 ? AudioState.length : 0
-                readonly property real displayProgress: dragging ? dragProgress : (trackLength > 0 ? Math.max(0, Math.min(1, livePosition / trackLength)) : 0)
-                property real livePosition: AudioState.position
+                readonly property real trackLength: AudioState.length > 0 ? AudioState.length : 1
+                readonly property real displayProgress: {
+                    if (dragging)
+                        return dragProgress;
+
+                    if (AudioState.length <= 0)
+                        return 0;
+
+                    return Math.max(0, Math.min(1, AudioState.position / trackLength));
+                }
                 property bool dragging: false
                 property real dragProgress: 0
 
@@ -70,17 +77,6 @@ PanelWindow {
                 height: outerSize
                 anchors.horizontalCenter: parent.horizontalCenter
 
-                Timer {
-                    interval: 250
-                    repeat: true
-                    triggeredOnStart: true
-                    running: AudioState.hasPlayer && AudioState.dropdownOpen
-                    onTriggered: coverArea.livePosition = AudioState.position
-                }
-
-                // Beide Ringe in einen gemeinsamen Layer packen.
-                // layer.samples = 8 aktiviert echtes Multisampling (MSAA),
-                // wodurch die Kurven glatt statt pixelig erscheinen.
                 Item {
                     id: ringLayer
 
@@ -89,11 +85,8 @@ PanelWindow {
                     layer.samples: 8
                     layer.smooth: true
 
-                    // Hintergrund-Ring (ungespielter Teil)
                     Shape {
                         anchors.fill: parent
-                        // antialiasing hier nicht nötig, da layer.samples übernimmt.
-                        // Schadet aber auch nicht und hilft, wenn jemand den Layer entfernt.
                         antialiasing: true
                         smooth: true
                         visible: AudioState.hasPlayer
@@ -117,7 +110,6 @@ PanelWindow {
 
                     }
 
-                    // Fortschritts-Ring
                     Shape {
                         anchors.fill: parent
                         antialiasing: true
@@ -145,7 +137,6 @@ PanelWindow {
 
                 }
 
-                // Griff auf dem Ring
                 Rectangle {
                     id: seekHandle
 
@@ -171,7 +162,6 @@ PanelWindow {
 
                 }
 
-                // Eigentliches Cover, mittig im vergrößerten Ring-Bereich
                 Item {
                     id: artContainer
 
@@ -247,7 +237,6 @@ PanelWindow {
 
                 }
 
-                // Drag-/Klick-Bereich für den Ring
                 MouseArea {
                     id: seekArea
 
@@ -270,7 +259,7 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     preventStealing: true
-                    enabled: AudioState.hasPlayer && coverArea.trackLength > 0
+                    enabled: AudioState.hasPlayer && AudioState.length > 0
                     onPressed: (mouse) => {
                         const cx = coverArea.outerSize / 2;
                         const cy = coverArea.outerSize / 2;
@@ -319,7 +308,6 @@ PanelWindow {
             Row {
                 spacing: 24
                 anchors.horizontalCenter: parent.horizontalCenter
-                bottomPadding: 12
 
                 Text {
                     text: "󰒮"
@@ -398,6 +386,87 @@ PanelWindow {
                             duration: Appearance.anim.durations.fast
                         }
 
+                    }
+
+                }
+
+            }
+
+            // NEU: Lautstärke-Slider
+            Row {
+                width: menuWidth - 70
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 4
+                bottomPadding: 8
+                visible: AudioState.hasPlayer // Nur anzeigen, wenn etwas läuft
+
+                Item {
+                    width: parent.width
+                    height: 15
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    // Hintergrund-Linie
+                    Rectangle {
+                        id: volTrack
+
+                        width: parent.width
+                        height: 4
+                        radius: 2
+                        color: Qt.rgba(1, 1, 1, 0.12)
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        // Gefüllte Linie (Fortschritt)
+                        Rectangle {
+                            width: Math.max(0, Math.min(AudioState.volume, 1)) * parent.width
+                            height: parent.height
+                            radius: 2
+                            color: WalColors.color4
+                        }
+
+                    }
+
+                    // Handle/Punkt für den Slider
+                    Rectangle {
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: WalColors.color0
+                        border.color: WalColors.color4
+                        border.width: 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        // Position basierend auf dem Volume berechnen
+                        x: Math.max(0, Math.min(AudioState.volume, 1)) * volTrack.width - width / 2
+                        scale: volMouse.pressed ? 1.3 : (volMouse.containsMouse ? 1.1 : 1)
+
+                        Behavior on scale {
+                            Anim {
+                                duration: Appearance.anim.durations.fast
+                            }
+
+                        }
+
+                    }
+
+                    MouseArea {
+                        id: volMouse
+
+                        function updateVol(mouseEvent) {
+                            let val = mouseEvent.x / width;
+                            AudioState.setVolume(val);
+                        }
+
+                        anchors.fill: parent
+                        anchors.margins: -6 // Etwas mehr Klickfläche
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onPositionChanged: (mouse) => {
+                            if (pressed)
+                                updateVol(mouse);
+
+                        }
+                        onPressed: (mouse) => {
+                            updateVol(mouse);
+                        }
                     }
 
                 }

@@ -4,6 +4,9 @@ import Quickshell.Services.Mpris
 pragma Singleton
 
 QtObject {
+    // WICHTIG: _lastRawPos NICHT überschreiben – wir brauchen den alten
+    // Wert vom Ende des vorherigen Liedes, um den Reset zu erkennen!
+
     id: root
 
     // ==== Audio-Icon-Zustand ====
@@ -12,7 +15,6 @@ QtObject {
     property bool buttonHovered: false
     property bool dropdownHovered: false
     property bool muted: false
-    property real volumePercent: 50
     // ==== MPRIS-Player ====
     property MprisPlayer lastActivePlayer: null
     readonly property MprisPlayer activePlayer: {
@@ -49,12 +51,14 @@ QtObject {
 
         return url;
     }
-    // ==== Wiedergabeposition / Länge (für Progress-Ring) ====
+    // ==== Wiedergabeposition / Länge / Lautstärke ====
     property real position: 0
     property real length: 0
-    // ==== Track-Erkennung ====
-    // Fingerprint aus Titel + Artist + trackId, um Songwechsel zu erkennen.
+    property real volume: 0
+    // ==== Track-Erkennung & Cooldown ====
     property string _trackKey: ""
+    property int _positionCooldown: 0
+    property real _lastRawPos: 0 // NEU: Merkt sich den letzten rohen Wert vom Player
     // ==== Website-Icon-Quelle (PNG) ====
     readonly property string websiteIconSource: {
         if (!hasPlayer)
@@ -85,11 +89,10 @@ QtObject {
         return "";
     }
     readonly property bool showWebsiteIcon: hasPlayer && isBrowser(activePlayer)
-    // ==== Dropdown-Timer ====
+    // ==== Timer ====
     property Timer hideTimer
     property Timer playerUpdateTimer
 
-    // ==== Browser-Erkennung ====
     function isBrowser(player) {
         if (!player)
             return false;
@@ -103,15 +106,10 @@ QtObject {
         if (!url)
             return "";
 
-        var s = url.toString();
-        s = s.replace(/^https?:\/\//, "");
-        s = s.split('/')[0];
-        s = s.split(':')[0];
-        s = s.replace(/^www\./, "");
+        var s = url.toString().replace(/^https?:\/\//, "").split('/')[0].split(':')[0].replace(/^www\./, "");
         return s.toLowerCase();
     }
 
-    // ==== Hover-Statusverwaltung ====
     function updateHoverTimer() {
         if (!root.buttonHovered && !root.dropdownHovered)
             hideTimer.start();
@@ -145,57 +143,78 @@ QtObject {
         hideTimer.stop();
     }
 
+    function seekTo(targetPosition) {
+        if (hasPlayer && activePlayer.positionSupported) {
+            activePlayer.position = targetPosition;
+            root.position = targetPosition;
+            root._positionCooldown = 3;
+        }
+    }
+
+    function setVolume(val) {
+        if (hasPlayer) {
+            const safeVal = Math.max(0, Math.min(val, 1));
+            activePlayer.volume = safeVal;
+            root.volume = safeVal;
+        }
+    }
+
     hideTimer: Timer {
         interval: 400
         onTriggered: root.dropdownOpen = false
     }
 
     playerUpdateTimer: Timer {
-        interval: 250
+        interval: 200
         running: true
         repeat: true
         onTriggered: {
-            // Debug-Log (bei Bedarf auskommentieren)
-            // console.log("AUDIO TICK",
-            //     "title:", player.trackTitle,
-            //     "pos:", newPos, "len:", newLength,
-            //     "metaChanged:", metadataChanged,
-            //     "jumpedBack:", positionJumpedBack,
-            //     "exceeded:", positionExceeded);
+            // _lastRawPos bewusst NICHT aktualisieren!
 
             if (!root.hasPlayer) {
                 root.position = 0;
                 root.length = 0;
+                root.volume = 0;
                 root._trackKey = "";
+                root._positionCooldown = 0;
+                root._lastRawPos = 0;
                 return ;
             }
             const player = root.activePlayer;
-            // Robuste Zahlen-Extraktion: NaN, null und undefined abfangen
-            const rawPos = player.positionSupported ? player.position : 0;
-            const rawLen = player.lengthSupported ? player.length : 0;
-            const newPos = Number.isFinite(rawPos) ? rawPos : 0;
-            const newLength = Number.isFinite(rawLen) ? rawLen : 0;
-            // Track-Fingerprint: Titel + Artist + trackId kombiniert.
-            // So erkennen wir Songwechsel auch dann, wenn ein Player
-            // nur trackId ändert oder nur den Titel ändert.
+            const newPos = player.position || 0;
+            const newLength = player.length || 0;
+            const newVol = (player.volume !== undefined && Number.isFinite(player.volume)) ? player.volume : 0;
             const trackKey = (player.trackTitle ?? "") + "|" + (player.trackArtist ?? "") + "|" + (player.trackId ?? "");
-            const metadataChanged = trackKey !== root._trackKey;
-            // Sicherheitsnetz 1: Position ist deutlich zurückgesprungen (> 3s)
-            // Das passiert bei Songwechsel, wenn die Metadaten noch nicht
-            // aktualisiert wurden, aber der Player die Position schon zurücksetzt.
-            const positionJumpedBack = newPos < root.position - 3e+06;
-            // Sicherheitsnetz 2: Position überschreitet die Länge
-            // (Song zu Ende, aber Player hat noch nicht auf 0 zurückgesetzt)
-            const positionExceeded = newLength > 0 && newPos > newLength;
-            const shouldReset = metadataChanged || positionJumpedBack || positionExceeded;
-            if (shouldReset) {
-                root.position = 0;
+            if (trackKey !== root._trackKey) {
+                // Neues Lied erkannt
                 root._trackKey = trackKey;
+                root.length = newLength;
+                root.position = 0;
+                root._positionCooldown = 25; // ~5 s Puffer für langsame Player
+                // Wenn der Player schon bei (fast) 0 ist, sofort übernehmen
+                if (newPos < 2) {
+                    root._positionCooldown = 0;
+                    root.position = newPos;
+                    root._lastRawPos = newPos;
+                }
+            } else if (root._positionCooldown > 0) {
+                root._positionCooldown -= 1;
+                root.length = newLength;
+                // Reset erkannt, wenn Position gesunken ist ODER sehr klein ist
+                if (newPos + 0.5 < root._lastRawPos || newPos < 2) {
+                    root._positionCooldown = 0;
+                    root.position = newPos;
+                    root._lastRawPos = newPos; // ab jetzt normal weiterführen
+                } else {
+                    root.position = 0;
+                }
             } else {
                 root.position = newPos;
+                root.length = newLength;
+                root._lastRawPos = newPos;
             }
-            root.length = newLength;
-            // --- lastActivePlayer aktualisieren ---
+            root.volume = newVol;
+            // ---- Player-Aktualisierung (unverändert) ----
             const players = Mpris.players.values;
             for (const p of players) {
                 if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {
