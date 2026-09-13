@@ -1,9 +1,11 @@
 -- ~/.config/hypr/modules/windows.lua
 
 -- Autostart-Befehle
-hl.exec_cmd("/home/azu/.config/hypr/scripts/start.sh")
-hl.exec_cmd("/home/azu/.config/hypr/scripts/kitty.sh")
-hl.exec_cmd("qs")
+hl.on("hyprland.start", function()
+  hl.exec_cmd("/home/azu/.config/hypr/scripts/start.sh")
+  hl.exec_cmd("/home/azu/.config/hypr/scripts/kitty.sh")
+  hl.exec_cmd("qs")
+end)
 
 -- Workspace-Zuweisungen an Monitore
 hl.workspace_rule({ workspace = "1", monitor = "DP-2" })

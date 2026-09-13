@@ -10,7 +10,7 @@ QtObject {
     property real iconCenterX: 0
     property bool dropdownOpen: false
     property bool buttonHovered: false
-    property bool dropdownHovered: false // NEU: Hover-Status des Dropdowns
+    property bool dropdownHovered: false
     property bool muted: false
     property real volumePercent: 50
     // ==== MPRIS-Player ====
@@ -47,9 +47,14 @@ QtObject {
         if (!url && activePlayer.metadata && activePlayer.metadata["mpris:artUrl"])
             url = activePlayer.metadata["mpris:artUrl"];
 
-        console.log("DEBUG artUrl:", url, "Player:", activePlayer.identity);
         return url;
     }
+    // ==== Wiedergabeposition / Länge (für Progress-Ring) ====
+    property real position: 0
+    property real length: 0
+    // ==== Track-Erkennung ====
+    // Fingerprint aus Titel + Artist + trackId, um Songwechsel zu erkennen.
+    property string _trackKey: ""
     // ==== Website-Icon-Quelle (PNG) ====
     readonly property string websiteIconSource: {
         if (!hasPlayer)
@@ -60,7 +65,6 @@ QtObject {
             domain = extractDomain(activePlayer.metadata["xesam:url"]);
         else if (activePlayer.trackId)
             domain = extractDomain(activePlayer.trackId);
-        console.log("DEBUG domain:", domain);
         var basePath = "file:///home/azu/.config/quickshell/resources/icons/";
         if (domain.includes("youtube") || domain.includes("youtu.be"))
             return basePath + "youtube.png";
@@ -80,11 +84,9 @@ QtObject {
 
         return "";
     }
-    // ==== Soll Website-Icon anstelle des Covers angezeigt werden? ====
     readonly property bool showWebsiteIcon: hasPlayer && isBrowser(activePlayer)
     // ==== Dropdown-Timer ====
     property Timer hideTimer
-    // ==== Timer zur Aktualisierung des lastActivePlayer ====
     property Timer playerUpdateTimer
 
     // ==== Browser-Erkennung ====
@@ -97,7 +99,6 @@ QtObject {
         return identity.includes("firefox") || identity.includes("zen") || identity.includes("chrome") || identity.includes("chromium") || desktopEntry.includes("firefox") || desktopEntry.includes("zen") || desktopEntry.includes("chrome") || desktopEntry.includes("chromium");
     }
 
-    // ==== Domain aus URL extrahieren ====
     function extractDomain(url) {
         if (!url)
             return "";
@@ -110,7 +111,7 @@ QtObject {
         return s.toLowerCase();
     }
 
-    // ==== Zentrale Hover-Statusverwaltung ====
+    // ==== Hover-Statusverwaltung ====
     function updateHoverTimer() {
         if (!root.buttonHovered && !root.dropdownHovered)
             hideTimer.start();
@@ -150,10 +151,51 @@ QtObject {
     }
 
     playerUpdateTimer: Timer {
-        interval: 500
+        interval: 250
         running: true
         repeat: true
         onTriggered: {
+            // Debug-Log (bei Bedarf auskommentieren)
+            // console.log("AUDIO TICK",
+            //     "title:", player.trackTitle,
+            //     "pos:", newPos, "len:", newLength,
+            //     "metaChanged:", metadataChanged,
+            //     "jumpedBack:", positionJumpedBack,
+            //     "exceeded:", positionExceeded);
+
+            if (!root.hasPlayer) {
+                root.position = 0;
+                root.length = 0;
+                root._trackKey = "";
+                return ;
+            }
+            const player = root.activePlayer;
+            // Robuste Zahlen-Extraktion: NaN, null und undefined abfangen
+            const rawPos = player.positionSupported ? player.position : 0;
+            const rawLen = player.lengthSupported ? player.length : 0;
+            const newPos = Number.isFinite(rawPos) ? rawPos : 0;
+            const newLength = Number.isFinite(rawLen) ? rawLen : 0;
+            // Track-Fingerprint: Titel + Artist + trackId kombiniert.
+            // So erkennen wir Songwechsel auch dann, wenn ein Player
+            // nur trackId ändert oder nur den Titel ändert.
+            const trackKey = (player.trackTitle ?? "") + "|" + (player.trackArtist ?? "") + "|" + (player.trackId ?? "");
+            const metadataChanged = trackKey !== root._trackKey;
+            // Sicherheitsnetz 1: Position ist deutlich zurückgesprungen (> 3s)
+            // Das passiert bei Songwechsel, wenn die Metadaten noch nicht
+            // aktualisiert wurden, aber der Player die Position schon zurücksetzt.
+            const positionJumpedBack = newPos < root.position - 3e+06;
+            // Sicherheitsnetz 2: Position überschreitet die Länge
+            // (Song zu Ende, aber Player hat noch nicht auf 0 zurückgesetzt)
+            const positionExceeded = newLength > 0 && newPos > newLength;
+            const shouldReset = metadataChanged || positionJumpedBack || positionExceeded;
+            if (shouldReset) {
+                root.position = 0;
+                root._trackKey = trackKey;
+            } else {
+                root.position = newPos;
+            }
+            root.length = newLength;
+            // --- lastActivePlayer aktualisieren ---
             const players = Mpris.players.values;
             for (const p of players) {
                 if (p.playbackState === MprisPlaybackState.Playing && !isBrowser(p)) {

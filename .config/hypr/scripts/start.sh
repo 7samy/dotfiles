@@ -1,8 +1,8 @@
 #!/bin/bash
-swww-daemon &
+awww-daemon &
 sleep 1 
 wal -R -n
-swww img ~/.cache/wal/wal.png &
+awww img ~/.cache/wal/wal.png &
 
 wait_for_window() {
     local title="$1"
