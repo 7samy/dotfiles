@@ -83,6 +83,10 @@ hl.window_rule({
   opacity = "1.0 override 1.0",
 })
 hl.window_rule({
+  match = { title = "krita" },
+  opacity = "1.0 override 1.0",
+})
+hl.window_rule({
   match = { class = "mpv" },
   opacity = "1.0 override 1.0",
 })

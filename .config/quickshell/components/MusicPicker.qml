@@ -20,7 +20,7 @@ Item {
     // Exakt die gleichen Maße wie im App Launcher
     readonly property real cellW: 190
     readonly property real cellH: 168
-    readonly property int gridColumns: 8
+    readonly property int gridColumns: 6
 
     function focusSearch() {
         searchInput.forceActiveFocus();

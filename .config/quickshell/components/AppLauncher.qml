@@ -16,7 +16,7 @@ Item {
     readonly property real cellH: 168
     // Fest auf 8 Spalten - dadurch immer 8 Apps pro Reihe,
     // links und rechts bleibt durch die Zentrierung gleichmäßig Platz.
-    readonly property int gridColumns: 8
+    readonly property int gridColumns: 6
 
     function focusSearch() {
         searchInput.forceActiveFocus();
