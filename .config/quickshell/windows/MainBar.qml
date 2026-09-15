@@ -47,7 +47,7 @@ PanelWindow {
             ShapePath {
                 id: barShape
 
-                fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
+                fillColor: WalColors.withAlpha(WalColors.color0, 1)
                 strokeColor: "transparent"
                 strokeWidth: 0
 
@@ -124,7 +124,7 @@ PanelWindow {
             id: forceRedrawTimer
 
             interval: 10
-            onTriggered: barShape.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
+            onTriggered: barShape.fillColor = WalColors.withAlpha(WalColors.color0, 1)
         }
 
         Item {

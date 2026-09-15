@@ -1,6 +1,5 @@
 import "../components"
 import QtQuick
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
@@ -11,14 +10,17 @@ Item {
     property var filteredSongs: allSongs.filter((song) => {
         return song.toLowerCase().includes(MusicPickerState.searchText.toLowerCase());
     })
-    // song path -> lokaler Cover-Dateipfad. Delegates binden sich direkt
-    // hieran statt sich über die Kinderliste des ListView zu suchen -
-    // funktioniert dadurch auch korrekt bei Delegate-Recycling.
+    // Songpfad -> lokaler Cover-Dateipfad. Delegates binden sich deklarativ
+    // hieran, damit Recycling korrekt funktioniert.
     property var coverCache: ({
     })
     property var coverQueue: []
     property bool coverBusy: false
     readonly property string musicDir: "/home/azu/Music/"
+    // Exakt die gleichen Maße wie im App Launcher
+    readonly property real cellW: 190
+    readonly property real cellH: 168
+    readonly property int gridColumns: 8
 
     function loadSongs() {
         try {
@@ -48,9 +50,6 @@ Item {
 
         try {
             console.log("Wähle Song:", songPath);
-            // Songpfad wird als positionales Argument ("$1") übergeben statt
-            // in den Skript-String interpoliert zu werden - sicher gegenüber
-            // Anführungszeichen, $-Zeichen etc. im Dateinamen.
             addAllAndPlay.command = ["bash", "-c", 'mpc clear && mpc listall | mpc add && ' + 'position=$(mpc playlist -f "%file%" | grep -nF "$1" | cut -d: -f1 | head -n 1) && ' + 'mpc play "$position" && mpc seek 0', "_", songPath];
             addAllAndPlay.running = true;
         } catch (e) {
@@ -59,8 +58,7 @@ Item {
         MusicPickerState.close();
     }
 
-    // ==== Cover-Queue: garantiert immer nur EIN ffmpeg-Aufruf gleichzeitig,
-    // dadurch keine Race Condition mehr zwischen mehreren Timern. ====
+    // ==== Cover-Queue: immer nur EIN ffmpeg-Aufruf gleichzeitig ====
     function requestCover(songPath) {
         if (!songPath || root.coverCache[songPath] || root.coverQueue.includes(songPath))
             return ;
@@ -78,17 +76,24 @@ Item {
         const outFile = "/tmp/qs_cover_" + Qt.md5(path) + ".jpg";
         coverProcess.songPath = path;
         coverProcess.outFile = outFile;
-        // Songpfad als "$1" übergeben statt interpoliert - sicher bei
-        // Sonderzeichen im Dateinamen.
         coverProcess.command = ["bash", "-c", 'ffmpeg -i "$1" -an -vcodec copy "$2" -y 2>/dev/null && echo "$2"', "_", root.musicDir + path, outFile];
         coverProcess.running = true;
+    }
+
+    // Songname ohne Pfad und ohne Dateiendung - für die Anzeige unter dem Cover
+    function displayName(songPath) {
+        if (!songPath)
+            return "";
+
+        const base = songPath.split("/").pop();
+        return base.replace(/\.[^.]+$/, "");
     }
 
     Component.onCompleted: loadSongs()
     Keys.onEscapePressed: MusicPickerState.close()
     Keys.onReturnPressed: {
         if (root.filteredSongs.length > 0)
-            root.playSong(root.filteredSongs[songList.currentIndex]);
+            root.playSong(root.filteredSongs[grid.currentIndex]);
 
     }
 
@@ -109,7 +114,7 @@ Item {
         id: addAllAndPlay
     }
 
-    // Einzelner, sequentiell abgearbeiteter Cover-Extraktionsprozess.
+    // Einzelner, sequenziell abgearbeiteter Cover-Extraktionsprozess.
     Process {
         id: coverProcess
 
@@ -121,12 +126,9 @@ Item {
 
             onStreamFinished: {
                 const result = coverOutput.text.trim();
-                const finishedPath = coverProcess.songPath; // sicher, da sequentiell abgearbeitet
+                const finishedPath = coverProcess.songPath;
                 root.coverBusy = false;
                 if (result) {
-                    // Neue Objekt-Referenz nötig, damit QMLs Property-Binding
-                    // die Änderung erkennt (reine Mutation würde nicht
-                    // getrackt werden).
                     const updated = Object.assign({
                     }, root.coverCache);
                     updated[finishedPath] = result;
@@ -138,141 +140,220 @@ Item {
 
     }
 
-    Column {
-        anchors.fill: parent
-        spacing: 16
+    // ==== Suchleiste - 1:1 wie im App Launcher ====
+    Rectangle {
+        id: searchBar
 
-        Rectangle {
-            width: parent.width
-            height: 44
-            color: WalColors.withAlpha(WalColors.color7, 0.2)
-            radius: 12
-            border.width: 2
-            border.color: WalColors.withAlpha(WalColors.color2, 0.3)
+        width: Math.min(root.width * 0.4, 400)
+        height: 56
+        radius: height / 2
+        anchors.top: parent.top
+        anchors.topMargin: Math.max(root.height * 0.08, 48)
+        anchors.horizontalCenter: parent.horizontalCenter
+        color: WalColors.withAlpha(WalColors.color7, 0.12)
+        border.width: 2
+        border.color: searchInput.activeFocus ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25)
 
-            TextInput {
-                id: searchInput
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 22
+            anchors.verticalCenter: parent.verticalCenter
+            text: "󰍉"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 18
+            color: WalColors.withAlpha(WalColors.color7, 0.5)
+        }
 
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                verticalAlignment: Text.AlignVCenter
-                font.family: "Monospace"
-                font.pixelSize: 13
-                color: WalColors.withAlpha(WalColors.color7, 0.8)
-                text: MusicPickerState.searchText
-                onTextChanged: MusicPickerState.searchText = text
-                Component.onCompleted: forceActiveFocus()
-                Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Down)
-                        songList.incrementCurrentIndex();
-                    else if (event.key === Qt.Key_Up)
-                        songList.decrementCurrentIndex();
+        TextInput {
+            id: searchInput
+
+            anchors.fill: parent
+            anchors.leftMargin: 54
+            anchors.rightMargin: 22
+            verticalAlignment: Text.AlignVCenter
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 16
+            color: WalColors.color7
+            text: MusicPickerState.searchText
+            onTextChanged: MusicPickerState.searchText = text
+            Component.onCompleted: forceActiveFocus()
+            Keys.onPressed: (event) => {
+                switch (event.key) {
+                case Qt.Key_Down:
+                    grid.moveCurrentIndexDown();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Up:
+                    grid.moveCurrentIndexUp();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Left:
+                    grid.moveCurrentIndexLeft();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Right:
+                    grid.moveCurrentIndexRight();
+                    event.accepted = true;
+                    break;
                 }
+            }
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 54
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Music"
+            color: WalColors.withAlpha(WalColors.color7, 0.35)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 14
+            visible: searchInput.text === ""
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 120
             }
 
         }
 
-        ListView {
-            id: songList
+    }
 
-            width: parent.width
-            height: parent.height
-            topMargin: 10
-            clip: true
-            spacing: 17
-            currentIndex: 0
-            focus: true
+    // ==== Song-Grid - 1:1 wie der App Launcher ====
+    Item {
+        id: gridArea
+
+        width: root.gridColumns * root.cellW
+        anchors.top: searchBar.bottom
+        anchors.topMargin: 48
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 40
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        GridView {
+            id: grid
+
+            anchors.fill: parent
             model: root.filteredSongs
+            cellWidth: root.cellW
+            cellHeight: root.cellH
+            currentIndex: 0
+            clip: true
 
-            delegate: Rectangle {
-                id: songItem
+            Text {
+                anchors.centerIn: parent
+                text: "Keine Songs gefunden"
+                color: WalColors.withAlpha(WalColors.color7, 0.4)
+                font.family: "JetBrainsMono Nerd Font"
+                visible: grid.count === 0
+            }
 
-                width: parent.width
-                height: 53
-                color: songList.currentIndex === index ? WalColors.withAlpha(WalColors.color2, 0.4) : "transparent"
-                radius: 5
-                // Nur die ersten 20 sichtbaren Einträge fordern initial ein
-                // Cover an - über die Queue, kein Timer-basiertes Rennen mehr.
+            delegate: Item {
+                readonly property bool isCurrent: GridView.isCurrentItem
+                readonly property string songPath: modelData
+                readonly property string coverPath: root.coverCache[songPath] ? ("file://" + root.coverCache[songPath]) : ""
+
+                width: grid.cellWidth
+                height: grid.cellHeight
+                // Cover asynchron anfordern (Queue-getrieben)
                 Component.onCompleted: {
-                    if (index < root.allSongs.length)
-                        root.requestCover(modelData);
+                    if (songPath)
+                        root.requestCover(songPath);
 
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: songList.currentIndex = index
-                    onClicked: root.playSong(modelData)
-                }
-
-                Row {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
+                Column {
+                    anchors.centerIn: parent
                     spacing: 10
 
                     Rectangle {
-                        width: 40
-                        height: 40
-                        anchors.verticalCenter: parent.verticalCenter
-                        radius: 4
-                        color: WalColors.withAlpha(WalColors.color1, 0.5)
+                        id: iconBg
+
+                        width: 88
+                        height: 88
+                        radius: 18
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: (isCurrent || mArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
+                        border.width: isCurrent ? 2 : 0
+                        border.color: WalColors.withAlpha(WalColors.color4, 0.6)
+                        scale: mArea.containsMouse ? 1.08 : 1
+                        clip: true
 
                         Image {
-                            id: smallCover
+                            id: coverImage
 
                             anchors.fill: parent
+                            anchors.margins: 0
+                            source: coverPath
                             fillMode: Image.PreserveAspectCrop
-                            smooth: true
                             asynchronous: true
                             cache: false
+                            sourceSize: Qt.size(176, 176)
                             visible: status === Image.Ready
-                            sourceSize.width: 40
-                            sourceSize.height: 40
-                            // Rein deklarativ an den Cache gebunden - aktualisiert
-                            // sich automatisch, egal welches Delegate gerade
-                            // welchen Index/Pfad zeigt (kein manuelles Suchen
-                            // in der Kinderliste mehr nötig).
-                            source: root.coverCache[modelData] ? ("file://" + root.coverCache[modelData]) : ""
+                        }
+
+                        // Cover füllt das ganze Rounded-Rechteck - oben drüber
+                        // ein abgerundetes Overlay, damit die Ecken sauber bleiben.
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: iconBg.radius
+                            color: "transparent"
+                            border.width: 0
+                            visible: coverImage.status === Image.Ready
                         }
 
                         Text {
+                            id: fallback
+
+                            visible: coverImage.status !== Image.Ready
                             anchors.centerIn: parent
                             text: "♪"
-                            color: WalColors.withAlpha(WalColors.color7, 0.4)
-                            font.pixelSize: 12
-                            visible: smallCover.status !== Image.Ready
+                            font.pixelSize: 38
+                            color: WalColors.color2
+                        }
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 100
+                            }
+
                         }
 
                     }
 
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData
-                        color: WalColors.color7
+                        width: grid.cellWidth - 12
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.displayName(modelData)
+                        font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
-                        font.family: "Monospace"
+                        color: WalColors.color7
                         elide: Text.ElideRight
-                        width: parent.width - 42
+                        maximumLineCount: 2
+                        wrapMode: Text.WordWrap
                     }
 
                 }
 
-            }
+                MouseArea {
+                    id: mArea
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-
-                background: Rectangle {
-                    color: WalColors.withAlpha(WalColors.color0, 0.3)
-                    radius: 4
-                }
-
-                contentItem: Rectangle {
-                    radius: 4
-                    color: WalColors.withAlpha(WalColors.color2, 0.5)
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        grid.currentIndex = index;
+                        root.playSong(modelData);
+                    }
                 }
 
             }

@@ -45,22 +45,16 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 
 -- App-Launcher (float, zentriert, feste Größe)
-hl.window_rule({
-  match = { title = "^(applauncher)$" },
-  float = true,
-  center = true,
-  size = "400 500",
-  border_size = 0,
-  no_shadow = true,
-  rounding = 0,
+-- App Launcher (Quickshell PanelWindow) blurren
+hl.layer_rule({
+  match = { namespace = "quickshell:applauncher" },
+  blur = true,
+  no_anim = true,
+  ignore_alpha = 0.1, -- niedriger als die 0.4 aus dem QML
 })
 
--- Music-Picker (float, zentriert)
-hl.window_rule({
-  match = { title = "^(music_picker)$" },
-  float = true,
-  center = true,
-})
+hl.layer_rule({ match = { namespace = "quickshell:musicpicker" }, no_anim = true, blur = true, ignore_alpha = 0.3 })
+
 
 -- Wallpaper-Picker (float, zentriert, feste Größe, ohne Animation)
 hl.window_rule({

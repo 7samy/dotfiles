@@ -1,6 +1,5 @@
 import "../components"
 import QtQuick
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
@@ -12,6 +11,12 @@ Item {
     property var filteredApps: allApps.filter((app) => {
         return app.name.toLowerCase().includes(AppLauncherState.searchText.toLowerCase());
     })
+    // Größere Zellen für größere Icons
+    readonly property real cellW: 190
+    readonly property real cellH: 168
+    // Fest auf 8 Spalten - dadurch immer 8 Apps pro Reihe,
+    // links und rechts bleibt durch die Zentrierung gleichmäßig Platz.
+    readonly property int gridColumns: 8
 
     function loadApplications() {
         try {
@@ -74,13 +79,6 @@ Item {
             else
                 command = ["sh", "-c", app.exec];
             console.log("Starte:", app.name, "mit Befehl:", command);
-            // Quickshell.execDetached() startet den Prozess komplett
-            // losgelöst von Quickshell - er wird nicht getrackt und
-            // niemals von Quickshell gekillt, selbst wenn das
-            // Launcher-Fenster sofort danach zerstört wird. Das ersetzt
-            // den vorherigen Process{}+setsid-Ansatz, bei dem schwere
-            // Apps wie Discord teils gekillt wurden, bevor sie sich
-            // vollständig vom Elternprozess lösen konnten.
             Quickshell.execDetached(command);
         } catch (e) {
             console.error("Fehler beim Starten von", app.name, ":", e);
@@ -91,10 +89,12 @@ Item {
     Component.onCompleted: {
         loadApplications();
     }
+    // Grid-Auswahl bei neuer Suche immer auf den ersten Treffer zurücksetzen
+    onFilteredAppsChanged: grid.currentIndex = 0
     Keys.onEscapePressed: AppLauncherState.close()
     Keys.onReturnPressed: {
         if (root.filteredApps.length > 0)
-            root.launchApp(root.filteredApps[appList.currentIndex]);
+            root.launchApp(root.filteredApps[grid.currentIndex]);
 
     }
 
@@ -120,144 +120,209 @@ Item {
 
     }
 
-    Column {
-        anchors.fill: parent
-        spacing: 16
+    // Suchleiste, oben mittig
+    Rectangle {
+        id: searchBar
 
-        Rectangle {
-            width: parent.width
-            height: 50
-            color: WalColors.withAlpha(WalColors.color7, 0.2)
-            radius: 8
-            border.width: 2
-            border.color: WalColors.withAlpha(WalColors.color2, 0.3)
+        width: Math.min(root.width * 0.4, 400)
+        height: 56
+        radius: height / 2
+        anchors.top: parent.top
+        anchors.topMargin: Math.max(root.height * 0.08, 48)
+        anchors.horizontalCenter: parent.horizontalCenter
+        color: WalColors.withAlpha(WalColors.color7, 0.12)
+        border.width: 2
+        border.color: searchInput.activeFocus ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25)
 
-            TextInput {
-                id: searchInput
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 22
+            anchors.verticalCenter: parent.verticalCenter
+            text: "󰍉"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 18
+            color: WalColors.withAlpha(WalColors.color7, 0.5)
+        }
 
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                verticalAlignment: Text.AlignVCenter
-                font.family: "ArcadeClassic"
-                font.pixelSize: 16
-                color: WalColors.withAlpha(WalColors.color7, 0.5)
-                text: AppLauncherState.searchText
-                onTextChanged: AppLauncherState.searchText = text
-                Component.onCompleted: forceActiveFocus()
-                Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Down)
-                        appList.incrementCurrentIndex();
-                    else if (event.key === Qt.Key_Up)
-                        appList.decrementCurrentIndex();
+        TextInput {
+            id: searchInput
+
+            anchors.fill: parent
+            anchors.leftMargin: 54
+            anchors.rightMargin: 22
+            verticalAlignment: Text.AlignVCenter
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 16
+            color: WalColors.color7
+            text: AppLauncherState.searchText
+            onTextChanged: AppLauncherState.searchText = text
+            Component.onCompleted: forceActiveFocus()
+            Keys.onPressed: (event) => {
+                switch (event.key) {
+                case Qt.Key_Down:
+                    grid.moveCurrentIndexDown();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Up:
+                    grid.moveCurrentIndexUp();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Left:
+                    grid.moveCurrentIndexLeft();
+                    event.accepted = true;
+                    break;
+                case Qt.Key_Right:
+                    grid.moveCurrentIndexRight();
+                    event.accepted = true;
+                    break;
                 }
             }
+        }
 
-            Text {
-                anchors.left: parent.left
-                anchors.leftMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Search..."
-                color: WalColors.withAlpha(WalColors.color7, 0.3)
-                font.family: "ArcadeClassic"
-                font.pixelSize: 16
-                visible: searchInput.text === ""
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 54
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Applications"
+            color: WalColors.withAlpha(WalColors.color7, 0.35)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 16
+            visible: searchInput.text === ""
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 120
             }
 
         }
 
-        Rectangle {
-            width: parent.width
-            height: parent.height - 66
-            color: "transparent"
+    }
+
+    // App-Grid
+    Item {
+        id: gridArea
+
+        // Feste Breite = 8 Spalten × Zellbreite.
+        // Durch anchors.horizontalCenter bleibt das Grid mittig,
+        // links und rechts entsteht automatisch gleichmäßiger Rand.
+        width: root.gridColumns * root.cellW
+        anchors.top: searchBar.bottom
+        anchors.topMargin: 48
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 40
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        GridView {
+            id: grid
+
+            anchors.fill: parent
+            model: root.filteredApps
+            cellWidth: root.cellW
+            cellHeight: root.cellH
+            currentIndex: 0
             clip: true
 
-            ListView {
-                id: appList
+            Text {
+                anchors.centerIn: parent
+                text: "Keine Anwendungen gefunden"
+                color: WalColors.withAlpha(WalColors.color7, 0.4)
+                font.family: "JetBrainsMono Nerd Font"
+                visible: grid.count === 0
+            }
 
-                anchors.fill: parent
-                model: root.filteredApps
-                spacing: 4
-                currentIndex: 0
+            delegate: Item {
+                readonly property bool isCurrent: GridView.isCurrentItem
 
-                Text {
+                width: grid.cellWidth
+                height: grid.cellHeight
+
+                Column {
                     anchors.centerIn: parent
-                    text: "No applications found"
-                    color: "#999999"
-                    visible: appList.count === 0
-                }
+                    spacing: 10
 
-                delegate: Rectangle {
-                    width: appList.width
-                    height: 48
-                    color: (appList.currentIndex === index || mArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
-                    radius: 6
+                    Rectangle {
+                        id: iconBg
 
-                    MouseArea {
-                        id: mArea
+                        // Größerer Icon-Hintergrund
+                        width: 88
+                        height: 88
+                        radius: 18
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: (isCurrent || mArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
+                        border.width: isCurrent ? 2 : 0
+                        border.color: WalColors.withAlpha(WalColors.color4, 0.6)
+                        scale: mArea.containsMouse ? 1.08 : 1
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: root.launchApp(modelData)
-                    }
+                        Image {
+                            id: appIcon
 
-                    Row {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        spacing: 12
+                            anchors.centerIn: parent
+                            // Größeres Icon
+                            width: 60
+                            height: 60
+                            source: modelData.icon ? "image://icon/" + modelData.icon : ""
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            onStatusChanged: {
+                                if (status === Image.Error)
+                                    fallback.visible = true;
 
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            anchors.verticalCenter: parent.verticalCenter
-                            radius: 6
-                            color: WalColors.withAlpha(WalColors.color2, 0.1)
-
-                            Image {
-                                id: appIcon
-
-                                anchors.centerIn: parent
-                                width: 24
-                                height: 24
-                                source: modelData.icon ? "image://icon/" + modelData.icon : ""
-                                fillMode: Image.PreserveAspectFit
-                                asynchronous: true
-                                onStatusChanged: {
-                                    if (status === Image.Error)
-                                        fallback.visible = true;
-
-                                }
                             }
-
-                            Text {
-                                id: fallback
-
-                                visible: appIcon.status !== Image.Ready
-                                anchors.centerIn: parent
-                                text: "󰈙"
-                                font.pixelSize: 18
-                                color: WalColors.color2
-                            }
-
                         }
 
                         Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.name
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 13
-                            color: WalColors.color7
+                            id: fallback
+
+                            visible: appIcon.status !== Image.Ready
+                            anchors.centerIn: parent
+                            text: "󰈙"
+                            font.pixelSize: 38
+                            color: WalColors.color2
+                        }
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 100
+                            }
+
                         }
 
                     }
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 100
-                        }
-
+                    Text {
+                        width: grid.cellWidth - 12
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: modelData.name
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        color: WalColors.color7
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
+                        wrapMode: Text.WordWrap
                     }
 
+                }
+
+                MouseArea {
+                    id: mArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        grid.currentIndex = index;
+                        root.launchApp(modelData);
+                    }
                 }
 
             }
