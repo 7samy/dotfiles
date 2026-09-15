@@ -1,8 +1,7 @@
-AppLauncherWindow 1.0 AppLauncherWindow.qml
-MusicPickerWindow 1.0 MusicPickerWindow.qml
+
+PickerWindow 1.0 PickerWindow.qml
 MainBar 1.0 MainBar.qml
 TriggerZone 1.0 TriggerZone.qml
-WallpaperPickerWindow 1.0 WallpaperPickerWindow.qml
 VpnDropDown 1.0 VpnDropDown.qml
 AudioDropdown 1.0 AudioDropdown.qml
 StatsDropdown 1.0 StatsDropdown.qml

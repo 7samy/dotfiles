@@ -1,4 +1,5 @@
 singleton HyprlandData 1.0 HyprlandData.qml
+singleton PickerManager 1.0 PickerManager.qml
 singleton WalColors 1.0 WalColors.qml
 singleton BarState 1.0 BarState.qml
 singleton AppLauncherState 1.0 AppLauncherState.qml
@@ -9,6 +10,7 @@ singleton AudioState 1.0 AudioState.qml
 singleton StatsState 1.0 StatsState.qml
 singleton StatsProvider 1.0 StatsProvider.qml
 singleton Appearance 1.0 Appearance.qml
+PickerSwitcher 1.0 PickerSwitcher.qml
 AudioToggle 1.0 AudioToggle.qml
 Clock 1.0 Clock.qml
 Workspaces 1.0 Workspaces.qml

@@ -2,21 +2,20 @@ import QtQuick
 pragma Singleton
 
 QtObject {
-    id: root
-
-    property bool pickerVisible: false
-    property string searchText: ""
+    readonly property bool pickerVisible: PickerManager.isOpen("wallpaper")
 
     function toggle() {
-        pickerVisible = !pickerVisible;
-        if (!pickerVisible)
-            searchText = "";
-
+        PickerManager.toggle("wallpaper");
     }
 
     function close() {
-        pickerVisible = false;
-        searchText = "";
+        if (PickerManager.isOpen("wallpaper"))
+            PickerManager.close();
+
+    }
+
+    function open() {
+        PickerManager.open("wallpaper");
     }
 
 }

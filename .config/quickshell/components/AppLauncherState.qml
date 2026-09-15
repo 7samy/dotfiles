@@ -2,21 +2,20 @@ import QtQuick
 pragma Singleton
 
 QtObject {
-    id: root
-
-    property bool launcherVisible: false
-    property string searchText: ""
+    readonly property bool launcherVisible: PickerManager.isOpen("app")
 
     function toggle() {
-        launcherVisible = !launcherVisible;
-        if (!launcherVisible)
-            searchText = "";
-
+        PickerManager.toggle("app");
     }
 
     function close() {
-        launcherVisible = false;
-        searchText = "";
+        if (PickerManager.isOpen("app"))
+            PickerManager.close();
+
+    }
+
+    function open() {
+        PickerManager.open("app");
     }
 
 }

@@ -10,15 +10,17 @@ Item {
 
     property var allWallpapers: []
     property var filteredWallpapers: allWallpapers.filter((w) => {
-        return w.name.toLowerCase().includes(WallpaperPickerState.searchText.toLowerCase());
+        return w.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
     readonly property string wallpaperDir: "/home/azu/Pictures/Wallpaper/"
-    // Wallpaper-Zellen bleiben exakt wie vorher (630×350)
     readonly property real cellW: 630
     readonly property real cellH: 350
-    // 2 Spalten × 3 Reihen sichtbar, wie vorher
     readonly property int visibleCols: 2
     readonly property int visibleRows: 3
+
+    function focusSearch() {
+        searchInput.forceActiveFocus();
+    }
 
     function loadWallpapers() {
         listProcess.running = true;
@@ -43,19 +45,18 @@ Item {
         let cmd = `awww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim; spicetify apply --no-restart; nohup /home/azu/.config/hypr/scripts/wallpaper-spotify.sh "${path}" >/dev/null 2>&1 & disown`;
         wallpaperSetter.command = ["sh", "-c", cmd];
         wallpaperSetter.running = true;
-        WallpaperPickerState.close();
+        PickerManager.close();
     }
 
     Component.onCompleted: loadWallpapers()
     onFilteredWallpapersChanged: grid.currentIndex = 0
-    Keys.onEscapePressed: WallpaperPickerState.close()
+    Keys.onEscapePressed: PickerManager.close()
     Keys.onReturnPressed: {
         if (root.filteredWallpapers.length > 0)
             root.setWallpaper(root.filteredWallpapers[grid.currentIndex].url);
 
     }
 
-    // Ordnerinhalt einlesen
     Process {
         id: listProcess
 
@@ -73,7 +74,7 @@ Item {
         id: wallpaperSetter
     }
 
-    // ==== Suchleiste - 1:1 wie im App Launcher ====
+    // ==== Suchleiste mit Switcher ====
     Rectangle {
         id: searchBar
 
@@ -102,33 +103,38 @@ Item {
 
             anchors.fill: parent
             anchors.leftMargin: 54
-            anchors.rightMargin: 22
+            anchors.rightMargin: 140 // Platz für den Switcher rechts
             verticalAlignment: Text.AlignVCenter
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 16
             color: WalColors.color7
-            text: WallpaperPickerState.searchText
-            onTextChanged: WallpaperPickerState.searchText = text
+            text: PickerManager.searchText
+            onTextChanged: PickerManager.searchText = text
             Component.onCompleted: forceActiveFocus()
             Keys.onPressed: (event) => {
+                // Tab / Shift+Tab: zwischen den Pickern wechseln
+                if (event.key === Qt.Key_Tab) {
+                    if (event.modifiers & Qt.ShiftModifier)
+                        PickerManager.cycleBackward();
+                    else
+                        PickerManager.cycle();
+                    event.accepted = true;
+                    return ;
+                }
                 switch (event.key) {
                 case Qt.Key_Down:
-                case Qt.Key_J:
                     grid.moveCurrentIndexDown();
                     event.accepted = true;
                     break;
                 case Qt.Key_Up:
-                case Qt.Key_K:
                     grid.moveCurrentIndexUp();
                     event.accepted = true;
                     break;
                 case Qt.Key_Left:
-                case Qt.Key_H:
                     grid.moveCurrentIndexLeft();
                     event.accepted = true;
                     break;
                 case Qt.Key_Right:
-                case Qt.Key_L:
                     grid.moveCurrentIndexRight();
                     event.accepted = true;
                     break;
@@ -140,11 +146,21 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 54
             anchors.verticalCenter: parent.verticalCenter
-            text: "Wallpaper"
+            text: "Search" // bei jedem Picker ggf. anpassen
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
             visible: searchInput.text === ""
+        }
+
+        // Switcher rechts in der Suchleiste
+        PickerSwitcher {
+            id: pickerSwitcher
+
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            searchInput: searchInput
         }
 
         Behavior on border.color {
@@ -156,7 +172,7 @@ Item {
 
     }
 
-    // ==== Wallpaper-Grid - exakt wie vorher, nur unter der Suchleiste ====
+    // ==== Wallpaper-Grid ====
     Item {
         id: gridArea
 

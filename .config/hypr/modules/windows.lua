@@ -46,28 +46,11 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 -- Workspace 7 ohne Border und Rounding
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 
--- App Launcher
 hl.layer_rule({
-  match = { namespace = "quickshell:applauncher" },
+  match = { namespace = "quickshell:pickers" },
   blur = true,
+  ignore_alpha = 0.1,
   no_anim = true,
-  ignore_alpha = 0.1, -- niedriger als die 0.4 aus dem QML
-})
-
--- Music Launcher
-hl.layer_rule({
-  match = { namespace = "quickshell:musicpicker" },
-  no_anim = true,
-  blur = true,
-  ignore_alpha = 0.3
-})
-
--- Wallpaper Picker
-hl.layer_rule({
-  match = { namespace = "quickshell:wallpaperpicker" },
-  no_anim = true,
-  blur = true,
-  ignore_alpha = 0.3,
 })
 
 

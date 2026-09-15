@@ -9,7 +9,7 @@ Item {
     property string terminalCommand: "kitty" // Dein Terminal
     property var allApps: []
     property var filteredApps: allApps.filter((app) => {
-        return app.name.toLowerCase().includes(AppLauncherState.searchText.toLowerCase());
+        return app.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
     // Größere Zellen für größere Icons
     readonly property real cellW: 190
@@ -17,6 +17,10 @@ Item {
     // Fest auf 8 Spalten - dadurch immer 8 Apps pro Reihe,
     // links und rechts bleibt durch die Zentrierung gleichmäßig Platz.
     readonly property int gridColumns: 8
+
+    function focusSearch() {
+        searchInput.forceActiveFocus();
+    }
 
     function loadApplications() {
         try {
@@ -149,15 +153,24 @@ Item {
 
             anchors.fill: parent
             anchors.leftMargin: 54
-            anchors.rightMargin: 22
+            anchors.rightMargin: 140 // Platz für den Switcher rechts
             verticalAlignment: Text.AlignVCenter
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 16
             color: WalColors.color7
-            text: AppLauncherState.searchText
-            onTextChanged: AppLauncherState.searchText = text
+            text: PickerManager.searchText
+            onTextChanged: PickerManager.searchText = text
             Component.onCompleted: forceActiveFocus()
             Keys.onPressed: (event) => {
+                // Tab / Shift+Tab: zwischen den Pickern wechseln
+                if (event.key === Qt.Key_Tab) {
+                    if (event.modifiers & Qt.ShiftModifier)
+                        PickerManager.cycleBackward();
+                    else
+                        PickerManager.cycle();
+                    event.accepted = true;
+                    return ;
+                }
                 switch (event.key) {
                 case Qt.Key_Down:
                     grid.moveCurrentIndexDown();
@@ -183,11 +196,21 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 54
             anchors.verticalCenter: parent.verticalCenter
-            text: "Applications"
+            text: "Search" // bei jedem Picker ggf. anpassen
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
             visible: searchInput.text === ""
+        }
+
+        // Switcher rechts in der Suchleiste
+        PickerSwitcher {
+            id: pickerSwitcher
+
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            searchInput: searchInput
         }
 
         Behavior on border.color {

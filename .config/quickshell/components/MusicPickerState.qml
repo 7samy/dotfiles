@@ -2,20 +2,20 @@ import QtQuick
 pragma Singleton
 
 QtObject {
-    id: root
-    property bool pickerVisible: false
-    property string searchText: ""
-    property string currentSongPath: ""
-    
+    readonly property bool pickerVisible: PickerManager.isOpen("music")
+
     function toggle() {
-        pickerVisible = !pickerVisible
-        if (!pickerVisible) {
-            searchText = ""
-        }
+        PickerManager.toggle("music");
     }
-    
+
     function close() {
-        pickerVisible = false
-        searchText = ""
+        if (PickerManager.isOpen("music"))
+            PickerManager.close();
+
     }
+
+    function open() {
+        PickerManager.open("music");
+    }
+
 }
