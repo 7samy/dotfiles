@@ -35,6 +35,9 @@ ShellRoot {
     PickerWindow {
     }
 
+    WorkspaceOverview {
+    }
+
     Variants {
         model: Quickshell.screens.filter((s) => {
             return s.name === "DP-2";

@@ -48,6 +48,14 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 
 hl.layer_rule({
+  name = "workspaceoverview-blur",
+  match = { namespace = "quickshell:workspaceoverview" },
+  blur = true,
+  ignore_alpha = 0.1,
+  no_anim = true,
+})
+
+hl.layer_rule({
   name = "powermenu-blur",
   match = { namespace = "quickshell:powermenu" },
   blur = true,

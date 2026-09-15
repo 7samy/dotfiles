@@ -29,15 +29,17 @@ Item {
         return title.replace(/[™®©]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
     }
 
-    // Zentrale Funktion für den Workspace-Wechsel - beide MouseAreas
-    // (normale Workspaces + Tablet-Kasten) rufen das hier auf.
+    // Zentrale Funktion für den Workspace-Wechsel
     function focusWorkspace(id) {
-    console.log("Wechsle zu Workspace:", id);
-    Quickshell.execDetached([
-        "hyprctl", "dispatch",
-        'hl.dsp.focus({ workspace = "' + id + '" })'
-    ]);
-}
+        console.log("Wechsle zu Workspace:", id);
+        Quickshell.execDetached(["hyprctl", "dispatch", "workspace", id.toString()]);
+    }
+
+    // Rechtsklick auf einen Workspace öffnet die Overview
+    function openOverview() {
+        console.log("Öffne Workspace Overview");
+        Quickshell.execDetached(["qs", "ipc", "call", "workspaceoverview", "toggle"]);
+    }
 
     Process {
         id: acfParser
@@ -88,11 +90,11 @@ Item {
     }
 
     function getCustomIconForWindow(winClass, winTitle) {
-    var titleMap = {
-        "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
-        "wallpaper-picker": "file:///home/azu/.config/quickshell/resources/icons/Senjogahara.png",
-        "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/icons8-minecraft-96.png"
-    };
+        var titleMap = {
+            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
+            "wallpaper-picker": "file:///home/azu/.config/quickshell/resources/icons/Senjogahara.png",
+            "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/icons8-minecraft-96.png"
+        };
         if (winTitle && titleMap[winTitle])
             return titleMap[winTitle];
 
@@ -281,6 +283,9 @@ Item {
                                 if (mouse.button === Qt.LeftButton) {
                                     workspaceWidget.focusWorkspace(modelData.id);
                                     mouse.accepted = true;
+                                } else if (mouse.button === Qt.RightButton) {
+                                    workspaceWidget.openOverview();
+                                    mouse.accepted = true;
                                 }
                             }
                         }
@@ -353,6 +358,9 @@ Item {
                     onClicked: (mouse) => {
                         if (mouse.button === Qt.LeftButton) {
                             workspaceWidget.focusWorkspace(workspaceWidget.tabletWorkspaceId);
+                            mouse.accepted = true;
+                        } else if (mouse.button === Qt.RightButton) {
+                            workspaceWidget.openOverview();
                             mouse.accepted = true;
                         }
                     }
