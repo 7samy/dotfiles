@@ -11,10 +11,10 @@ singleton StatsState 1.0 StatsState.qml
 singleton StatsProvider 1.0 StatsProvider.qml
 singleton Appearance 1.0 Appearance.qml
 PickerSwitcher 1.0 PickerSwitcher.qml
+PowerMenuButton 1.0 PowerMenuButton.qml
 AudioToggle 1.0 AudioToggle.qml
 Clock 1.0 Clock.qml
 Workspaces 1.0 Workspaces.qml
-PowerOff 1.0 PowerOff.qml
 Stats 1.0 Stats.qml
 ActiveWindow 1.0 ActiveWindow.qml
 AppLauncher 1.0 AppLauncher.qml

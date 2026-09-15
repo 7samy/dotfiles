@@ -48,6 +48,14 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 
 hl.layer_rule({
+  name = "powermenu-blur",
+  match = { namespace = "quickshell:powermenu" },
+  blur = true,
+  ignore_alpha = 0.3,
+  no_anim = true,
+})
+
+hl.layer_rule({
   name = "pickers-blur",
   match = { namespace = "quickshell:pickers" },
   blur = true,

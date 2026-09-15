@@ -191,10 +191,10 @@ PanelWindow {
                     spacing: 8
                     height: parent.height
 
-                    AudioToggle {
+                    PowerMenuButton {
                     }
 
-                    PowerOff {
+                    AudioToggle {
                     }
 
                     Stats {

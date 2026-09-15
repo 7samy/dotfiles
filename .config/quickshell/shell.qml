@@ -63,6 +63,9 @@ ShellRoot {
                 screen: modelData
             }
 
+            PowerMenu {
+            }
+
             StatsDropdown {
                 screen: modelData
             }
