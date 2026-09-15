@@ -31,6 +31,7 @@ hl.window_rule({ match = { class = "com.obsproject.Studio" }, workspace = "6" })
 hl.window_rule({ match = { class = "org.openrgb.OpenRGB" }, workspace = "6" })
 hl.window_rule({ match = { title = "tmux_nvim" }, workspace = "3" })
 hl.window_rule({ match = { class = "nvim-reload" }, workspace = "3" })
+hl.window_rule({ match = { class = "krita" }, workspace = "11" })
 
 -- Fensterregeln: Fullscreen für Spiele
 hl.window_rule({ match = { class = "gamescope" }, fullscreen = true })
@@ -61,6 +62,7 @@ hl.workspace_rule({
   gaps_in = 0,
   gaps_out = 0,
 })
+
 -- fzfwindows (float, zentriert)
 hl.window_rule({
   match = { class = "^fzfwindows$" },
