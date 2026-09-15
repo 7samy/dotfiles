@@ -14,11 +14,13 @@ hl.workspace_rule({ workspace = "5", monitor = "DP-2" })
 hl.workspace_rule({ workspace = "7", monitor = "DP-2" })
 hl.workspace_rule({ workspace = "9", monitor = "DP-2" })
 
-hl.workspace_rule({ workspace = "2", monitor = "DP-1" })
+hl.workspace_rule({ workspace = "2", monitor = "DP-3" })
 hl.workspace_rule({ workspace = "4", monitor = "DP-3" })
-hl.workspace_rule({ workspace = "6", monitor = "DP-1" })
-hl.workspace_rule({ workspace = "8", monitor = "DP-1" })
-hl.workspace_rule({ workspace = "10", monitor = "DP-1" })
+hl.workspace_rule({ workspace = "6", monitor = "DP-3" })
+hl.workspace_rule({ workspace = "8", monitor = "DP-3" })
+hl.workspace_rule({ workspace = "10", monitor = "DP-3" })
+
+hl.workspace_rule({ workspace = "11", monitor = "HDMI-A-1" })
 
 -- Fensterregeln: Workspace-Zuweisungen nach Klasse
 hl.window_rule({ match = { class = "kitty" }, workspace = "1" })
@@ -44,8 +46,7 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 -- Workspace 7 ohne Border und Rounding
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 
--- App-Launcher (float, zentriert, feste Größe)
--- App Launcher (Quickshell PanelWindow) blurren
+-- App Launcher
 hl.layer_rule({
   match = { namespace = "quickshell:applauncher" },
   blur = true,
@@ -53,20 +54,22 @@ hl.layer_rule({
   ignore_alpha = 0.1, -- niedriger als die 0.4 aus dem QML
 })
 
-hl.layer_rule({ match = { namespace = "quickshell:musicpicker" }, no_anim = true, blur = true, ignore_alpha = 0.3 })
-
-
--- Wallpaper-Picker (float, zentriert, feste Größe, ohne Animation)
-hl.window_rule({
-  match = { title = "^(wallpaper-picker)$" },
+-- Music Launcher
+hl.layer_rule({
+  match = { namespace = "quickshell:musicpicker" },
   no_anim = true,
-  float = true,
-  center = true,
-  size = "2560 1480",
-  border_size = 0,
-  no_shadow = true,
-  rounding = 0,
+  blur = true,
+  ignore_alpha = 0.3
 })
+
+-- Wallpaper Picker
+hl.layer_rule({
+  match = { namespace = "quickshell:wallpaperpicker" },
+  no_anim = true,
+  blur = true,
+  ignore_alpha = 0.3,
+})
+
 
 -- fzfwindows (float, zentriert)
 hl.window_rule({

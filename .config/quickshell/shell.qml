@@ -20,9 +20,7 @@ ShellRoot {
 
     GlobalShortcut {
         name: "toggle_wallpaper"
-        onPressed: {
-            wallpaperPicker.visible = !wallpaperPicker.visible;
-        }
+        onPressed: WallpaperPickerState.toggle()
     }
 
     GlobalShortcut {
@@ -37,9 +35,7 @@ ShellRoot {
     AppLauncherWindow {
     }
 
-    Wallpaper {
-        id: wallpaperPicker
-        visible: false
+    WallpaperPickerWindow {
     }
 
     MusicPickerWindow {
@@ -65,10 +61,6 @@ ShellRoot {
                 screen: modelData
             }
 
-            WallpaperTriggerzone {
-                screen: modelData
-            }
-
             VpnDropDown {
                 screen: modelData
             }
@@ -80,6 +72,9 @@ ShellRoot {
             StatsDropdown {
                 screen: modelData
             }
+
         }
+
     }
+
 }

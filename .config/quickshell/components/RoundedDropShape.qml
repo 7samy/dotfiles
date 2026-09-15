@@ -7,7 +7,7 @@ Shape {
     property real cornerRadius: 20
     property real menuWidth: 200
     property real menuHeight: 120
-    property color fillColor: WalColors.withAlpha(WalColors.color0, 0.9)
+    property color fillColor: WalColors.withAlpha(WalColors.color0, 1)
 
     width: menuWidth + 2 * cornerRadius
     height: menuHeight

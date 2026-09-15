@@ -186,7 +186,7 @@ Item {
             text: "Applications"
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 16
+            font.pixelSize: 14
             visible: searchInput.text === ""
         }
 

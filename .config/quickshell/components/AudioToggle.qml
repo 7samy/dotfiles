@@ -53,8 +53,8 @@ Rectangle {
         id: iconText
 
         anchors.centerIn: parent
-        text: AudioState.muted ? "󰖁" : (AudioState.volumePercent > 50 ? "" : "")
-        color: AudioState.muted ? "#f0b8b8" : WalColors.color2
+        text: ""
+        color: WalColors.color2
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 14
         scale: mouseArea.containsMouse ? 1.3 : 1
