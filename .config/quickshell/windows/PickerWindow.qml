@@ -95,11 +95,6 @@ PanelWindow {
             Item {
                 id: crossfadeContainer
 
-                readonly property int activeIndex: {
-                    const idx = PickerManager.pickers.indexOf(PickerManager.activePicker);
-                    return idx < 0 ? 0 : idx;
-                }
-
                 anchors.fill: parent
 
                 AppLauncher {
@@ -107,10 +102,12 @@ PanelWindow {
 
                     anchors.fill: parent
                     focus: false
-                    opacity: crossfadeContainer.activeIndex === 0 ? 1 : 0
+                    opacity: PickerManager.activePicker === "app" ? 1 : 0
                     visible: opacity > 0
 
                     Behavior on opacity {
+                        enabled: !PickerManager.openingFresh
+
                         NumberAnimation {
                             duration: 250
                             easing.type: Easing.OutCubic
@@ -125,10 +122,12 @@ PanelWindow {
 
                     anchors.fill: parent
                     focus: false
-                    opacity: crossfadeContainer.activeIndex === 1 ? 1 : 0
+                    opacity: PickerManager.activePicker === "music" ? 1 : 0
                     visible: opacity > 0
 
                     Behavior on opacity {
+                        enabled: !PickerManager.openingFresh
+
                         NumberAnimation {
                             duration: 250
                             easing.type: Easing.OutCubic
@@ -143,10 +142,12 @@ PanelWindow {
 
                     anchors.fill: parent
                     focus: false
-                    opacity: crossfadeContainer.activeIndex === 2 ? 1 : 0
+                    opacity: PickerManager.activePicker === "wallpaper" ? 1 : 0
                     visible: opacity > 0
 
                     Behavior on opacity {
+                        enabled: !PickerManager.openingFresh
+
                         NumberAnimation {
                             duration: 250
                             easing.type: Easing.OutCubic

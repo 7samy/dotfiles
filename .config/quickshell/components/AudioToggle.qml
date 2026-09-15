@@ -75,9 +75,16 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            AudioState.muted = !AudioState.muted;
-            muteProcess.running = true;
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.LeftButton) {
+                // Linksklick: Music Picker öffnen
+                MusicPickerState.toggle();
+            } else if (mouse.button === Qt.RightButton) {
+                // Rechtsklick: Mute toggeln
+                AudioState.muted = !AudioState.muted;
+                muteProcess.running = true;
+            }
         }
         onEntered: {
             AudioState.buttonHovered = true;

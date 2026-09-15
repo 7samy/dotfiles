@@ -1,4 +1,5 @@
 import "../components"
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -10,6 +11,9 @@ PanelWindow {
 
     property bool open: false
     property int currentIndex: 0
+    // Aktiv: kräftiges Wal-Blau, Inaktiv: gleiche Farbe halbtransparent
+    readonly property color iconActiveColor: WalColors.color4
+    readonly property color iconInactiveColor: WalColors.withAlpha(WalColors.color4, 0.55)
     readonly property var actions: [{
         "label": "Shutdown",
         "icon": "../resources/icons/power.png",
@@ -21,7 +25,7 @@ PanelWindow {
     }, {
         "label": "Lock",
         "icon": "../resources/icons/padlock.png",
-        "cmd": ["hyprlock"]
+        "cmd": ["/home/azu/.config/hypr/scripts/lock.sh"]
     }, {
         "label": "Logout",
         "icon": "../resources/icons/logout.png",
@@ -62,7 +66,6 @@ PanelWindow {
     screen: currentScreen
     visible: open
     color: "transparent"
-    // Bounce-Animation beim Öffnen starten
     onOpenChanged: {
         if (open)
             freshOpenBounce.restart();
@@ -92,7 +95,6 @@ PanelWindow {
         target: "powermenu"
     }
 
-    // Tastatursteuerung
     Item {
         anchors.fill: parent
         focus: powerMenu.open
@@ -103,7 +105,6 @@ PanelWindow {
         Keys.onRightPressed: powerMenu.currentIndex = (powerMenu.currentIndex + 1) % powerMenu.actions.length
     }
 
-    // Abdunkelnder Hintergrund
     Rectangle {
         id: dimmer
 
@@ -111,13 +112,11 @@ PanelWindow {
         color: WalColors.withAlpha(WalColors.color0, 0.55)
         opacity: powerMenu.open ? 1 : 0
 
-        // Klick außerhalb schließt
         MouseArea {
             anchors.fill: parent
             onClicked: powerMenu.close()
         }
 
-        // Bounce-Wrapper
         Item {
             id: scaleWrapper
 
@@ -139,10 +138,9 @@ PanelWindow {
 
             }
 
-            // Container für die Buttons
             Row {
                 anchors.centerIn: parent
-                spacing: 32
+                spacing: 45
 
                 Repeater {
                     model: powerMenu.actions
@@ -163,7 +161,7 @@ PanelWindow {
 
                             anchors.fill: parent
                             radius: 22
-                            color: WalColors.withAlpha(WalColors.color2, 0.15)
+                            color: WalColors.withAlpha(WalColors.color1, 0.2)
                             border.width: isCurrent ? 2 : 0
                             border.color: WalColors.withAlpha(WalColors.color4, 0.6)
 
@@ -171,22 +169,37 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 spacing: 16
 
-                                Image {
+                                Item {
+                                    id: iconWrapper
+
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    source: modelData.icon
-                                    sourceSize.width: 64
-                                    sourceSize.height: 64
                                     width: 64
                                     height: 64
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
-                                    smooth: true
-                                    mipmap: true
 
-                                    Behavior on opacity {
-                                        NumberAnimation {
-                                            duration: 200
-                                            easing.type: Easing.OutCubic
+                                    Image {
+                                        id: iconImg
+
+                                        anchors.fill: parent
+                                        source: modelData.icon
+                                        sourceSize.width: 64
+                                        sourceSize.height: 64
+                                        fillMode: Image.PreserveAspectFit
+                                        asynchronous: true
+                                        smooth: true
+                                        mipmap: true
+                                        visible: false
+                                    }
+
+                                    ColorOverlay {
+                                        anchors.fill: iconImg
+                                        source: iconImg
+                                        color: isCurrent ? powerMenu.iconActiveColor : powerMenu.iconInactiveColor
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 200
+                                            }
+
                                         }
 
                                     }
