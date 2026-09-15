@@ -41,38 +41,8 @@ PanelWindow {
         });
     }
 
-    // Ermittelt die Monitor-Geometrie zu einem Workspace, egal ob
-    // ws.monitor als Objekt oder nur als Name (String) vorliegt.
-    function monitorGeometryFor(ws) {
-        if (!ws || !ws.monitor)
-            return null;
-
-        let mon = ws.monitor;
-        if (typeof mon === "string")
-            mon = Hyprland.monitors.values.find((m) => {
-                return m.name === mon;
-            }) || null;
-
-        return mon;
-    }
-
     function activate(id) {
-        const ws = overview.workspaceById(id);
-        const mon = overview.monitorGeometryFor(ws);
         Hyprland.dispatch("workspace " + id);
-        // Cursor in die Mitte des Ziel-Monitors springen lassen,
-        // damit die Maus dem Fokuswechsel folgt (Hyprland warpt den
-        // Cursor bei einem reinen "workspace"-Dispatch nicht immer
-        // automatisch, z.B. wenn cursor:no_warps aktiv ist).
-        if (mon && typeof mon.x === "number" && typeof mon.width === "number") {
-            const cx = Math.round(mon.x + mon.width / 2);
-            const cy = Math.round(mon.y + mon.height / 2);
-            try {
-                Hyprland.dispatch("movecursor " + cx + " " + cy);
-            } catch (e) {
-                console.log("movecursor dispatch failed:", e);
-            }
-        }
         close();
     }
 
@@ -218,21 +188,6 @@ PanelWindow {
                                 font.pixelSize: 120
                                 font.bold: true
                                 z: 0
-                            }
-
-                            // Klick auf freie Fläche wechselt Workspace.
-                            // WICHTIG: z liegt UNTER previewArea (z:2), damit
-                            // Presses/Drags auf den Fenster-Thumbnails zuerst
-                            // bei deren eigener MouseArea ankommen und nicht
-                            // hier "geschluckt" werden (das war der Grund,
-                            // warum Drag&Drop nie gestartet ist).
-                            MouseArea {
-                                anchors.fill: parent
-                                z: 1
-                                acceptedButtons: Qt.LeftButton
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: overview.activate(card.wsId)
                             }
 
                             // Fenster-Previews
@@ -422,10 +377,7 @@ PanelWindow {
                                 z: 3
                             }
 
-                            // Drop-Ziel über den Previews (bewusst ganz oben,
-                            // damit man auch über bestehende Thumbnails droppen
-                            // kann - eine DropArea "schluckt" aber keine
-                            // normalen Klicks, blockiert also nichts).
+                            // Drop-Ziel über den Previews
                             DropArea {
                                 anchors.fill: parent
                                 z: 4
@@ -445,6 +397,16 @@ PanelWindow {
 
                                     overview.dropTargetWorkspaceId = -1;
                                 }
+                            }
+
+                            // Klick auf freie Fläche wechselt Workspace
+                            MouseArea {
+                                anchors.fill: parent
+                                z: 5
+                                acceptedButtons: Qt.LeftButton
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: overview.activate(card.wsId)
                             }
 
                             HoverHandler {
