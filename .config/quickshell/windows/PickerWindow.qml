@@ -36,7 +36,6 @@ PanelWindow {
     screen: currentScreen
     visible: PickerManager.anyOpen
     color: "transparent"
-    // Beim echten Öffnen: Bounce; beim Wechseln nicht
     onVisibleChanged: {
         if (visible) {
             freshOpenBounce.restart();
@@ -72,16 +71,12 @@ PanelWindow {
         color: WalColors.withAlpha(WalColors.color0, 0.4)
         opacity: pickerWindow.visible ? 1 : 0
 
-        // Bounce-Wrapper für den frischen Öffnen-Effekt
         Item {
             id: scaleWrapper
 
             anchors.fill: parent
             scale: 1
             transformOrigin: Item.Center
-            layer.enabled: true // ← neu
-            layer.smooth: true // ← neu
-            layer.samples: 4
 
             SequentialAnimation {
                 id: freshOpenBounce
@@ -97,44 +92,28 @@ PanelWindow {
 
             }
 
-            // Carousel-Container
             Item {
-                id: slideContainer
+                id: crossfadeContainer
 
                 readonly property int activeIndex: {
                     const idx = PickerManager.pickers.indexOf(PickerManager.activePicker);
                     return idx < 0 ? 0 : idx;
                 }
-                readonly property real slideWidth: pickerWindow.width
-                // Beim frischen Öffnen: kein Slide (openingFresh = true)
-                // Beim Wechseln: Slide mit menu_decel-Kurve
-                // (entspricht Hyprlands workspaces-Animation)
-                readonly property bool slideEnabled: !PickerManager.openingFresh && pickerWindow.visible
-
-                function offsetFor(index) {
-                    return (index - activeIndex) * slideWidth;
-                }
 
                 anchors.fill: parent
-                clip: true
 
                 AppLauncher {
                     id: appPicker
 
-                    layer.enabled: true // ← neu
-                    layer.smooth: true
-                    width: slideContainer.slideWidth
-                    height: pickerWindow.height
-                    x: slideContainer.offsetFor(0)
+                    anchors.fill: parent
                     focus: false
+                    opacity: crossfadeContainer.activeIndex === 0 ? 1 : 0
+                    visible: opacity > 0
 
-                    Behavior on x {
-                        enabled: slideContainer.slideEnabled
-
+                    Behavior on opacity {
                         NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: [0.1, 1, 0, 1] // menu_decel
+                            duration: 250
+                            easing.type: Easing.OutCubic
                         }
 
                     }
@@ -144,20 +123,15 @@ PanelWindow {
                 MusicPicker {
                     id: musicPicker
 
-                    layer.enabled: true // ← neu
-                    layer.smooth: true
-                    width: slideContainer.slideWidth
-                    height: pickerWindow.height
-                    x: slideContainer.offsetFor(1)
+                    anchors.fill: parent
                     focus: false
+                    opacity: crossfadeContainer.activeIndex === 1 ? 1 : 0
+                    visible: opacity > 0
 
-                    Behavior on x {
-                        enabled: slideContainer.slideEnabled
-
+                    Behavior on opacity {
                         NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: [0.1, 1, 0, 1] // menu_decel
+                            duration: 250
+                            easing.type: Easing.OutCubic
                         }
 
                     }
@@ -167,20 +141,15 @@ PanelWindow {
                 WallpaperPicker {
                     id: wallpaperPicker
 
-                    layer.enabled: true // ← neu
-                    layer.smooth: true
-                    width: slideContainer.slideWidth
-                    height: pickerWindow.height
-                    x: slideContainer.offsetFor(2)
+                    anchors.fill: parent
                     focus: false
+                    opacity: crossfadeContainer.activeIndex === 2 ? 1 : 0
+                    visible: opacity > 0
 
-                    Behavior on x {
-                        enabled: slideContainer.slideEnabled
-
+                    Behavior on opacity {
                         NumberAnimation {
-                            duration: 200
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: [0.1, 1, 0, 1] // menu_decel
+                            duration: 250
+                            easing.type: Easing.OutCubic
                         }
 
                     }

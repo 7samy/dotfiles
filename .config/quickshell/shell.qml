@@ -19,11 +19,6 @@ ShellRoot {
     }
 
     GlobalShortcut {
-        name: "toggle_launcher"
-        onPressed: AppLauncherState.toggle()
-    }
-
-    GlobalShortcut {
         name: "toggle_wallpaper"
         onPressed: WallpaperPickerState.toggle()
     }

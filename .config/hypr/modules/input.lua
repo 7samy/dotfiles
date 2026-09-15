@@ -19,3 +19,8 @@ hl.device({
   name = "epic-mouse-v1",
   sensitivity = -0.5,
 })
+
+hl.device({
+  name = "huion-huion-tablet_gt-156-v2-pen",
+  output = "HDMI-A-1",
+})
