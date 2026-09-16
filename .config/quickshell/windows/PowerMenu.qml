@@ -161,7 +161,7 @@ PanelWindow {
 
                             anchors.fill: parent
                             radius: 22
-                            color: WalColors.withAlpha(WalColors.color1, 0.6)
+                            color: WalColors.withAlpha(WalColors.color0, 0.8)
                             border.width: isCurrent ? 2 : 0
                             border.color: WalColors.withAlpha(WalColors.color4, 0.6)
 
