@@ -42,12 +42,6 @@ kitty --title="tmux_nvim" tmux new-session -A -s Nvim nvim &
 fcitx5 -d &
 sleep 1
 
-# APPLICATIONS #
-steam & 
-zen-browser & 
-openrgb &
-discord &
-
 # AUDIO #
 systemctl --user enable --now mpd.service
 sleep 2  # Give MPD time to start

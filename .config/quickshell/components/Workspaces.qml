@@ -90,14 +90,27 @@ Item {
     }
 
     function getCustomIconForWindow(winClass, winTitle) {
-        var titleMap = {
-            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/tmux.png",
+        // ---- 1) Exakte Treffer (schneller Objekt-Lookup) ----
+        var exactByTitle = {
+            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/neovim_1.png",
             "wallpaper-picker": "file:///home/azu/.config/quickshell/resources/icons/Senjogahara.png",
-            "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/icons8-minecraft-96.png"
+            "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/modrinth.png"
         };
-        if (winTitle && titleMap[winTitle])
-            return titleMap[winTitle];
 
+        if (winTitle && exactByTitle[winTitle])
+            return exactByTitle[winTitle];
+
+        // ---- 2) Regex-Fallbacks (für sich ändernde Klassen/Titel) ----
+        // Minecraft-Klasse ändert sich mit der Version (z.B. "Minecraft* 26.2"),
+        // daher per Regex matchen statt exaktem Key.
+        if (winClass && /^Minecraft\*/.test(winClass))
+            return "file:///home/azu/.config/quickshell/resources/icons/minecraft.png";
+
+        // Fallback über den Titel (falls Klasse mal abweicht)
+        if (winTitle && /Minecraft/i.test(winTitle))
+            return "file:///home/azu/.config/quickshell/resources/icons/minecraft.png";
+
+        // ---- 3) Gamescope / Steam-Sonderfälle ----
         if (winClass === "gamescope" && winTitle) {
             var appId = workspaceWidget.steamTitleMap[winTitle];
             if (!appId)
@@ -109,10 +122,11 @@ Item {
         }
 
         if (winClass && winClass.startsWith("steam_app_")) {
-            var appId = winClass.replace("steam_app_", "");
-            return workspaceWidget.getSteamIcon(appId);
+            var appId2 = winClass.replace("steam_app_", "");
+            return workspaceWidget.getSteamIcon(appId2);
         }
 
+        // ---- 4) Exakte Klassen-Map ----
         var classMap = {
             "code-oss":              "code-oss",
             "com.obsproject.Studio": "com.obsproject.Studio",
@@ -126,6 +140,7 @@ Item {
         if (winClass && classMap[winClass])
             return classMap[winClass];
 
+        // ---- 5) Heuristik über Desktop-Einträge ----
         if (winClass) {
             var entry = DesktopEntries.heuristicLookup(winClass);
             if (entry && entry.icon) return entry.icon;

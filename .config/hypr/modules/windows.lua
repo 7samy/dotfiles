@@ -5,6 +5,8 @@ hl.on("hyprland.start", function()
   hl.exec_cmd("/home/azu/.config/hypr/scripts/start.sh")
   hl.exec_cmd("/home/azu/.config/hypr/scripts/kitty.sh")
   hl.exec_cmd("qs")
+  hl.exec_cmd("vesktop", { workspace = "4 silent" })
+  hl.exec_cmd("zen-browser", { workspace = "2 silent" })
 end)
 
 -- Workspace-Zuweisungen an Monitore
@@ -24,8 +26,9 @@ hl.workspace_rule({ workspace = "11", monitor = "HDMI-A-1" })
 
 -- Fensterregeln: Workspace-Zuweisungen nach Klasse
 hl.window_rule({ match = { class = "kitty" }, workspace = "1" })
+hl.window_rule({ match = { class = "ModrinthApp" }, workspace = "5" })
 hl.window_rule({ match = { class = "zen" }, workspace = "2" })
-hl.window_rule({ match = { class = "discord" }, workspace = "4" })
+hl.window_rule({ match = { class = "vesktop" }, workspace = "4" })
 hl.window_rule({ match = { class = "steam" }, workspace = "5" })
 hl.window_rule({ match = { class = "com.obsproject.Studio" }, workspace = "6" })
 hl.window_rule({ match = { class = "org.openrgb.OpenRGB" }, workspace = "6" })
@@ -40,6 +43,7 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, fullscreen = true })
 -- Fensterregeln: Workspace 7 (silent) für Spiele
 hl.window_rule({ match = { class = "gamescope" }, workspace = "7 silent" })
 hl.window_rule({ match = { class = "steam_app_\\d+" }, workspace = "7 silent" })
+hl.window_rule({ match = { class = "Minecraft\\*.*" }, workspace = "7 silent" })
 
 -- Fensterregeln: Kein Blur für Spiele
 hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })

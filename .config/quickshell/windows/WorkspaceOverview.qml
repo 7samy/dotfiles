@@ -191,6 +191,14 @@ PanelWindow {
                             }
 
                             // Fenster-Previews
+                            // z bewusst höher als die "Klick auf freie Fläche"-MouseArea
+                            // weiter unten (z: 5): sonst schluckt die überall aufliegende
+                            // Karten-MouseArea jeden Press, bevor previewMouse (tief in
+                            // thumbBox verschachtelt) ihn je zu Gesicht bekommt - Qt Quick
+                            // reicht Mausereignisse bei Überlappung nicht automatisch an
+                            // tiefer liegende Items durch. Außerhalb der Thumbnails trifft
+                            // previewArea (nicht-interaktiv) ohnehin nicht, das Ereignis
+                            // fällt dort ganz normal zur Karten-MouseArea durch.
                             Item {
                                 id: previewArea
 
@@ -198,7 +206,7 @@ PanelWindow {
                                 anchors.margins: 10
                                 anchors.bottomMargin: 30
                                 clip: true
-                                z: 2
+                                z: 6
 
                                 Grid {
                                     id: previewGrid
@@ -213,6 +221,12 @@ PanelWindow {
                                     spacing: 6
 
                                     Repeater {
+                                        // Wichtig: thumbBox selbst bewegt sich nie (bleibt fest im Grid).
+                                        // Qt Quicks Drag/DropArea-System erkennt ein DropArea-"entered"
+                                        // aber nur, wenn sich die Position des Items mit Drag.active
+                                        // tatsächlich ändert. Deshalb hängen die Drag-Properties jetzt am
+                                        // wirklich beweglichen dragGhost weiter unten, nicht mehr hier.
+
                                         model: card.wins.slice(0, 4)
 
                                         delegate: Rectangle {
@@ -229,18 +243,13 @@ PanelWindow {
                                             border.color: thumbHovered ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.12)
                                             scale: thumbHovered ? 1.03 : 1
                                             clip: true
-                                            Drag.active: previewMouse.dragActive
-                                            Drag.hotSpot: Qt.point(previewMouse.lastX, previewMouse.lastY)
-                                            Drag.mimeData: ({
-                                                "text/plain": String(thumbBox.win.address)
-                                            })
 
                                             ScreencopyView {
                                                 id: thumb
 
                                                 anchors.fill: parent
                                                 captureSource: thumbBox.win.wayland
-                                                live: false
+                                                live: true
                                                 opacity: previewMouse.dragActive ? 0.35 : (thumbHovered ? 1 : (brightened ? 0.95 : 0.85))
 
                                                 Behavior on opacity {
@@ -295,21 +304,15 @@ PanelWindow {
 
                                                 property bool dragActive: false
                                                 property point pressPos: Qt.point(0, 0)
-                                                property real lastX: 0
-                                                property real lastY: 0
 
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: dragActive ? Qt.ClosedHandCursor : Qt.PointingHandCursor
                                                 onPressed: (mouse) => {
                                                     pressPos = Qt.point(mouse.x, mouse.y);
-                                                    lastX = mouse.x;
-                                                    lastY = mouse.y;
                                                     dragActive = false;
                                                 }
                                                 onPositionChanged: (mouse) => {
-                                                    lastX = mouse.x;
-                                                    lastY = mouse.y;
                                                     if (!dragActive && (Math.abs(mouse.x - pressPos.x) > 8 || Math.abs(mouse.y - pressPos.y) > 8)) {
                                                         dragActive = true;
                                                         overview.dropTargetWorkspaceId = -1;
@@ -322,7 +325,12 @@ PanelWindow {
                                                 onReleased: {
                                                     if (!dragActive)
                                                         overview.activate(card.wsId);
-
+                                                    else
+                                                        // Ohne diesen Aufruf würde Qt Quick den Drag beim
+                                                        // Loslassen nur abbrechen (cancel) - er muss explizit
+                                                        // "gedroppt" werden, damit die DropArea, über der
+                                                        // dragGhost gerade hängt, ihr onDropped feuert.
+                                                        dragGhost.Drag.drop();
                                                     dragActive = false;
                                                     overview.draggedWindow = null;
                                                 }
@@ -468,6 +476,16 @@ PanelWindow {
             z: 100
             x: overview.dragGlobalPos.x - width / 2
             y: overview.dragGlobalPos.y - height / 2
+            // dragGhost trägt jetzt den eigentlichen Drag: es ist das einzige Item,
+            // dessen Position sich während des Ziehens wirklich ändert (x/y sind an
+            // dragGlobalPos gebunden). Genau das braucht Qt Quick, um beim Überfahren
+            // einer Workspace-Karte deren DropArea "entered" auszulösen.
+            Drag.active: overview.draggedWindow !== null
+            Drag.hotSpot.x: width / 2
+            Drag.hotSpot.y: height / 2
+            Drag.mimeData: ({
+                "text/plain": overview.draggedWindow ? String(overview.draggedWindow.address) : ""
+            })
 
             ScreencopyView {
                 anchors.fill: parent
