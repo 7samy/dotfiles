@@ -162,8 +162,8 @@ PanelWindow {
                             anchors.fill: parent
                             radius: 22
                             color: WalColors.withAlpha(WalColors.color0, 0.8)
-                            border.width: isCurrent ? 2 : 0
-                            border.color: WalColors.withAlpha(WalColors.color4, 0.6)
+                            border.width: isCurrent ? 2 : 1
+                            border.color: isCurrent ? WalColors.withAlpha(WalColors.color5, 0.6) : WalColors.withAlpha(WalColors.color4, 0.3)
 
                             Column {
                                 anchors.centerIn: parent
