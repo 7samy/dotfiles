@@ -5,19 +5,22 @@ import Quickshell
 import Quickshell.Wayland
 
 PanelWindow {
-    // BR: CONCAVE
+    // Konkave Anschmiegung unten-rechts an den Rand
 
     id: calendar
 
     required property var screen
     // ── Geometrie ─────────────────────────────────────────────────────
-    readonly property real topRadius: 20
-    // TL: CONVEX
-    readonly property real cornerRadius: 20
-    // BL: CONVEX
-    readonly property real hugRadius: 20
-    readonly property real dropdownWidth: 380
     readonly property real barHeight: 40
+    // Höhe der Topbar
+    readonly property real barOffset: 80
+    // Abstand von links bis zum Kalender-Hauptkörper
+    readonly property real topRadius: 20
+    // Konkave Anschmiegung oben-links an die Bar
+    readonly property real cornerRadius: 20
+    // Konvexe Rundung unten-links
+    readonly property real hugRadius: 20
+    readonly property real dropdownWidth: 450
     // ── Kalender-Daten ────────────────────────────────────────────────
     readonly property var monthNames: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     readonly property var weekdayLabels: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -75,9 +78,9 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     exclusiveZone: -1
     implicitWidth: dropdownWidth
-    implicitHeight: content.implicitHeight + 24
+    implicitHeight: content.implicitHeight + 24 + hugRadius + barHeight
     color: "transparent"
-    visible: CalendarState.dropdownOpen || container.width > 1
+    visible: container.opacity > 0
 
     anchors {
         top: true
@@ -104,11 +107,8 @@ PanelWindow {
     Item {
         id: container
 
-        anchors.top: parent.top
-        anchors.left: parent.left
-        width: CalendarState.dropdownOpen ? calendar.implicitWidth : 0
-        height: CalendarState.dropdownOpen ? calendar.implicitHeight : 0
-        clip: true
+        anchors.fill: parent
+        opacity: CalendarState.dropdownOpen ? 1 : 0
 
         HoverHandler {
             onHoveredChanged: {
@@ -117,9 +117,7 @@ PanelWindow {
             }
         }
 
-        // ── Hintergrund ───────────────────────────────────────────────
-        // TL und BL: convex (Kontrollpunkt in der äußeren Ecke)
-        // BR: concave (Kontrollpunkt in der inneren Ecke → S-Kurve)
+        // ── Hintergrund-Form ──────────────────────────────────────────
         Shape {
             id: bgShape
 
@@ -134,58 +132,67 @@ PanelWindow {
                 strokeColor: "transparent"
                 strokeWidth: 0
 
-                // Start: oben-rechts (flush mit Bildschirmrand)
+                // 1. Oben rechts in der Bildschirmecke starten
                 PathMove {
                     x: bgShape.width
                     y: 0
                 }
 
-                // obere Kante nach links
+                // 2. Ganz nach links oben an den Bildschirmrand (unter die echte Topbar-Lücke)
                 PathLine {
-                    x: calendar.topRadius
+                    x: 0
                     y: 0
                 }
 
-                // ── TL: CONVEX ──
-                // Kontrollpunkt in der äußeren Ecke (0,0) → runde Ecke
-                PathQuad {
-                    x: 0
-                    y: calendar.topRadius
-                    controlX: 0
-                    controlY: 0
-                }
-
-                // linke Kante nach unten
+                // 3. Am linken Bildschirmrand nach unten bis zur Bar-Unterkante (y = 40)
                 PathLine {
                     x: 0
-                    y: bgShape.height - calendar.cornerRadius
+                    y: calendar.barHeight
                 }
 
-                // ── BL: CONVEX ──
-                // Kontrollpunkt in der äußeren Ecke (0, H) → runde Ecke
-                PathQuad {
-                    x: calendar.cornerRadius
-                    y: bgShape.height
-                    controlX: 0
-                    controlY: bgShape.height
-                }
-
-                // untere Kante nach rechts
+                // 4. Entlang der Bar-Unterkante nach rechts bis kurz vor die Anschmiegung
                 PathLine {
-                    x: bgShape.width - calendar.hugRadius
-                    y: bgShape.height
+                    x: calendar.barOffset - calendar.topRadius
+                    y: calendar.barHeight
                 }
 
-                // ── BR: CONCAVE ──
-                // Kontrollpunkt in der inneren Ecke (W-R, H-R) → S-Kurve nach innen
+                // 5. Konkave Anschmiegung an die Bar (wie in deiner Skizze)
                 PathQuad {
-                    x: bgShape.width
+                    x: calendar.barOffset
+                    y: calendar.barHeight + calendar.topRadius
+                    controlX: calendar.barOffset
+                    controlY: calendar.barHeight
+                }
+
+                // 6. Linke Außenkante des Kalenders nach unten
+                PathLine {
+                    x: calendar.barOffset
+                    y: bgShape.height - calendar.hugRadius - calendar.cornerRadius
+                }
+
+                // 7. Konvexe Abrundung unten links
+                PathQuad {
+                    x: calendar.barOffset + calendar.cornerRadius
                     y: bgShape.height - calendar.hugRadius
-                    controlX: bgShape.width - calendar.hugRadius
+                    controlX: calendar.barOffset
                     controlY: bgShape.height - calendar.hugRadius
                 }
 
-                // rechte Kante nach oben (flush)
+                // 8. Untere Kante nach rechts
+                PathLine {
+                    x: bgShape.width - calendar.hugRadius
+                    y: bgShape.height - calendar.hugRadius
+                }
+
+                // 9. Konkave Anschmiegung unten rechts an den rechten Rand
+                PathQuad {
+                    x: bgShape.width
+                    y: bgShape.height
+                    controlX: bgShape.width
+                    controlY: bgShape.height - calendar.hugRadius
+                }
+
+                // 10. Am rechten Rand wieder ganz nach oben (y: 0)
                 PathLine {
                     x: bgShape.width
                     y: 0
@@ -199,16 +206,16 @@ PanelWindow {
         Column {
             id: content
 
-            x: (calendar.implicitWidth - width) / 2
-            y: 0
-            width: calendar.dropdownWidth - 28
+            x: calendar.barOffset + (calendar.implicitWidth - calendar.barOffset - width) / 2
+            y: calendar.barHeight
+            width: calendar.dropdownWidth - calendar.barOffset - 28
             spacing: 10
-            topPadding: 0
+            topPadding: 10
             bottomPadding: 16
 
             Item {
                 width: parent.width
-                height: calendar.barHeight
+                height: 30
 
                 Text {
                     id: calendarClock
@@ -236,7 +243,7 @@ PanelWindow {
             }
 
             Row {
-                width: calendar.dropdownWidth - 28
+                width: parent.width
                 anchors.horizontalCenter: parent.horizontalCenter
 
                 Text {
@@ -295,7 +302,7 @@ PanelWindow {
             }
 
             Column {
-                width: calendar.dropdownWidth - 28
+                width: parent.width
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 6
 
@@ -374,18 +381,35 @@ PanelWindow {
 
         }
 
-        Behavior on width {
-            NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutCubic
+        // ── ANIMATION: Skalieren exakt aus dem Uhren-Punkt ──────────────
+        transform: Scale {
+            origin.x: calendar.barOffset
+            origin.y: calendar.barHeight
+            xScale: CalendarState.dropdownOpen ? 1 : 0
+            yScale: CalendarState.dropdownOpen ? 1 : 0
+
+            Behavior on xScale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutQuart
+                }
+
+            }
+
+            Behavior on yScale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutQuart
+                }
+
             }
 
         }
 
-        Behavior on height {
+        Behavior on opacity {
             NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutCubic
+                duration: 200
+                easing.type: Easing.InOutQuad
             }
 
         }
