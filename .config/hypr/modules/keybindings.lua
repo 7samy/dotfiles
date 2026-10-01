@@ -29,12 +29,17 @@ hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("/home/azu/.config/hypr/scripts/nvim.
 hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("./Vial-v0.7.1-x86_64.AppImage --no-sandbox"))
 
 -- Fensterfokus mit Vim-Tasten (H, J, K, L)
-hl.bind(mainMod .. " + H", hl.dsp.window.move({ direction = "l" })) -- movefocus l
-hl.bind(mainMod .. " + L", hl.dsp.window.move({ direction = "r" })) -- movefocus r
-hl.bind(mainMod .. " + K", hl.dsp.window.move({ direction = "u" })) -- movefocus u
-hl.bind(mainMod .. " + J", hl.dsp.window.move({ direction = "d" })) -- movefocus d
+hl.bind(mainMod .. " + H", hl.dsp.focus({ direction = "l" })) -- movefocus l
+hl.bind(mainMod .. " + L", hl.dsp.focus({ direction = "r" })) -- movefocus r
+hl.bind(mainMod .. " + K", hl.dsp.focus({ direction = "u" })) -- movefocus u
+hl.bind(mainMod .. " + J", hl.dsp.focus({ direction = "d" })) -- movefocus d-- Arbeitsbereiche 1-10 wechseln
 
--- Arbeitsbereiche 1-10 wechseln
+-- Fenster selbst verschieben (SHIFT + Vim-Tasten)
+hl.bind(mainMod .. " + SHIFT + H", hl.dsp.window.move({ direction = "l" }))
+hl.bind(mainMod .. " + SHIFT + L", hl.dsp.window.move({ direction = "r" }))
+hl.bind(mainMod .. " + SHIFT + K", hl.dsp.window.move({ direction = "u" }))
+hl.bind(mainMod .. " + SHIFT + J", hl.dsp.window.move({ direction = "d" }))
+
 hl.bind(mainMod .. " + 1", hl.dsp.focus({ workspace = 1 }))
 hl.bind(mainMod .. " + 2", hl.dsp.focus({ workspace = 2 }))
 hl.bind(mainMod .. " + 3", hl.dsp.focus({ workspace = 3 }))

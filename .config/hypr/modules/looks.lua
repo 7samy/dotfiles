@@ -4,6 +4,13 @@
 -- seit Hyprland 0.55 nicht mehr unterstützt wird, müssen die Farbvariablen
 -- (color0, color10, ...) künftig in Lua definiert werden.
 -- Siehe Hinweis unten für die empfohlene Vorgehensweise.
+-- ~/.config/hypr/looks.lua
+
+-- pywal-Farben laden (wird bei jedem `wal`-Lauf neu geschrieben)
+local wal = dofile(os.getenv("HOME") .. "/.cache/wal/colors.lua")
+
+-- "#rrggbb" -> "rrggbb" für rgba()-Strings
+local function rgb(c) return (c:gsub("^#", "")) end
 
 -- Allgemeine Einstellungen
 hl.config({
@@ -13,8 +20,8 @@ hl.config({
     border_size = 1,
 
     col = {
-      active_border = "#ffffff", -- siehe Hinweis unten
-      inactive_border = "#111111",
+      active_border = wal.color5,
+      inactive_border = wal.color0,
     },
 
     resize_on_border = false,
@@ -35,7 +42,7 @@ hl.config({
       enabled = true,
       range = 4,
       render_power = 3,
-      color = "rgba(1a1a1aee)",
+      color = "rgba(" .. rgb(wal.color0) .. "ee)",
     },
 
     blur = {
