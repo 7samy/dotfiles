@@ -30,3 +30,4 @@ VialPopup 1.0 VialPopup.qml
 StateLayer 1.0 StateLayer.qml
 RoundedDropShape 1.0 RoundedDropShape.qml
 Anim 1.0 Anim.qml
+singleton CalendarState 1.0 CalenderState.qml

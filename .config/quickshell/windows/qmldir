@@ -6,3 +6,4 @@ TriggerZone 1.0 TriggerZone.qml
 VpnDropDown 1.0 VpnDropDown.qml
 AudioDropdown 1.0 AudioDropdown.qml
 StatsDropdown 1.0 StatsDropdown.qml
+CalendarDropdown 1.0 CalendarDropdown.qml

@@ -3,15 +3,17 @@ import Quickshell
 
 Text {
     id: clockText
+
+    function updateTime() {
+        clockText.text = Qt.formatDateTime(new Date(), "hh:mm:ss");
+    }
+
     color: WalColors.color2
     font.family: "JetBrainsMono Nerd Font"
     font.pixelSize: 14
     height: parent.height
     verticalAlignment: Text.AlignVCenter
-
-    function updateTime() {
-        clockText.text = Qt.formatDateTime(new Date(), "hh:mm:ss")
-    }
+    Component.onCompleted: updateTime()
 
     Timer {
         interval: 1000
@@ -20,5 +22,14 @@ Text {
         onTriggered: clockText.updateTime()
     }
 
-    Component.onCompleted: updateTime()
+    HoverHandler {
+        onHoveredChanged: {
+            CalendarState.buttonHovered = hovered;
+            if (hovered)
+                CalendarState.dropdownOpen = true;
+
+            CalendarState.updateHoverTimer();
+        }
+    }
+
 }

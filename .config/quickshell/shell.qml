@@ -66,6 +66,10 @@ ShellRoot {
                 screen: modelData
             }
 
+            CalendarDropdown {
+                screen: modelData
+            }
+
             PowerMenu {
             }
 
