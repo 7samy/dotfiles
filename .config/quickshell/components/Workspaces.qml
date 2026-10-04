@@ -295,6 +295,7 @@ Item {
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                             cursorShape: Qt.PointingHandCursor
                             onClicked: (mouse) => {
+                                console.log("WS clicked:", modelData.id, "button:", mouse.button);
                                 if (mouse.button === Qt.LeftButton) {
                                     workspaceWidget.focusWorkspace(modelData.id);
                                     mouse.accepted = true;
@@ -371,6 +372,7 @@ Item {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
                     onClicked: (mouse) => {
+                        console.log("Tablet clicked, button:", mouse.button);
                         if (mouse.button === Qt.LeftButton) {
                             workspaceWidget.focusWorkspace(workspaceWidget.tabletWorkspaceId);
                             mouse.accepted = true;
