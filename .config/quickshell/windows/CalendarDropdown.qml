@@ -5,22 +5,21 @@ import Quickshell
 import Quickshell.Wayland
 
 PanelWindow {
-    // Konkave Anschmiegung unten-rechts an den Rand
-
     id: calendar
 
     required property var screen
     // ── Geometrie ─────────────────────────────────────────────────────
-    readonly property real barHeight: 40
-    // Höhe der Topbar
-    readonly property real barOffset: 80
-    // Abstand von links bis zum Kalender-Hauptkörper
-    readonly property real topRadius: 20
-    // Konkave Anschmiegung oben-links an die Bar
-    readonly property real cornerRadius: 20
-    // Konvexe Rundung unten-links
-    readonly property real hugRadius: 20
+    // Bar-Geometrie (aus MainBar.qml abgeleitet)
+    readonly property real barContainerWidth: screen.width / 1.333
+    readonly property real barHeight: screen.width / 64
+    readonly property real barRightEdgeX: (screen.width + barContainerWidth) / 2
+    // Kalender-Geometrie
     readonly property real dropdownWidth: 450
+    readonly property real panelLeftX: screen.width - dropdownWidth
+    readonly property real barOffset: barRightEdgeX - panelLeftX
+    readonly property real topRadius: 20
+    readonly property real cornerRadius: 20
+    readonly property real hugRadius: 20
     // ── Kalender-Daten ────────────────────────────────────────────────
     readonly property var monthNames: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     readonly property var weekdayLabels: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -80,7 +79,7 @@ PanelWindow {
     implicitWidth: dropdownWidth
     implicitHeight: content.implicitHeight + 24 + hugRadius + barHeight
     color: "transparent"
-    visible: container.opacity > 0
+    visible: container.revealProgress > 0.001
 
     anchors {
         top: true
@@ -107,8 +106,9 @@ PanelWindow {
     Item {
         id: container
 
+        property real revealProgress: CalendarState.dropdownOpen ? 1 : 0
+
         anchors.fill: parent
-        opacity: CalendarState.dropdownOpen ? 1 : 0
 
         HoverHandler {
             onHoveredChanged: {
@@ -117,256 +117,279 @@ PanelWindow {
             }
         }
 
-        // ── Hintergrund-Form ──────────────────────────────────────────
-        Shape {
-            id: bgShape
+        // ── Reveal-Fenster ────────────────────────────────────────────
+        // Anker liegt an der linken Kante der Hug-Kurve, also dort,
+        // wo der Kalender an die Bar anschließt. Der Clip wächst von
+        // hier auschließlich nach rechts und unten - wie wenn man die
+        // Ecke greift und das Kaugummi diagonal nach unten-rechts zieht.
+        Item {
+            id: revealClip
 
-            property color bgColor: WalColors.withAlpha(WalColors.color0, 1)
+            // ★ Fester Anker: Startpunkt der Hug-Kurve an der Bar-Unterkante
+            readonly property real anchorX: calendar.barOffset - calendar.topRadius
+            readonly property real anchorY: calendar.barHeight
 
-            anchors.fill: parent
-            smooth: true
-            antialiasing: true
+            clip: true
+            // ★ Anker bleibt stehen, nur Größe wächst
+            x: anchorX
+            y: anchorY
+            width: (calendar.implicitWidth - anchorX) * container.revealProgress
+            height: (calendar.implicitHeight - anchorY) * container.revealProgress
 
-            ShapePath {
-                fillColor: bgShape.bgColor
-                strokeColor: "transparent"
-                strokeWidth: 0
+            // ── Hintergrund-Form ──────────────────────────────────────
+            Shape {
+                id: bgShape
 
-                // 1. Oben rechts in der Bildschirmecke starten
-                PathMove {
-                    x: bgShape.width
-                    y: 0
-                }
+                property color bgColor: WalColors.withAlpha(WalColors.color0, 1)
 
-                // 2. Ganz nach links oben an den Bildschirmrand (unter die echte Topbar-Lücke)
-                PathLine {
-                    x: 0
-                    y: 0
-                }
+                // Shape liegt in Fensterkoordinaten, relativ zum Anker
+                x: -revealClip.anchorX
+                y: -revealClip.anchorY
+                width: calendar.implicitWidth
+                height: calendar.implicitHeight
+                smooth: true
+                antialiasing: true
+                // ★ Shape als Textur backen - eliminiert Sub-Pixel-Wobbeln
+                layer.enabled: true
+                layer.smooth: true
+                layer.samples: 16
 
-                // 3. Am linken Bildschirmrand nach unten bis zur Bar-Unterkante (y = 40)
-                PathLine {
-                    x: 0
-                    y: calendar.barHeight
-                }
+                ShapePath {
+                    // ★ Kein Top-Strip mehr. Die Form beginnt direkt an
+                    //   der Bar-Unterkante und hat nur die Hug-Kurve
+                    //   oben links, damit's sauber an die Bar anschließt.
 
-                // 4. Entlang der Bar-Unterkante nach rechts bis kurz vor die Anschmiegung
-                PathLine {
-                    x: calendar.barOffset - calendar.topRadius
-                    y: calendar.barHeight
-                }
+                    fillColor: bgShape.bgColor
+                    strokeColor: "transparent"
+                    strokeWidth: 0
 
-                // 5. Konkave Anschmiegung an die Bar (wie in deiner Skizze)
-                PathQuad {
-                    x: calendar.barOffset
-                    y: calendar.barHeight + calendar.topRadius
-                    controlX: calendar.barOffset
-                    controlY: calendar.barHeight
-                }
-
-                // 6. Linke Außenkante des Kalenders nach unten
-                PathLine {
-                    x: calendar.barOffset
-                    y: bgShape.height - calendar.hugRadius - calendar.cornerRadius
-                }
-
-                // 7. Konvexe Abrundung unten links
-                PathQuad {
-                    x: calendar.barOffset + calendar.cornerRadius
-                    y: bgShape.height - calendar.hugRadius
-                    controlX: calendar.barOffset
-                    controlY: bgShape.height - calendar.hugRadius
-                }
-
-                // 8. Untere Kante nach rechts
-                PathLine {
-                    x: bgShape.width - calendar.hugRadius
-                    y: bgShape.height - calendar.hugRadius
-                }
-
-                // 9. Konkave Anschmiegung unten rechts an den rechten Rand
-                PathQuad {
-                    x: bgShape.width
-                    y: bgShape.height
-                    controlX: bgShape.width
-                    controlY: bgShape.height - calendar.hugRadius
-                }
-
-                // 10. Am rechten Rand wieder ganz nach oben (y: 0)
-                PathLine {
-                    x: bgShape.width
-                    y: 0
-                }
-
-            }
-
-        }
-
-        // ── Inhalt ────────────────────────────────────────────────────
-        Column {
-            id: content
-
-            x: calendar.barOffset + (calendar.implicitWidth - calendar.barOffset - width) / 2
-            y: calendar.barHeight
-            width: calendar.dropdownWidth - calendar.barOffset - 28
-            spacing: 10
-            topPadding: 10
-            bottomPadding: 16
-
-            Item {
-                width: parent.width
-                height: 30
-
-                Text {
-                    id: calendarClock
-
-                    function updateTime() {
-                        calendarClock.text = Qt.formatDateTime(new Date(), "hh:mm:ss");
+                    // Start: obere rechte Ecke des Kalenderkörpers
+                    PathMove {
+                        x: bgShape.width
+                        y: calendar.barHeight
                     }
 
-                    anchors.centerIn: parent
-                    color: WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    font.bold: true
-                    Component.onCompleted: updateTime()
+                    // Nach links bis zum Start der Hug-Kurve
+                    PathLine {
+                        x: calendar.barOffset - calendar.topRadius
+                        y: calendar.barHeight
+                    }
 
-                    Timer {
-                        interval: 1000
-                        running: true
-                        repeat: true
-                        onTriggered: calendarClock.updateTime()
+                    // Konkave Hug-Kurve runter zur Körper-Linkkante
+                    PathQuad {
+                        x: calendar.barOffset
+                        y: calendar.barHeight + calendar.topRadius
+                        controlX: calendar.barOffset
+                        controlY: calendar.barHeight
+                    }
+
+                    // Linke Außenkante des Kalenders nach unten
+                    PathLine {
+                        x: calendar.barOffset
+                        y: bgShape.height - calendar.hugRadius - calendar.cornerRadius
+                    }
+
+                    // Konvexe Abrundung unten links
+                    PathQuad {
+                        x: calendar.barOffset + calendar.cornerRadius
+                        y: bgShape.height - calendar.hugRadius
+                        controlX: calendar.barOffset
+                        controlY: bgShape.height - calendar.hugRadius
+                    }
+
+                    // Untere Kante nach rechts
+                    PathLine {
+                        x: bgShape.width - calendar.hugRadius
+                        y: bgShape.height - calendar.hugRadius
+                    }
+
+                    // Konkave Anschmiegung unten rechts an den Rand
+                    PathQuad {
+                        x: bgShape.width
+                        y: bgShape.height
+                        controlX: bgShape.width
+                        controlY: bgShape.height - calendar.hugRadius
+                    }
+
+                    // Rechte Kante hoch zur Startposition
+                    PathLine {
+                        x: bgShape.width
+                        y: calendar.barHeight
                     }
 
                 }
 
             }
 
-            Row {
-                width: parent.width
-                anchors.horizontalCenter: parent.horizontalCenter
-
-                Text {
-                    id: prevBtn
-
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "󰅁"
-                    color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-
-                    MouseArea {
-                        id: prevMouse
-
-                        anchors.fill: parent
-                        anchors.margins: -8
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: calendar.goToPrevMonth()
-                    }
-
-                }
-
-                Text {
-                    width: parent.width - prevBtn.width - nextBtn.width - 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    horizontalAlignment: Text.AlignHCenter
-                    text: calendar.monthNames[calendar.viewMonth] + " " + calendar.viewYear
-                    color: WalColors.color7
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    font.bold: true
-                }
-
-                Text {
-                    id: nextBtn
-
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "󰅂"
-                    color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-
-                    MouseArea {
-                        id: nextMouse
-
-                        anchors.fill: parent
-                        anchors.margins: -8
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: calendar.goToNextMonth()
-                    }
-
-                }
-
-            }
-
+            // ── Inhalt ────────────────────────────────────────────────
             Column {
-                width: parent.width
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 6
+                id: content
 
-                Grid {
+                // Content in Fensterkoordinaten positionieren, aber
+                // um den Anker-Versatz korrigiert.
+                x: calendar.barOffset + (calendar.implicitWidth - calendar.barOffset - width) / 2 - revealClip.anchorX
+                y: calendar.barHeight - revealClip.anchorY
+                width: calendar.dropdownWidth - calendar.barOffset - 28
+                spacing: 10
+                topPadding: 10
+                bottomPadding: 16
+
+                Item {
                     width: parent.width
-                    columns: 7
+                    height: 30
 
-                    Repeater {
-                        model: calendar.weekdayLabels
+                    Text {
+                        id: calendarClock
 
-                        delegate: Text {
-                            width: parent.width / 7
-                            horizontalAlignment: Text.AlignHCenter
-                            text: modelData
-                            color: WalColors.withAlpha(WalColors.color7, 0.45)
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            font.bold: true
+                        function updateTime() {
+                            calendarClock.text = Qt.formatDateTime(new Date(), "hh:mm:ss");
+                        }
+
+                        anchors.centerIn: parent
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 14
+                        font.bold: true
+                        Component.onCompleted: updateTime()
+
+                        Timer {
+                            interval: 1000
+                            running: true
+                            repeat: true
+                            onTriggered: calendarClock.updateTime()
                         }
 
                     }
 
                 }
 
-                Grid {
-                    id: dayGrid
-
+                Row {
                     width: parent.width
-                    columns: 7
-                    rowSpacing: 4
+                    anchors.horizontalCenter: parent.horizontalCenter
 
-                    Repeater {
-                        model: calendar.cells
+                    Text {
+                        id: prevBtn
 
-                        delegate: Rectangle {
-                            id: dayCell
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰅁"
+                        color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
 
-                            readonly property var cell: modelData
+                        MouseArea {
+                            id: prevMouse
 
-                            width: dayGrid.width / 7
-                            height: width
-                            radius: width / 2
-                            color: cell.isToday ? WalColors.color4 : (dayMouse.containsMouse && cell.inMonth ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent")
+                            anchors.fill: parent
+                            anchors.margins: -8
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calendar.goToPrevMonth()
+                        }
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: cell.day
-                                color: cell.isToday ? WalColors.color0 : (cell.inMonth ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.25))
+                    }
+
+                    Text {
+                        width: parent.width - prevBtn.width - nextBtn.width - 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: calendar.monthNames[calendar.viewMonth] + " " + calendar.viewYear
+                        color: WalColors.color7
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+
+                    Text {
+                        id: nextBtn
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰅂"
+                        color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
+
+                        MouseArea {
+                            id: nextMouse
+
+                            anchors.fill: parent
+                            anchors.margins: -8
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calendar.goToNextMonth()
+                        }
+
+                    }
+
+                }
+
+                Column {
+                    width: parent.width
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 6
+
+                    Grid {
+                        width: parent.width
+                        columns: 7
+
+                        Repeater {
+                            model: calendar.weekdayLabels
+
+                            delegate: Text {
+                                width: parent.width / 7
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData
+                                color: WalColors.withAlpha(WalColors.color7, 0.45)
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                                font.bold: cell.isToday
+                                font.pixelSize: 10
+                                font.bold: true
                             }
 
-                            MouseArea {
-                                id: dayMouse
+                        }
 
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: cell.inMonth
-                            }
+                    }
 
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 100
+                    Grid {
+                        id: dayGrid
+
+                        width: parent.width
+                        columns: 7
+                        rowSpacing: 4
+
+                        Repeater {
+                            model: calendar.cells
+
+                            delegate: Rectangle {
+                                id: dayCell
+
+                                readonly property var cell: modelData
+
+                                width: dayGrid.width / 7
+                                height: width
+                                radius: width / 2
+                                color: cell.isToday ? WalColors.color4 : (dayMouse.containsMouse && cell.inMonth ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent")
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: cell.day
+                                    color: cell.isToday ? WalColors.color0 : (cell.inMonth ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.25))
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.bold: cell.isToday
+                                }
+
+                                MouseArea {
+                                    id: dayMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: cell.inMonth
+                                }
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 100
+                                    }
+
                                 }
 
                             }
@@ -381,35 +404,10 @@ PanelWindow {
 
         }
 
-        // ── ANIMATION: Skalieren exakt aus dem Uhren-Punkt ──────────────
-        transform: Scale {
-            origin.x: calendar.barOffset
-            origin.y: calendar.barHeight
-            xScale: CalendarState.dropdownOpen ? 1 : 0
-            yScale: CalendarState.dropdownOpen ? 1 : 0
-
-            Behavior on xScale {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutQuart
-                }
-
-            }
-
-            Behavior on yScale {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutQuart
-                }
-
-            }
-
-        }
-
-        Behavior on opacity {
+        Behavior on revealProgress {
             NumberAnimation {
-                duration: 200
-                easing.type: Easing.InOutQuad
+                duration: 220
+                easing.type: Easing.OutCubic
             }
 
         }
