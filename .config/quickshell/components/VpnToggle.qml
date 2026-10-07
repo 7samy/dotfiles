@@ -5,15 +5,12 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    readonly property string vpnConnectionName: "proton"
+    // Nur noch fuer die Statuspruefung (greift auf alle "proton-xx" Verbindungen)
+    readonly property string vpnPattern: "proton"
     readonly property real globalCenterX: windowX(root) + width / 2
 
     // Läuft die Parent-Kette hoch bis zum Fenster-Root (parent === null)
-    // und summiert dabei die x-Offsets. Im Gegensatz zu mapToItem() sind
-    // das alles normale QML-Property-Reads (item.x, item.parent), die der
-    // Binding-Engine als Abhängigkeit bekannt sind – die Property aktualisiert
-    // sich also automatisch, sobald sich irgendein Vorfahre bewegt
-    // (z.B. wenn der Row-Positioner seine Kinder layoutet).
+    // und summiert dabei die x-Offsets.
     function windowX(item) {
         var x = 0;
         var it = item;
@@ -32,13 +29,20 @@ Rectangle {
         geoProcess.running = true;
     }
 
-    // Binding statt onCompleted+onChanged: wird sofort UND bei jeder
-    // Änderung von globalCenterX neu ausgewertet, kein Race-Condition-Risiko
-    // beim ersten Layout-Pass.
     Binding {
         target: VpnState
         property: "iconCenterX"
         value: root.globalCenterX
+    }
+
+    // Nach einem Laenderwechsel im Picker Status und Standort neu laden
+    Connections {
+        function onSwitched() {
+            statusProcess.running = true;
+            geoRefreshTimer.restart();
+        }
+
+        target: VpnPickerState
     }
 
     Timer {
@@ -51,7 +55,7 @@ Rectangle {
     Process {
         id: statusProcess
 
-        command: ["bash", "-c", `nmcli connection show --active | grep -q '${root.vpnConnectionName}' && echo on || echo off`]
+        command: ["bash", "-c", `nmcli connection show --active | grep -q '${root.vpnPattern}' && echo on || echo off`]
 
         stdout: StdioCollector {
             onStreamFinished: VpnState.connected = text.trim() === "on"
@@ -80,13 +84,16 @@ Rectangle {
 
     }
 
+    // Linksklick: an/aus. Aus = aktive Verbindung trennen,
+    // an = zuletzt gewaehlte Verbindung starten.
     Process {
         id: toggleProcess
 
-        command: VpnState.connected ? ["nmcli", "connection", "down", root.vpnConnectionName] : ["nmcli", "connection", "up", root.vpnConnectionName]
+        command: VpnState.connected ? ["nmcli", "connection", "down", VpnPickerState.activeConnection !== "" ? VpnPickerState.activeConnection : "proton"] : ["nmcli", "connection", "up", VpnPickerState.lastConnection]
         onRunningChanged: {
             if (!running) {
                 statusProcess.running = true;
+                VpnPickerState.refresh();
                 geoRefreshTimer.restart();
             }
         }
@@ -147,11 +154,22 @@ Rectangle {
 
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: toggleProcess.running = true
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.RightButton) {
+                hideTimer.stop();
+                VpnState.dropdownOpen = false;
+                VpnPickerState.toggle();
+            } else {
+                toggleProcess.running = true;
+            }
+        }
         onEntered: {
             hideTimer.stop();
-            VpnState.dropdownOpen = true;
+            if (!VpnPickerState.open)
+                VpnState.dropdownOpen = true;
+
         }
         onExited: hideTimer.start()
     }

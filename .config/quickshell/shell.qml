@@ -66,6 +66,10 @@ ShellRoot {
                 screen: modelData
             }
 
+            VpnPickerWindow {
+                screen: modelData
+            }
+
             CalendarDropdown {
                 screen: modelData
             }
