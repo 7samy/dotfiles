@@ -20,7 +20,7 @@ PanelWindow {
     // 0 = zu, 1 = offen (fuer Ein-/Ausblenden)
     property real show: VpnPickerState.open ? 1 : 0
 
-    WlrLayershell.namespace: "quickshell:vpn-picker" // <--- Hier den Namespace festlegen
+    WlrLayershell.namespace: "quickshell:vpn-picker"
     visible: VpnPickerState.open || show > 0.001
     color: "transparent"
     exclusiveZone: -1
@@ -44,6 +44,7 @@ PanelWindow {
                 searchInput.text = "";
                 grid.currentIndex = 0;
                 searchInput.forceActiveFocus();
+                openBounce.restart();
             }
         }
 
@@ -68,8 +69,23 @@ PanelWindow {
 
         anchors.fill: parent
         opacity: win.show
-        scale: 0.97 + 0.03 * win.show
+        scale: 1
         transformOrigin: Item.Center
+
+        // Gleiche Öffnungs-Animation wie die anderen Picker (Bounce 0.85 -> 1)
+        SequentialAnimation {
+            id: openBounce
+
+            NumberAnimation {
+                target: content
+                property: "scale"
+                from: 0.85
+                to: 1
+                duration: 300
+                easing.type: Easing.OutBack
+            }
+
+        }
 
         // Klicks im Inhalt nicht an den Hintergrund durchreichen
         MouseArea {
@@ -349,7 +365,7 @@ PanelWindow {
 
     Behavior on show {
         NumberAnimation {
-            duration: 220
+            duration: 250
             easing.type: Easing.OutCubic
         }
 
