@@ -12,6 +12,12 @@ Item {
     property var filteredWallpapers: allWallpapers.filter((w) => {
         return w.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
+    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
+    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
+    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
+    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
+    property real lastMouseX: -1
+    property real lastMouseY: -1
     readonly property string wallpaperDir: "/home/azu/Pictures/Wallpaper/"
     readonly property real cellW: 630
     readonly property real cellH: 350
@@ -259,6 +265,16 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
+                    onPositionChanged: (mouse) => {
+                        const p = imageMouseArea.mapToItem(null, mouse.x, mouse.y);
+                        if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)
+                            return ;
+
+                        root.lastMouseX = p.x;
+                        root.lastMouseY = p.y;
+                        grid.currentIndex = index;
+                    }
                     onClicked: {
                         grid.currentIndex = index;
                         root.setWallpaper(modelData.url);

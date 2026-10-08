@@ -1,4 +1,5 @@
 import "../components"
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -16,11 +17,22 @@ Item {
     })
     property var coverQueue: []
     property bool coverBusy: false
+    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
+    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
+    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
+    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
+    property real lastMouseX: -1
+    property real lastMouseY: -1
     readonly property string musicDir: "/home/azu/Music/"
-    // Exakt die gleichen Maße wie im App Launcher
-    readonly property real cellW: 190
-    readonly property real cellH: 168
-    readonly property int gridColumns: 6
+    // Raster: 5 Spalten, etwas größere Zellen
+    readonly property real cellW: 210
+    readonly property real cellH: 190
+    readonly property int gridColumns: 5
+    // Box und Cover (Cover sitzt zentriert in der Box)
+    readonly property real boxSize: 108
+    readonly property real boxRadius: 22
+    readonly property real coverSize: 84
+    readonly property real coverRadius: 15
 
     function focusSearch() {
         searchInput.forceActiveFocus();
@@ -94,6 +106,8 @@ Item {
     }
 
     Component.onCompleted: loadSongs()
+    // Grid-Auswahl bei neuer Suche immer auf den ersten Treffer zurücksetzen (wie im App Launcher)
+    onFilteredSongsChanged: grid.currentIndex = 0
     Keys.onEscapePressed: MusicPickerState.close()
     Keys.onReturnPressed: {
         if (root.filteredSongs.length > 0)
@@ -289,39 +303,51 @@ Item {
                     anchors.centerIn: parent
                     spacing: 10
 
+                    // Box im Stil des App Launchers
                     Rectangle {
                         id: iconBg
 
-                        width: 88
-                        height: 88
-                        radius: 18
+                        width: root.boxSize
+                        height: root.boxSize
+                        radius: root.boxRadius
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: (isCurrent || mArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
+                        color: isCurrent ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
                         border.width: isCurrent ? 2 : 0
                         border.color: WalColors.withAlpha(WalColors.color4, 0.6)
-                        scale: mArea.containsMouse ? 1.08 : 1
-                        clip: true
+                        scale: isCurrent ? 1.08 : 1
 
+                        // Cover wird als Quelle fuer die Rundung genutzt
                         Image {
                             id: coverImage
 
-                            anchors.fill: parent
-                            anchors.margins: 0
+                            anchors.centerIn: parent
+                            width: root.coverSize
+                            height: root.coverSize
                             source: coverPath
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: false
-                            sourceSize: Qt.size(176, 176)
-                            visible: status === Image.Ready
+                            sourceSize: Qt.size(root.coverSize * 2, root.coverSize * 2)
+                            visible: false
                         }
 
-                        // Cover füllt das ganze Rounded-Rechteck - oben drüber
-                        // ein abgerundetes Overlay, damit die Ecken sauber bleiben.
                         Rectangle {
-                            anchors.fill: parent
-                            radius: iconBg.radius
-                            color: "transparent"
-                            border.width: 0
+                            id: coverMaskShape
+
+                            anchors.centerIn: parent
+                            width: root.coverSize
+                            height: root.coverSize
+                            radius: root.coverRadius
+                            visible: false
+                        }
+
+                        // Abgerundetes Cover in der Box
+                        OpacityMask {
+                            anchors.centerIn: parent
+                            width: root.coverSize
+                            height: root.coverSize
+                            source: coverImage
+                            maskSource: coverMaskShape
                             visible: coverImage.status === Image.Ready
                         }
 
@@ -331,7 +357,7 @@ Item {
                             visible: coverImage.status !== Image.Ready
                             anchors.centerIn: parent
                             text: "♪"
-                            font.pixelSize: 38
+                            font.pixelSize: 44
                             color: WalColors.color2
                         }
 
@@ -373,6 +399,16 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
+                    onPositionChanged: (mouse) => {
+                        const p = mArea.mapToItem(null, mouse.x, mouse.y);
+                        if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)
+                            return ;
+
+                        root.lastMouseX = p.x;
+                        root.lastMouseY = p.y;
+                        grid.currentIndex = index;
+                    }
                     onClicked: {
                         grid.currentIndex = index;
                         root.playSong(modelData);

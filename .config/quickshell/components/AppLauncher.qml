@@ -11,6 +11,12 @@ Item {
     property var filteredApps: allApps.filter((app) => {
         return app.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
+    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
+    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
+    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
+    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
+    property real lastMouseX: -1
+    property real lastMouseY: -1
     // Größere Zellen für größere Icons
     readonly property real cellW: 190
     readonly property real cellH: 168
@@ -272,10 +278,10 @@ Item {
                         height: 88
                         radius: 18
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: (isCurrent || mArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
+                        color: isCurrent ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
                         border.width: isCurrent ? 2 : 0
                         border.color: WalColors.withAlpha(WalColors.color4, 0.6)
-                        scale: mArea.containsMouse ? 1.08 : 1
+                        scale: isCurrent ? 1.08 : 1
 
                         Image {
                             id: appIcon
@@ -342,6 +348,16 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
+                    onPositionChanged: (mouse) => {
+                        const p = mArea.mapToItem(null, mouse.x, mouse.y);
+                        if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)
+                            return ;
+
+                        root.lastMouseX = p.x;
+                        root.lastMouseY = p.y;
+                        grid.currentIndex = index;
+                    }
                     onClicked: {
                         grid.currentIndex = index;
                         root.launchApp(modelData);
