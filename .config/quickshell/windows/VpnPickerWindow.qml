@@ -10,7 +10,8 @@ PanelWindow {
     readonly property real cellW: 380
     readonly property real cellH: 100
     readonly property int visibleCols: 2
-    readonly property int visibleRows: 5
+    // Passt sich automatisch an die Bildschirmhöhe an (mind. 3 Zeilen)
+    readonly property int visibleRows: Math.max(3, Math.floor((screen.height - 240) / cellH))
     readonly property var filtered: {
         const q = VpnPickerState.searchText.toLowerCase();
         return VpnPickerState.connections.filter((c) => {
@@ -54,8 +55,8 @@ PanelWindow {
     // Abdunkeln, Klick daneben schliesst
     Rectangle {
         anchors.fill: parent
-        color: "black"
-        opacity: 0.5 * win.show
+        color: WalColors.withAlpha(WalColors.color0, 0.6)
+        opacity: win.show
 
         MouseArea {
             anchors.fill: parent
@@ -72,7 +73,6 @@ PanelWindow {
         scale: 1
         transformOrigin: Item.Center
 
-        // Gleiche Öffnungs-Animation wie die anderen Picker (Bounce 0.85 -> 1)
         SequentialAnimation {
             id: openBounce
 
@@ -87,7 +87,6 @@ PanelWindow {
 
         }
 
-        // Klicks im Inhalt nicht an den Hintergrund durchreichen
         MouseArea {
             anchors.fill: parent
         }
@@ -236,7 +235,6 @@ PanelWindow {
                         border.width: 2
                         border.color: delegateItem.isActive ? WalColors.color4 : (delegateItem.isCurrent ? WalColors.withAlpha(WalColors.color2, 0.45) : "transparent")
 
-                        // Flagge (runde SVG), Fallback: Laendercode
                         Item {
                             id: flagBox
 

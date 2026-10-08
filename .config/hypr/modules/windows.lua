@@ -71,7 +71,7 @@ hl.layer_rule({
   name = "vpn-blur",
   match = { namespace = "quickshell:vpn-picker" },
   blur = true,
-  ignore_alpha = 0.3,
+  ignore_alpha = 0.1,
   no_anim = true,
 })
 
