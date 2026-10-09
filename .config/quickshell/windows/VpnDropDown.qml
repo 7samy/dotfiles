@@ -1,20 +1,62 @@
 import "../components"
+import Qt5Compat.GraphicalEffects
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 
 PanelWindow {
     id: dropdown
 
     required property var screen
-    // --- Layout-Konstanten ---------------------------------------------
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 200
-    readonly property real edgePadding: 8 // Mindestabstand zum Bildschirmrand
+    readonly property real edgePadding: 8
     readonly property real contentBottomPadding: 16
+    readonly property real globeSize: 100
+    // Volle Zielhöhe – Bezugsgröße für Container und Panel-Höhe.
+    readonly property real fullHeight: infoColumn.implicitHeight + contentBottomPadding + 24
+    readonly property string countryCode: {
+        const c = (VpnState.vpnCountry || "").trim();
+        if (c.length === 2)
+            return c.toLowerCase();
 
-    // --- Dynamische Größe -------------------------------------------------
+        if (c.length === 3)
+            return c.toLowerCase().substring(0, 2);
+
+        const map = {
+            "united states": "us",
+            "usa": "us",
+            "germany": "de",
+            "deutschland": "de",
+            "netherlands": "nl",
+            "niederlande": "nl",
+            "japan": "jp",
+            "united kingdom": "gb",
+            "uk": "gb",
+            "france": "fr",
+            "frankreich": "fr",
+            "switzerland": "ch",
+            "schweiz": "ch",
+            "austria": "at",
+            "oesterreich": "at",
+            "sweden": "se",
+            "schweden": "se",
+            "norway": "no",
+            "norwegen": "no",
+            "canada": "ca",
+            "kanada": "ca",
+            "australia": "au",
+            "australien": "au",
+            "singapore": "sg",
+            "singapur": "sg"
+        };
+        return map[c.toLowerCase()] || "";
+    }
+    readonly property string flagSource: countryCode !== "" ? "../resources/flags/" + countryCode + ".svg" : ""
+
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: infoColumn.implicitHeight + contentBottomPadding
+    // Panel folgt der Container-Höhe. Bei geschlossenem Menü -> 0 px hoch.
+    implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -22,8 +64,6 @@ PanelWindow {
 
     margins {
         top: 40
-        // Zentriert das Menü unter dem VPN-Icon, geclampt an die
-        // Bildschirmränder damit es nie abgeschnitten aus dem Screen ragt.
         left: {
             const desired = VpnState.iconCenterX - implicitWidth / 2;
             return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
@@ -34,21 +74,21 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: VpnState.dropdownOpen ? dropdown.implicitHeight : 0
+        height: VpnState.dropdownOpen ? dropdown.fullHeight : 0
         clip: true
 
         RoundedDropShape {
             anchors.top: parent.top
             cornerRadius: dropdown.cornerRadius
             menuWidth: dropdown.menuWidth
-            menuHeight: dropdown.implicitHeight
+            menuHeight: dropdown.fullHeight
         }
 
         Column {
             id: infoColumn
 
-            spacing: 8
-            topPadding: 12
+            spacing: 10
+            topPadding: 18
 
             anchors {
                 top: parent.top
@@ -56,6 +96,236 @@ PanelWindow {
                 right: parent.right
                 leftMargin: cornerRadius + 14
                 rightMargin: cornerRadius + 14
+            }
+
+            Item {
+                id: globe
+
+                width: dropdown.globeSize
+                height: dropdown.globeSize
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                Rectangle {
+                    id: pulseRing
+
+                    anchors.centerIn: parent
+                    width: globe.width + 12
+                    height: globe.height + 12
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 2
+                    border.color: WalColors.color4
+                    opacity: 0.5
+
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+
+                        NumberAnimation {
+                            to: 0.15
+                            duration: 1600
+                            easing.type: Easing.InOutSine
+                        }
+
+                        NumberAnimation {
+                            to: 0.55
+                            duration: 1600
+                            easing.type: Easing.InOutSine
+                        }
+
+                    }
+
+                }
+
+                Rectangle {
+                    id: globeBg
+
+                    anchors.centerIn: parent
+                    width: globe.width
+                    height: globe.height
+                    radius: width / 2
+                    color: WalColors.withAlpha(WalColors.color0, 0.6)
+                    border.width: 1
+                    border.color: WalColors.withAlpha(WalColors.color4, 0.35)
+                }
+
+                Image {
+                    id: flagRaw
+
+                    anchors.fill: globeBg
+                    source: dropdown.flagSource
+                    fillMode: Image.PreserveAspectCrop
+                    visible: false
+                    asynchronous: true
+                    sourceSize: Qt.size(dropdown.globeSize * 2, dropdown.globeSize * 2)
+                    smooth: true
+                }
+
+                Rectangle {
+                    id: globeMask
+
+                    anchors.fill: globeBg
+                    radius: width / 2
+                    visible: false
+                }
+
+                OpacityMask {
+                    id: globeFlag
+
+                    anchors.fill: globeBg
+                    source: flagRaw
+                    maskSource: globeMask
+                    visible: flagRaw.status === Image.Ready
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: flagRaw.status !== Image.Ready
+                    text: "󰖟"
+                    color: WalColors.color4
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 44
+                }
+
+                Shape {
+                    anchors.fill: globeBg
+                    antialiasing: true
+                    smooth: true
+                    visible: flagRaw.status === Image.Ready
+                    opacity: 0.45
+                    layer.enabled: true
+                    layer.samples: 4
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.55)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: globeBg.width / 2
+                            y: 6
+                        }
+
+                        PathLine {
+                            x: globeBg.width / 2
+                            y: globeBg.height - 6
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.4)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: globeBg.width * 0.25
+                            y: globeBg.height * 0.06
+                        }
+
+                        PathQuad {
+                            controlX: globeBg.width * 0.15
+                            controlY: globeBg.height / 2
+                            x: globeBg.width * 0.25
+                            y: globeBg.height * 0.94
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.4)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: globeBg.width * 0.75
+                            y: globeBg.height * 0.06
+                        }
+
+                        PathQuad {
+                            controlX: globeBg.width * 0.85
+                            controlY: globeBg.height / 2
+                            x: globeBg.width * 0.75
+                            y: globeBg.height * 0.94
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.45)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: 6
+                            y: globeBg.height / 2
+                        }
+
+                        PathLine {
+                            x: globeBg.width - 6
+                            y: globeBg.height / 2
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.3)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: globeBg.width * 0.08
+                            y: globeBg.height * 0.28
+                        }
+
+                        PathQuad {
+                            controlX: globeBg.width / 2
+                            controlY: globeBg.height * 0.22
+                            x: globeBg.width * 0.92
+                            y: globeBg.height * 0.28
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.3)
+                        strokeWidth: 1
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: globeBg.width * 0.08
+                            y: globeBg.height * 0.72
+                        }
+
+                        PathQuad {
+                            controlX: globeBg.width / 2
+                            controlY: globeBg.height * 0.78
+                            x: globeBg.width * 0.92
+                            y: globeBg.height * 0.72
+                        }
+
+                    }
+
+                }
+
+                Rectangle {
+                    anchors.left: globeBg.left
+                    anchors.top: globeBg.top
+                    anchors.leftMargin: globeBg.width * 0.12
+                    anchors.topMargin: globeBg.height * 0.12
+                    width: globeBg.width * 0.35
+                    height: width
+                    radius: width / 2
+                    color: "white"
+                    opacity: 0.12
+                    visible: flagRaw.status === Image.Ready
+                }
+
             }
 
             Rectangle {
@@ -93,7 +363,7 @@ PanelWindow {
                         color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 12
-                        width: 150
+                        width: 140
                         elide: Text.ElideRight
                     }
 
