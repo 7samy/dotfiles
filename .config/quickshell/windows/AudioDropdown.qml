@@ -1,8 +1,8 @@
 import "../components"
 import Qt5Compat.GraphicalEffects
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
+import Quickshell.Io
 
 PanelWindow {
     id: dropdown
@@ -12,6 +12,23 @@ PanelWindow {
     readonly property real menuWidth: 220
     readonly property real edgePadding: 8
     readonly property real coverSize: 120
+    // ---- Visualizer (cava) ----
+    // cava liefert cavaBars Werte; sie werden links/rechts gespiegelt,
+    // dadurch entstehen barCount = 2 * cavaBars Balken rund ums Cover.
+    readonly property int cavaBars: 25
+    readonly property int barCount: cavaBars * 2
+    readonly property real barWidth: 3
+    readonly property real barGap: 3 // Abstand zwischen Cover und Balken
+    readonly property real barMinLen: 3 // Balkenlaenge bei Stille
+    readonly property real barMaxLen: 25 // Balkenlaenge bei voller Lautstaerke
+    // Empfindlichkeit: < 1 = empfindlicher (kleine Pegel werden angehoben),
+    // 1.0 = linear, 0.5 = Wurzel. Zum Justieren hier aendern.
+    readonly property real cavaGamma: 0.5
+    // Noise-Floor: Werte unterhalb dieses Pegels werden als 0 behandelt.
+    // cava liefert bei Stille oft 2-5 statt 0.
+    readonly property real cavaNoiseFloor: 0.03
+    // Aktuelle Pegel 0..1 (Index 0 = tiefste Frequenz)
+    property var cavaValues: new Array(cavaBars).fill(0)
 
     implicitWidth: menuWidth + 2 * cornerRadius
     implicitHeight: content.implicitHeight + 24
@@ -35,6 +52,38 @@ PanelWindow {
         height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
         clip: true
 
+        // cava laeuft nur, solange das Menue offen ist und Musik spielt.
+        // Die Config wird in eine Datei geschrieben und cava per exec gestartet,
+        // damit beim Stoppen wirklich cava (und kein Shell-Wrapper) beendet wird.
+        Process {
+            id: cavaProcess
+
+            running: AudioState.dropdownOpen && AudioState.isPlaying
+            command: ["sh", "-c", "printf '%s\\n' '[general]' 'bars=" + dropdown.cavaBars + "' 'framerate=40' 'sleep_timer=3' '[output]' 'method=raw' 'raw_target=/dev/stdout' 'data_format=ascii' 'ascii_max_range=100' 'channels=mono' > /tmp/qs-cava-audio.conf && exec cava -p /tmp/qs-cava-audio.conf"]
+            onRunningChanged: {
+                if (!running)
+                    dropdown.cavaValues = new Array(dropdown.cavaBars).fill(0);
+
+            }
+
+            stdout: SplitParser {
+                // Eine Zeile pro Frame: "12;45;7;...;"
+                onRead: (line) => {
+                    const parts = line.split(";");
+                    const values = [];
+                    for (const p of parts) {
+                        if (p !== "")
+                            values.push(Number(p) / 100);
+
+                    }
+                    if (values.length >= dropdown.cavaBars)
+                        dropdown.cavaValues = values;
+
+                }
+            }
+
+        }
+
         RoundedDropShape {
             anchors.top: parent.top
             cornerRadius: dropdown.cornerRadius
@@ -56,106 +105,71 @@ PanelWindow {
             Item {
                 id: coverArea
 
-                readonly property real ringPadding: 10
-                readonly property real ringThickness: 3
-                readonly property real outerSize: coverSize + 2 * (ringPadding + ringThickness)
-                readonly property real ringRadius: outerSize / 2 - ringThickness / 2
-                readonly property real trackLength: AudioState.length > 0 ? AudioState.length : 1
-                readonly property real displayProgress: {
-                    if (dragging)
-                        return dragProgress;
-
-                    if (AudioState.length <= 0)
-                        return 0;
-
-                    return Math.max(0, Math.min(1, AudioState.position / trackLength));
-                }
-                property bool dragging: false
-                property real dragProgress: 0
+                readonly property real outerSize: coverSize + 2 * (dropdown.barGap + dropdown.barMaxLen)
 
                 width: outerSize
                 height: outerSize
                 anchors.horizontalCenter: parent.horizontalCenter
 
+                // Kreisfoermiger Visualizer: Balken starten direkt am Coverrand
                 Item {
-                    id: ringLayer
+                    id: visualizerLayer
 
                     anchors.fill: parent
+                    visible: AudioState.hasPlayer
                     layer.enabled: true
                     layer.samples: 8
                     layer.smooth: true
 
-                    Shape {
-                        anchors.fill: parent
-                        antialiasing: true
-                        smooth: true
-                        visible: AudioState.hasPlayer
+                    Repeater {
+                        model: dropdown.barCount
 
-                        ShapePath {
-                            strokeColor: Qt.rgba(1, 1, 1, 0.12)
-                            strokeWidth: coverArea.ringThickness
-                            fillColor: "transparent"
-                            capStyle: ShapePath.RoundCap
+                        delegate: Item {
+                            // Roh-Wert von cava, auf 0..1 begrenzt
+                            readonly property real rawLevel: {
+                                const v = dropdown.cavaValues[index < dropdown.cavaBars ? index : dropdown.barCount - 1 - index] ?? 0;
+                                return Math.max(0, Math.min(1, v));
+                            }
+                            // Noise-Floor wegschneiden und Rest auf 0..1 neu skalieren
+                            readonly property real cleanedLevel: {
+                                const nf = dropdown.cavaNoiseFloor;
+                                if (rawLevel <= nf)
+                                    return 0;
 
-                            PathAngleArc {
-                                centerX: coverArea.outerSize / 2
-                                centerY: coverArea.outerSize / 2
-                                radiusX: coverArea.ringRadius
-                                radiusY: coverArea.ringRadius
-                                startAngle: -90
-                                sweepAngle: 359.999
+                                return Math.min(1, (rawLevel - nf) / (1 - nf));
+                            }
+                            // Gamma-Korrektur: < 1 = empfindlicher
+                            readonly property real level: Math.pow(cleanedLevel, dropdown.cavaGamma)
+
+                            x: coverArea.outerSize / 2
+                            y: coverArea.outerSize / 2
+                            width: 0
+                            height: 0
+                            // Tiefe Toene unten, hohe oben
+                            rotation: 180 + (index + 0.5) * 360 / dropdown.barCount
+
+                            Rectangle {
+                                // unterer Rand haengt fest am Cover, nur die Laenge aendert sich
+                                anchors.bottom: parent.top
+                                anchors.bottomMargin: coverSize / 2 + dropdown.barGap
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: dropdown.barWidth
+                                height: dropdown.barMinLen + parent.level * (dropdown.barMaxLen - dropdown.barMinLen)
+                                radius: width / 2
+                                antialiasing: true
+                                color: WalColors.color4
+                                opacity: 0.45 + 0.55 * parent.cleanedLevel
+
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: 60
+                                        easing.type: Easing.OutQuad
+                                    }
+
+                                }
+
                             }
 
-                        }
-
-                    }
-
-                    Shape {
-                        anchors.fill: parent
-                        antialiasing: true
-                        smooth: true
-                        visible: AudioState.hasPlayer
-
-                        ShapePath {
-                            strokeColor: WalColors.color4
-                            strokeWidth: coverArea.ringThickness
-                            fillColor: "transparent"
-                            capStyle: ShapePath.RoundCap
-
-                            PathAngleArc {
-                                centerX: coverArea.outerSize / 2
-                                centerY: coverArea.outerSize / 2
-                                radiusX: coverArea.ringRadius
-                                radiusY: coverArea.ringRadius
-                                startAngle: -90
-                                sweepAngle: Math.max(0.001, 360 * coverArea.displayProgress)
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                Rectangle {
-                    id: seekHandle
-
-                    readonly property real angleRad: (-90 + 360 * coverArea.displayProgress) * Math.PI / 180
-
-                    visible: AudioState.hasPlayer
-                    width: coverArea.ringThickness + 6
-                    height: width
-                    radius: width / 2
-                    color: WalColors.color0
-                    border.color: WalColors.color4
-                    border.width: 2
-                    scale: coverArea.dragging ? 1.3 : 1
-                    x: coverArea.outerSize / 2 + coverArea.ringRadius * Math.cos(angleRad) - width / 2
-                    y: coverArea.outerSize / 2 + coverArea.ringRadius * Math.sin(angleRad) - height / 2
-
-                    Behavior on scale {
-                        Anim {
-                            duration: Appearance.anim.durations.fast
                         }
 
                     }
@@ -235,49 +249,6 @@ PanelWindow {
                         visible: AudioState.artUrl !== "" && !AudioState.showWebsiteIcon
                     }
 
-                }
-
-                MouseArea {
-                    id: seekArea
-
-                    function angleFromPoint(px, py) {
-                        const cx = coverArea.outerSize / 2;
-                        const cy = coverArea.outerSize / 2;
-                        let deg = Math.atan2(py - cy, px - cx) * 180 / Math.PI + 90;
-                        if (deg < 0)
-                            deg += 360;
-
-                        return deg;
-                    }
-
-                    function applySeek(px, py) {
-                        const progress = angleFromPoint(px, py) / 360;
-                        coverArea.dragProgress = progress;
-                        AudioState.seekTo(progress * coverArea.trackLength);
-                    }
-
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    preventStealing: true
-                    enabled: AudioState.hasPlayer && AudioState.length > 0
-                    onPressed: (mouse) => {
-                        const cx = coverArea.outerSize / 2;
-                        const cy = coverArea.outerSize / 2;
-                        const dist = Math.hypot(mouse.x - cx, mouse.y - cy);
-                        if (Math.abs(dist - coverArea.ringRadius) > coverArea.ringThickness * 3) {
-                            mouse.accepted = false;
-                            return ;
-                        }
-                        coverArea.dragging = true;
-                        applySeek(mouse.x, mouse.y);
-                    }
-                    onPositionChanged: (mouse) => {
-                        if (coverArea.dragging)
-                            applySeek(mouse.x, mouse.y);
-
-                    }
-                    onReleased: coverArea.dragging = false
-                    onCanceled: coverArea.dragging = false
                 }
 
             }
