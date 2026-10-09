@@ -11,6 +11,12 @@ ShellRoot {
             var s = Quickshell.screens[i];
             console.log("screen", i, s.name, JSON.stringify(s.geometry));
         }
+        // States vorab laden, damit die Scans laufen, waehrend der User
+        // noch nichts tut. Sonst starten die Scans erst beim ersten
+        // Oeffnen des jeweiligen Pickers (sichtbare Verzoegerung).
+        AppLauncherState.loadApps();
+        MusicPickerState.loadSongs();
+        WallpaperPickerState.loadWallpapers();
     }
 
     GlobalShortcut {

@@ -7,63 +7,41 @@ QtObject {
     id: root
 
     readonly property bool launcherVisible: PickerManager.isOpen("app")
+    // Alle geladenen Apps. Wird einmal beim Start befuellt und bleibt
+    // als leichtes Array (~50 KB) im RAM – kostet fast nichts, spart
+    // aber den Neu-Scan beim Wiederoeffnen des Launchers.
     property var allApps: []
     property bool appsLoaded: false
     property bool appsLoading: false
-    // ==== 1. Cache synchron beim Start lesen ====
-    // Wenn /tmp/qs-apps.list existiert, wird sie sofort geladen –
-    // noch bevor der Launcher das erste Mal geöffnet wird.
-    property FileView cacheFile
-
-    cacheFile: FileView {
-        path: "/tmp/qs-apps.list"
-        blockLoading: true
-        watchChanges: false
-        onLoaded: {
-            if (text && text.length > 0) {
-                root.parseApplications(text);
-                console.log("Apps aus Cache geladen:", root.allApps.length);
-            }
-        }
-    }
-
-    // ==== 2. Scan läuft parallel im Hintergrund ====
-    // Aktualisiert den Cache, falls sich Apps geändert haben.
-    // Blockiert nicht, aber der Launcher hat durch den Cache
-    // sofort Daten.
+    // Process-Instanz im Singleton – laeuft einmal beim Start.
+    // Bash expandiert die Globs (Quickshell selbst kann das nicht).
     property Process appsProcess
 
     appsProcess: Process {
         running: true
-        command: ["awk", "-F", "=", "FNR==1 {", "  if (NR > 1 && type==\"Application\" && !nodisplay && !hidden && name != \"\" && exec != \"\") {", "    print name \"|\" exec \"|\" icon \"|\" terminal;", "  }", "  type=nodisplay=hidden=name=exec=icon=terminal=\"\";", "  in_de=0;", "}", "/^\\[Desktop Entry\\]/ { in_de=1; next }", "/^\\[/ { in_de=0 }", "in_de && /^Type=/ { type=substr($0, 6) }", "in_de && /^NoDisplay=/ { nodisplay=(substr($0, 11)==\"true\") }", "in_de && /^Hidden=/ { hidden=(substr($0, 8)==\"true\") }", "in_de && /^Name=/ && name == \"\" { name=substr($0, 6) }", "in_de && /^Exec=/ && exec == \"\" { exec=substr($0, 6) }", "in_de && /^Icon=/ && icon == \"\" { icon=substr($0, 6) }", "in_de && /^Terminal=/ { terminal=substr($0, 10) }", "END {", "  if (type==\"Application\" && !nodisplay && !hidden && name != \"\" && exec != \"\") {", "    print name \"|\" exec \"|\" icon \"|\" terminal;", "  }", "}", "/usr/share/applications/*.desktop", "/var/lib/flatpak/exports/share/applications/*.desktop", "/home/azu/.local/share/flatpak/exports/share/applications/*.desktop"]
+        command: ["bash", "-c", "for f in /usr/share/applications/*.desktop /var/lib/flatpak/exports/share/applications/*.desktop /home/azu/.local/share/flatpak/exports/share/applications/*.desktop; do \
+            [ -f \"$f\" ] || continue; \
+            grep -q '^Type=Application' \"$f\" || continue; \
+            grep -q '^NoDisplay=true' \"$f\" && continue; \
+            grep -q '^Hidden=true' \"$f\" && continue; \
+            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2-); \
+            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2-); \
+            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2-); \
+            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2-); \
+            echo \"$name|$exec|$icon|$terminal\"; \
+        done"]
 
         stdout: StdioCollector {
-            id: appsStdout
-
-            onStreamFinished: {
-                // 1. In den State übernehmen (aktualisiert die Liste live)
-                root.parseApplications(text);
-                // 2. Cache auf Platte schreiben fuer den naechsten Start
-                cacheWriter.command = ["bash", "-c", "cat > /tmp/qs-apps.list"];
-                cacheWriter.stdinEnabled = true;
-                cacheWriter.running = true;
-                cacheWriter.write(text);
-                cacheWriter.stdinEnabled = false;
-            }
+            onStreamFinished: root.parseApplications(text)
         }
 
     }
 
-    // Hilfs-Prozess zum Cache-Schreiben
-    property Process cacheWriter
-
-    cacheWriter: Process {
-        stdinEnabled: true
-    }
-
     function loadApps() {
-        // Nur noch fuer manuellen Re-Scan – beim Start laeuft der
-        // Process automatisch (running: true oben).
+        if (root.appsLoaded || root.appsLoading)
+            return ;
+
+        root.appsLoading = true;
         root.appsProcess.running = true;
     }
 
