@@ -44,22 +44,6 @@ PanelWindow {
             menuHeight: dropdown.implicitHeight
         }
 
-        Connections {
-            function onColorsUpdated() {
-                mainPath.fillColor = "transparent";
-                forceRedrawTimer.start();
-            }
-
-            target: WalColors
-        }
-
-        Timer {
-            id: forceRedrawTimer
-
-            interval: 10
-            onTriggered: mainPath.fillColor = WalColors.withAlpha(WalColors.color0, 0.9)
-        }
-
         Column {
             id: infoColumn
 

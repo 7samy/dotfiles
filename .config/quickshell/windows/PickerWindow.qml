@@ -21,12 +21,12 @@ PanelWindow {
     }
 
     function focusActivePicker() {
-        if (PickerManager.isOpen("app"))
-            appPicker.focusSearch();
-        else if (PickerManager.isOpen("music"))
-            musicPicker.focusSearch();
-        else if (PickerManager.isOpen("wallpaper"))
-            wallpaperPicker.focusSearch();
+        if (PickerManager.isOpen("app") && appLoader.item)
+            appLoader.item.focusSearch();
+        else if (PickerManager.isOpen("music") && musicLoader.item)
+            musicLoader.item.focusSearch();
+        else if (PickerManager.isOpen("wallpaper") && wallpaperLoader.item)
+            wallpaperLoader.item.focusSearch();
     }
 
     WlrLayershell.namespace: "quickshell:pickers"
@@ -97,60 +97,112 @@ PanelWindow {
 
                 anchors.fill: parent
 
-                AppLauncher {
-                    id: appPicker
+                // ---- App Launcher (lazy, Qt Loader) ----
+                Loader {
+                    id: appLoader
 
                     anchors.fill: parent
-                    focus: false
-                    opacity: PickerManager.activePicker === "app" ? 1 : 0
-                    visible: opacity > 0
+                    asynchronous: true
+                    // Aktiv solange der Picker aktiv ist ODER
+                    // das geladene Item noch sichtbar (Fade-out laeuft).
+                    active: PickerManager.activePicker === "app" || (appLoader.item && appLoader.item.opacity > 0.01)
+                    // Wenn active false wird, wird das Item zerstoert
+                    // und der Speicher freigegeben.
+                    sourceComponent: appComponent
 
-                    Behavior on opacity {
-                        enabled: !PickerManager.openingFresh
+                    Component {
+                        id: appComponent
 
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutCubic
+                        AppLauncher {
+                            id: appPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: PickerManager.activePicker === "app" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
                         }
 
                     }
 
                 }
 
-                MusicPicker {
-                    id: musicPicker
+                // ---- Music Picker (lazy, Qt Loader) ----
+                Loader {
+                    id: musicLoader
 
                     anchors.fill: parent
-                    focus: false
-                    opacity: PickerManager.activePicker === "music" ? 1 : 0
-                    visible: opacity > 0
+                    asynchronous: true
+                    active: PickerManager.activePicker === "music" || (musicLoader.item && musicLoader.item.opacity > 0.01)
+                    sourceComponent: musicComponent
 
-                    Behavior on opacity {
-                        enabled: !PickerManager.openingFresh
+                    Component {
+                        id: musicComponent
 
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutCubic
+                        MusicPicker {
+                            id: musicPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: PickerManager.activePicker === "music" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
                         }
 
                     }
 
                 }
 
-                WallpaperPicker {
-                    id: wallpaperPicker
+                // ---- Wallpaper Picker (lazy, Qt Loader) ----
+                Loader {
+                    id: wallpaperLoader
 
                     anchors.fill: parent
-                    focus: false
-                    opacity: PickerManager.activePicker === "wallpaper" ? 1 : 0
-                    visible: opacity > 0
+                    asynchronous: true
+                    active: PickerManager.activePicker === "wallpaper" || (wallpaperLoader.item && wallpaperLoader.item.opacity > 0.01)
+                    sourceComponent: wallpaperComponent
 
-                    Behavior on opacity {
-                        enabled: !PickerManager.openingFresh
+                    Component {
+                        id: wallpaperComponent
 
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutCubic
+                        WallpaperPicker {
+                            id: wallpaperPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: PickerManager.activePicker === "wallpaper" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
                         }
 
                     }

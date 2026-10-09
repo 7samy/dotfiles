@@ -6,76 +6,20 @@ import Quickshell.Io
 Item {
     id: root
 
-    property string terminalCommand: "kitty" // Dein Terminal
-    property var allApps: []
+    property string terminalCommand: "kitty"
+    // Apps kommen aus dem Singleton, nicht mehr aus eigenem Process.
+    property var allApps: AppLauncherState.allApps
     property var filteredApps: allApps.filter((app) => {
         return app.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
-    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
-    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
-    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
-    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
     property real lastMouseX: -1
     property real lastMouseY: -1
-    // Größere Zellen für größere Icons
     readonly property real cellW: 190
     readonly property real cellH: 168
-    // Fest auf 8 Spalten - dadurch immer 8 Apps pro Reihe,
-    // links und rechts bleibt durch die Zentrierung gleichmäßig Platz.
     readonly property int gridColumns: 5
 
     function focusSearch() {
         searchInput.forceActiveFocus();
-    }
-
-    function loadApplications() {
-        try {
-            appsProcess.running = true;
-        } catch (e) {
-            console.error("Error loading applications:", e);
-        }
-    }
-
-    function parseApplications() {
-        try {
-            const lines = appsOutput.text.split('\n').filter((l) => {
-                return l.trim();
-            });
-            const apps = [];
-            const blacklist = ["qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uuctl", "wpgtk", "xgps", "Wine", "Rofi", "Xfce", "Ark", "Blackmagic", "Cppcheck", "lstopo", "OpenJDK", "rmpc", "Electron", "Advanced Network", "Htop", "Base", "Calc", "Draw", "Impress", "Math"];
-            for (let line of lines) {
-                const parts = line.split('|');
-                if (parts.length >= 3) {
-                    let name = parts[0].trim();
-                    let exec = parts[1].trim();
-                    let icon = parts[2] ? parts[2].trim() : "";
-                    let needsTerminal = (parts[3] && parts[3].trim() === "true");
-                    exec = exec.replace(/%[fFuUikcnvezt]/g, "").trim();
-                    const fullNameInfo = (name + " " + exec).toLowerCase();
-                    const isBlacklisted = blacklist.some((item) => {
-                        return fullNameInfo.includes(item.toLowerCase());
-                    });
-                    if (name && exec && !isBlacklisted)
-                        apps.push({
-                        "name": name,
-                        "exec": exec,
-                        "icon": icon,
-                        "terminal": needsTerminal
-                    });
-
-                }
-            }
-            allApps = apps.filter((v, i, a) => {
-                return a.findIndex((t) => {
-                    return (t.name === v.name);
-                }) === i;
-            }).sort((a, b) => {
-                return a.name.localeCompare(b.name);
-            });
-            console.log("Geladene Apps:", allApps.length);
-        } catch (e) {
-            console.error("Error parsing applications:", e);
-        }
     }
 
     function launchApp(app) {
@@ -97,36 +41,14 @@ Item {
     }
 
     Component.onCompleted: {
-        loadApplications();
+        // Sicherstellen, dass der Scan laeuft, falls er noch nicht gestartet ist
+        AppLauncherState.loadApps();
     }
-    // Grid-Auswahl bei neuer Suche immer auf den ersten Treffer zurücksetzen
     onFilteredAppsChanged: grid.currentIndex = 0
     Keys.onEscapePressed: AppLauncherState.close()
     Keys.onReturnPressed: {
         if (root.filteredApps.length > 0)
             root.launchApp(root.filteredApps[grid.currentIndex]);
-
-    }
-
-    Process {
-        id: appsProcess
-
-        command: ["bash", "-c", "for f in /usr/share/applications/*.desktop; do \
-            grep -q '^Type=Application' \"$f\" || continue; \
-            grep -q '^NoDisplay=true' \"$f\" && continue; \
-            grep -q '^Hidden=true' \"$f\" && continue; \
-            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2); \
-            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2); \
-            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2); \
-            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2); \
-            echo \"$name|$exec|$icon|$terminal\"; \
-        done"]
-
-        stdout: StdioCollector {
-            id: appsOutput
-
-            onStreamFinished: parseApplications()
-        }
 
     }
 
@@ -159,7 +81,7 @@ Item {
 
             anchors.fill: parent
             anchors.leftMargin: 54
-            anchors.rightMargin: 140 // Platz für den Switcher rechts
+            anchors.rightMargin: 140
             verticalAlignment: Text.AlignVCenter
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 16
@@ -168,7 +90,6 @@ Item {
             onTextChanged: PickerManager.searchText = text
             Component.onCompleted: forceActiveFocus()
             Keys.onPressed: (event) => {
-                // Tab / Shift+Tab: zwischen den Pickern wechseln
                 if (event.key === Qt.Key_Tab) {
                     if (event.modifiers & Qt.ShiftModifier)
                         PickerManager.cycleBackward();
@@ -202,14 +123,13 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 54
             anchors.verticalCenter: parent.verticalCenter
-            text: "Search" // bei jedem Picker ggf. anpassen
+            text: "Search"
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
             visible: searchInput.text === ""
         }
 
-        // Switcher rechts in der Suchleiste
         PickerSwitcher {
             id: pickerSwitcher
 
@@ -232,15 +152,22 @@ Item {
     Item {
         id: gridArea
 
-        // Feste Breite = 8 Spalten × Zellbreite.
-        // Durch anchors.horizontalCenter bleibt das Grid mittig,
-        // links und rechts entsteht automatisch gleichmäßiger Rand.
         width: root.gridColumns * root.cellW
         anchors.top: searchBar.bottom
         anchors.topMargin: 48
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
         anchors.horizontalCenter: parent.horizontalCenter
+
+        // Ladeanzeige, falls der Scan noch laeuft
+        Text {
+            anchors.centerIn: parent
+            text: "Lade Anwendungen…"
+            color: WalColors.withAlpha(WalColors.color7, 0.45)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 14
+            visible: !AppLauncherState.appsLoaded && grid.count === 0
+        }
 
         GridView {
             id: grid
@@ -257,7 +184,7 @@ Item {
                 text: "Keine Anwendungen gefunden"
                 color: WalColors.withAlpha(WalColors.color7, 0.4)
                 font.family: "JetBrainsMono Nerd Font"
-                visible: grid.count === 0
+                visible: grid.count === 0 && AppLauncherState.appsLoaded
             }
 
             delegate: Item {
@@ -273,7 +200,6 @@ Item {
                     Rectangle {
                         id: iconBg
 
-                        // Größerer Icon-Hintergrund
                         width: 88
                         height: 88
                         radius: 18
@@ -287,7 +213,6 @@ Item {
                             id: appIcon
 
                             anchors.centerIn: parent
-                            // Größeres Icon
                             width: 60
                             height: 60
                             source: modelData.icon ? "image://icon/" + modelData.icon : ""
@@ -348,7 +273,6 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
                     onPositionChanged: (mouse) => {
                         const p = mArea.mapToItem(null, mouse.x, mouse.y);
                         if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)

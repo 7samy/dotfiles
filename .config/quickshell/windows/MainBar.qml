@@ -42,7 +42,7 @@ PanelWindow {
             antialiasing: true
             layer.enabled: true
             layer.smooth: true
-            layer.samples: 16
+            layer.samples: 4
 
             ShapePath {
                 id: barShape
@@ -212,11 +212,9 @@ PanelWindow {
 
             Behavior on height {
                 NumberAnimation {
-                    // 1. Die Dauer aus dem Singleton abrufen
-                    duration: Theme.anim.durations.slow
-                    // 2. Die Motion-Kurve aus dem Singleton anwenden (optional, aber empfohlen)
+                    duration: Appearance.anim.durations.slow
                     easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Theme.anim.curves.standard
+                    easing.bezierCurve: Appearance.anim.curves.standard
                 }
 
             }
@@ -225,11 +223,9 @@ PanelWindow {
 
         Behavior on opacity {
             NumberAnimation {
-                // Nutze die Dauer aus deinem Singleton (z. B. normal oder slow)
-                duration: Theme.anim.durations.slow
-                // Füge die Motion-Kurve hinzu für einen weicheren Fade-Effekt
+                duration: Appearance.anim.durations.slow
                 easing.type: Easing.BezierSpline
-                easing.bezierCurve: Theme.anim.curves.standard
+                easing.bezierCurve: Appearance.anim.curves.standard
             }
 
         }

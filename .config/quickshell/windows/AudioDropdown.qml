@@ -110,7 +110,7 @@ PanelWindow {
                     anchors.fill: parent
                     visible: AudioState.hasPlayer
                     layer.enabled: true
-                    layer.samples: 8
+                    layer.samples: 4
                     layer.smooth: true
 
                     Repeater {
@@ -185,6 +185,9 @@ PanelWindow {
                         source: AudioState.artUrl
                         fillMode: Image.PreserveAspectCrop
                         visible: false
+                        // Cover auf 200x200 runterskalieren statt in
+                        // Originalgroesse (oft 1000x1000) im RAM halten.
+                        sourceSize: Qt.size(200, 200)
                     }
 
                     Rectangle {
@@ -216,6 +219,8 @@ PanelWindow {
                         visible: AudioState.showWebsiteIcon && AudioState.websiteIconSource !== ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
+                        // Webseiten-Icon ist nur 60x60 -> 96x96 reicht mit Puffer.
+                        sourceSize: Qt.size(96, 96)
                     }
 
                     Text {

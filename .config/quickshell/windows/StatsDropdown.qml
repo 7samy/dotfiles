@@ -307,7 +307,7 @@ PanelWindow {
                     antialiasing: true
                     smooth: true
                     layer.enabled: true
-                    layer.samples: 8
+                    layer.samples: 4
 
                     ShapePath {
                         strokeColor: Qt.rgba(1, 1, 1, 0.1)

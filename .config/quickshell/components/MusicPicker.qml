@@ -7,28 +7,18 @@ import Quickshell.Io
 Item {
     id: root
 
-    property var allSongs: []
+    // Song-Liste und Cover-Cache kommen aus dem Singleton.
+    property var allSongs: MusicPickerState.allSongs
     property var filteredSongs: allSongs.filter((song) => {
         return song.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
-    // Songpfad -> lokaler Cover-Dateipfad. Delegates binden sich deklarativ
-    // hieran, damit Recycling korrekt funktioniert.
-    property var coverCache: ({
-    })
-    property var coverQueue: []
-    property bool coverBusy: false
-    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
-    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
-    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
-    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
+    property var coverCache: MusicPickerState.coverCache
     property real lastMouseX: -1
     property real lastMouseY: -1
-    readonly property string musicDir: "/home/azu/Music/"
-    // Raster: 5 Spalten, etwas größere Zellen
+    readonly property string musicDir: MusicPickerState.musicDir
     readonly property real cellW: 210
     readonly property real cellH: 190
     readonly property int gridColumns: 5
-    // Box und Cover (Cover sitzt zentriert in der Box)
     readonly property real boxSize: 108
     readonly property real boxRadius: 22
     readonly property real coverSize: 84
@@ -36,28 +26,6 @@ Item {
 
     function focusSearch() {
         searchInput.forceActiveFocus();
-    }
-
-    function loadSongs() {
-        try {
-            songsProcess.running = true;
-        } catch (e) {
-            console.error("Error loading songs:", e);
-        }
-    }
-
-    function parseSongs() {
-        try {
-            const lines = songsOutput.text.split('\n').filter((l) => {
-                return l.trim();
-            });
-            allSongs = lines.sort((a, b) => {
-                return a.localeCompare(b);
-            });
-            console.log("Gefundene Songs:", allSongs.length);
-        } catch (e) {
-            console.error("Error parsing songs:", e);
-        }
     }
 
     function playSong(songPath) {
@@ -74,39 +42,15 @@ Item {
         MusicPickerState.close();
     }
 
-    // ==== Cover-Queue: immer nur EIN ffmpeg-Aufruf gleichzeitig ====
-    function requestCover(songPath) {
-        if (!songPath || root.coverCache[songPath] || root.coverQueue.includes(songPath))
-            return ;
-
-        root.coverQueue.push(songPath);
-        processCoverQueue();
-    }
-
-    function processCoverQueue() {
-        if (root.coverBusy || root.coverQueue.length === 0)
-            return ;
-
-        root.coverBusy = true;
-        const path = root.coverQueue.shift();
-        const outFile = "/tmp/qs_cover_" + Qt.md5(path) + ".jpg";
-        coverProcess.songPath = path;
-        coverProcess.outFile = outFile;
-        coverProcess.command = ["bash", "-c", 'ffmpeg -i "$1" -an -vcodec copy "$2" -y 2>/dev/null && echo "$2"', "_", root.musicDir + path, outFile];
-        coverProcess.running = true;
-    }
-
-    // Songname ohne Pfad und ohne Dateiendung - für die Anzeige unter dem Cover
     function displayName(songPath) {
-        if (!songPath)
-            return "";
-
-        const base = songPath.split("/").pop();
-        return base.replace(/\.[^.]+$/, "");
+        return MusicPickerState.displayName(songPath);
     }
 
-    Component.onCompleted: loadSongs()
-    // Grid-Auswahl bei neuer Suche immer auf den ersten Treffer zurücksetzen (wie im App Launcher)
+    Component.onCompleted: {
+        // Sicherstellen, dass die Song-Liste geladen wird,
+        // falls der Picker als erstes geoeffnet wird.
+        MusicPickerState.loadSongs();
+    }
     onFilteredSongsChanged: grid.currentIndex = 0
     Keys.onEscapePressed: MusicPickerState.close()
     Keys.onReturnPressed: {
@@ -116,46 +60,7 @@ Item {
     }
 
     Process {
-        id: songsProcess
-
-        command: ["mpc", "listall"]
-
-        stdout: StdioCollector {
-            id: songsOutput
-
-            onStreamFinished: parseSongs()
-        }
-
-    }
-
-    Process {
         id: addAllAndPlay
-    }
-
-    // Einzelner, sequenziell abgearbeiteter Cover-Extraktionsprozess.
-    Process {
-        id: coverProcess
-
-        property string songPath: ""
-        property string outFile: ""
-
-        stdout: StdioCollector {
-            id: coverOutput
-
-            onStreamFinished: {
-                const result = coverOutput.text.trim();
-                const finishedPath = coverProcess.songPath;
-                root.coverBusy = false;
-                if (result) {
-                    const updated = Object.assign({
-                    }, root.coverCache);
-                    updated[finishedPath] = result;
-                    root.coverCache = updated;
-                }
-                processCoverQueue();
-            }
-        }
-
     }
 
     // ==== Suchleiste - 1:1 wie im App Launcher ====
@@ -187,7 +92,7 @@ Item {
 
             anchors.fill: parent
             anchors.leftMargin: 54
-            anchors.rightMargin: 140 // Platz für den Switcher rechts
+            anchors.rightMargin: 140
             verticalAlignment: Text.AlignVCenter
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 16
@@ -196,7 +101,6 @@ Item {
             onTextChanged: PickerManager.searchText = text
             Component.onCompleted: forceActiveFocus()
             Keys.onPressed: (event) => {
-                // Tab / Shift+Tab: zwischen den Pickern wechseln
                 if (event.key === Qt.Key_Tab) {
                     if (event.modifiers & Qt.ShiftModifier)
                         PickerManager.cycleBackward();
@@ -230,14 +134,13 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 54
             anchors.verticalCenter: parent.verticalCenter
-            text: "Search" // bei jedem Picker ggf. anpassen
+            text: "Search"
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
             visible: searchInput.text === ""
         }
 
-        // Switcher rechts in der Suchleiste
         PickerSwitcher {
             id: pickerSwitcher
 
@@ -256,7 +159,7 @@ Item {
 
     }
 
-    // ==== Song-Grid - 1:1 wie der App Launcher ====
+    // ==== Song-Grid ====
     Item {
         id: gridArea
 
@@ -266,6 +169,16 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
         anchors.horizontalCenter: parent.horizontalCenter
+
+        // Ladeanzeige, falls die Song-Liste noch vom mpc-Scan kommt
+        Text {
+            anchors.centerIn: parent
+            text: "Lade Songs…"
+            color: WalColors.withAlpha(WalColors.color7, 0.45)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 14
+            visible: !MusicPickerState.songsLoaded && grid.count === 0
+        }
 
         GridView {
             id: grid
@@ -282,20 +195,21 @@ Item {
                 text: "Keine Songs gefunden"
                 color: WalColors.withAlpha(WalColors.color7, 0.4)
                 font.family: "JetBrainsMono Nerd Font"
-                visible: grid.count === 0
+                visible: grid.count === 0 && MusicPickerState.songsLoaded
             }
 
             delegate: Item {
                 readonly property bool isCurrent: GridView.isCurrentItem
                 readonly property string songPath: modelData
+                // Cover-Cache kommt aus dem State – Pfad bleibt beim
+                // Schliessen erhalten, kein Re-Extrahieren noetig.
                 readonly property string coverPath: root.coverCache[songPath] ? ("file://" + root.coverCache[songPath]) : ""
 
                 width: grid.cellWidth
                 height: grid.cellHeight
-                // Cover asynchron anfordern (Queue-getrieben)
                 Component.onCompleted: {
                     if (songPath)
-                        root.requestCover(songPath);
+                        MusicPickerState.requestCover(songPath);
 
                 }
 
@@ -303,7 +217,6 @@ Item {
                     anchors.centerIn: parent
                     spacing: 10
 
-                    // Box im Stil des App Launchers
                     Rectangle {
                         id: iconBg
 
@@ -316,7 +229,6 @@ Item {
                         border.color: WalColors.withAlpha(WalColors.color4, 0.6)
                         scale: isCurrent ? 1.08 : 1
 
-                        // Cover wird als Quelle fuer die Rundung genutzt
                         Image {
                             id: coverImage
 
@@ -341,7 +253,6 @@ Item {
                             visible: false
                         }
 
-                        // Abgerundetes Cover in der Box
                         OpacityMask {
                             anchors.centerIn: parent
                             width: root.coverSize
@@ -399,7 +310,6 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
                     onPositionChanged: (mouse) => {
                         const p = mArea.mapToItem(null, mouse.x, mouse.y);
                         if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)

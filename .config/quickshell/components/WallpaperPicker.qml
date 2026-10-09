@@ -8,17 +8,14 @@ import Quickshell.Io
 Item {
     id: root
 
-    property var allWallpapers: []
+    // Wandert aus dem State, nicht mehr aus eigenem Process
+    property var allWallpapers: WallpaperPickerState.allWallpapers
     property var filteredWallpapers: allWallpapers.filter((w) => {
         return w.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
     })
-    // Letzte echte Mausposition (Szene-Koordinaten). Verhindert, dass ein
-    // Scrollen per Pfeiltasten (Items wandern/skalieren unter dem stehenden
-    // Cursor) die Auswahl an die Maus zurueckgibt. Kleine Abweichungen
-    // (< 3px, z.B. Rundung bei Skalierung) zaehlen nicht als Mausbewegung.
     property real lastMouseX: -1
     property real lastMouseY: -1
-    readonly property string wallpaperDir: "/home/azu/Pictures/Wallpaper/"
+    readonly property string wallpaperDir: WallpaperPickerState.wallpaperDir
     readonly property real cellW: 630
     readonly property real cellH: 350
     readonly property int visibleCols: 2
@@ -26,23 +23,6 @@ Item {
 
     function focusSearch() {
         searchInput.forceActiveFocus();
-    }
-
-    function loadWallpapers() {
-        listProcess.running = true;
-    }
-
-    function parseWallpapers() {
-        const lines = listOutput.text.split('\n').filter((l) => {
-            return l.trim();
-        });
-        allWallpapers = lines.map((name) => {
-            return {
-                "name": name,
-                "url": "file://" + root.wallpaperDir + name
-            };
-        });
-        console.log("Gefundene Wallpaper:", allWallpapers.length);
     }
 
     function setWallpaper(url) {
@@ -54,25 +34,16 @@ Item {
         PickerManager.close();
     }
 
-    Component.onCompleted: loadWallpapers()
+    Component.onCompleted: {
+        // Sicherstellen, dass die Liste geladen ist (falls der Picker
+        // als erstes geoeffnet wird und der Singleton noch nichts hat)
+        WallpaperPickerState.loadWallpapers();
+    }
     onFilteredWallpapersChanged: grid.currentIndex = 0
     Keys.onEscapePressed: PickerManager.close()
     Keys.onReturnPressed: {
         if (root.filteredWallpapers.length > 0)
             root.setWallpaper(root.filteredWallpapers[grid.currentIndex].url);
-
-    }
-
-    Process {
-        id: listProcess
-
-        command: ["bash", "-c", "find /home/azu/Pictures/Wallpaper -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \\) -printf '%f\\n' | sort"]
-
-        stdout: StdioCollector {
-            id: listOutput
-
-            onStreamFinished: parseWallpapers()
-        }
 
     }
 
@@ -109,7 +80,7 @@ Item {
 
             anchors.fill: parent
             anchors.leftMargin: 54
-            anchors.rightMargin: 140 // Platz für den Switcher rechts
+            anchors.rightMargin: 140
             verticalAlignment: Text.AlignVCenter
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 16
@@ -118,7 +89,6 @@ Item {
             onTextChanged: PickerManager.searchText = text
             Component.onCompleted: forceActiveFocus()
             Keys.onPressed: (event) => {
-                // Tab / Shift+Tab: zwischen den Pickern wechseln
                 if (event.key === Qt.Key_Tab) {
                     if (event.modifiers & Qt.ShiftModifier)
                         PickerManager.cycleBackward();
@@ -152,14 +122,13 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 54
             anchors.verticalCenter: parent.verticalCenter
-            text: "Search" // bei jedem Picker ggf. anpassen
+            text: "Search"
             color: WalColors.withAlpha(WalColors.color7, 0.35)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
             visible: searchInput.text === ""
         }
 
-        // Switcher rechts in der Suchleiste
         PickerSwitcher {
             id: pickerSwitcher
 
@@ -188,6 +157,15 @@ Item {
         anchors.topMargin: 40
         anchors.horizontalCenter: parent.horizontalCenter
 
+        Text {
+            anchors.centerIn: parent
+            text: "Lade Wallpaper…"
+            color: WalColors.withAlpha(WalColors.color7, 0.45)
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 14
+            visible: !WallpaperPickerState.wallpapersLoaded && grid.count === 0
+        }
+
         GridView {
             id: grid
 
@@ -199,14 +177,14 @@ Item {
             currentIndex: 0
             clip: true
             focus: true
-            cacheBuffer: 800
+            cacheBuffer: 200
 
             Text {
                 anchors.centerIn: parent
                 text: "Keine Wallpaper gefunden"
                 color: WalColors.withAlpha(WalColors.color7, 0.4)
                 font.family: "JetBrainsMono Nerd Font"
-                visible: grid.count === 0
+                visible: grid.count === 0 && WallpaperPickerState.wallpapersLoaded
             }
 
             delegate: Item {
@@ -265,7 +243,6 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    // Nur bei tatsaechlicher Mausbewegung die Auswahl uebernehmen
                     onPositionChanged: (mouse) => {
                         const p = imageMouseArea.mapToItem(null, mouse.x, mouse.y);
                         if (Math.abs(p.x - root.lastMouseX) < 3 && Math.abs(p.y - root.lastMouseY) < 3)
