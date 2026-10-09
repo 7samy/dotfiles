@@ -13,25 +13,22 @@ PanelWindow {
     readonly property real edgePadding: 8
     readonly property real coverSize: 120
     // ---- Visualizer (cava) ----
-    // cava liefert cavaBars Werte; sie werden links/rechts gespiegelt,
-    // dadurch entstehen barCount = 2 * cavaBars Balken rund ums Cover.
-    readonly property int cavaBars: 25
+    readonly property int cavaBars: 20
     readonly property int barCount: cavaBars * 2
-    readonly property real barWidth: 3
-    readonly property real barGap: 3 // Abstand zwischen Cover und Balken
-    readonly property real barMinLen: 3 // Balkenlaenge bei Stille
-    readonly property real barMaxLen: 25 // Balkenlaenge bei voller Lautstaerke
-    // Empfindlichkeit: < 1 = empfindlicher (kleine Pegel werden angehoben),
-    // 1.0 = linear, 0.5 = Wurzel. Zum Justieren hier aendern.
-    readonly property real cavaGamma: 0.5
-    // Noise-Floor: Werte unterhalb dieses Pegels werden als 0 behandelt.
-    // cava liefert bei Stille oft 2-5 statt 0.
-    readonly property real cavaNoiseFloor: 0.03
-    // Aktuelle Pegel 0..1 (Index 0 = tiefste Frequenz)
+    readonly property real barWidth: 4
+    readonly property real barGap: 3
+    readonly property real barMinLen: 5
+    readonly property real barMaxLen: 25
+    readonly property real cavaGamma: 0.45
+    readonly property real cavaNoiseFloor: 0.05
     property var cavaValues: new Array(cavaBars).fill(0)
+    // Volle Zielhöhe – wird für Container und Panel-Höhe gebraucht.
+    readonly property real fullHeight: content.implicitHeight + 24
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: content.implicitHeight + 24
+    // Panel folgt der Container-Höhe. Bei geschlossenem Menü -> 0 px hoch,
+    // dadurch blockiert es keinen Hover für andere Dropdowns.
+    implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -49,12 +46,9 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: AudioState.dropdownOpen ? dropdown.implicitHeight : 0
+        height: AudioState.dropdownOpen ? dropdown.fullHeight : 0
         clip: true
 
-        // cava laeuft nur, solange das Menue offen ist und Musik spielt.
-        // Die Config wird in eine Datei geschrieben und cava per exec gestartet,
-        // damit beim Stoppen wirklich cava (und kein Shell-Wrapper) beendet wird.
         Process {
             id: cavaProcess
 
@@ -67,7 +61,6 @@ PanelWindow {
             }
 
             stdout: SplitParser {
-                // Eine Zeile pro Frame: "12;45;7;...;"
                 onRead: (line) => {
                     const parts = line.split(";");
                     const values = [];
@@ -88,7 +81,7 @@ PanelWindow {
             anchors.top: parent.top
             cornerRadius: dropdown.cornerRadius
             menuWidth: dropdown.menuWidth
-            menuHeight: dropdown.implicitHeight
+            menuHeight: dropdown.fullHeight
         }
 
         Column {
@@ -111,7 +104,6 @@ PanelWindow {
                 height: outerSize
                 anchors.horizontalCenter: parent.horizontalCenter
 
-                // Kreisfoermiger Visualizer: Balken starten direkt am Coverrand
                 Item {
                     id: visualizerLayer
 
@@ -125,12 +117,10 @@ PanelWindow {
                         model: dropdown.barCount
 
                         delegate: Item {
-                            // Roh-Wert von cava, auf 0..1 begrenzt
                             readonly property real rawLevel: {
                                 const v = dropdown.cavaValues[index < dropdown.cavaBars ? index : dropdown.barCount - 1 - index] ?? 0;
                                 return Math.max(0, Math.min(1, v));
                             }
-                            // Noise-Floor wegschneiden und Rest auf 0..1 neu skalieren
                             readonly property real cleanedLevel: {
                                 const nf = dropdown.cavaNoiseFloor;
                                 if (rawLevel <= nf)
@@ -138,18 +128,15 @@ PanelWindow {
 
                                 return Math.min(1, (rawLevel - nf) / (1 - nf));
                             }
-                            // Gamma-Korrektur: < 1 = empfindlicher
                             readonly property real level: Math.pow(cleanedLevel, dropdown.cavaGamma)
 
                             x: coverArea.outerSize / 2
                             y: coverArea.outerSize / 2
                             width: 0
                             height: 0
-                            // Tiefe Toene unten, hohe oben
                             rotation: 180 + (index + 0.5) * 360 / dropdown.barCount
 
                             Rectangle {
-                                // unterer Rand haengt fest am Cover, nur die Laenge aendert sich
                                 anchors.bottom: parent.top
                                 anchors.bottomMargin: coverSize / 2 + dropdown.barGap
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -363,20 +350,18 @@ PanelWindow {
 
             }
 
-            // NEU: Lautstärke-Slider
             Row {
                 width: menuWidth - 70
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 4
                 bottomPadding: 8
-                visible: AudioState.hasPlayer // Nur anzeigen, wenn etwas läuft
+                visible: AudioState.hasPlayer
 
                 Item {
                     width: parent.width
                     height: 15
                     anchors.verticalCenter: parent.verticalCenter
 
-                    // Hintergrund-Linie
                     Rectangle {
                         id: volTrack
 
@@ -386,7 +371,6 @@ PanelWindow {
                         color: Qt.rgba(1, 1, 1, 0.12)
                         anchors.verticalCenter: parent.verticalCenter
 
-                        // Gefüllte Linie (Fortschritt)
                         Rectangle {
                             width: Math.max(0, Math.min(AudioState.volume, 1)) * parent.width
                             height: parent.height
@@ -396,7 +380,6 @@ PanelWindow {
 
                     }
 
-                    // Handle/Punkt für den Slider
                     Rectangle {
                         width: 12
                         height: 12
@@ -405,7 +388,6 @@ PanelWindow {
                         border.color: WalColors.color4
                         border.width: 2
                         anchors.verticalCenter: parent.verticalCenter
-                        // Position basierend auf dem Volume berechnen
                         x: Math.max(0, Math.min(AudioState.volume, 1)) * volTrack.width - width / 2
                         scale: volMouse.pressed ? 1.3 : (volMouse.containsMouse ? 1.1 : 1)
 
@@ -427,7 +409,7 @@ PanelWindow {
                         }
 
                         anchors.fill: parent
-                        anchors.margins: -6 // Etwas mehr Klickfläche
+                        anchors.margins: -6
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onPositionChanged: (mouse) => {

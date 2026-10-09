@@ -69,13 +69,13 @@ Rectangle {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onEntered: {
-            StatsState.stopHideTimer();
             StatsState.buttonHovered = true;
+            StatsState.updateHoverTimer();
             StatsState.dropdownOpen = true;
         }
         onExited: {
             StatsState.buttonHovered = false;
-            StatsState.startHideTimer();
+            StatsState.updateHoverTimer();
         }
     }
 

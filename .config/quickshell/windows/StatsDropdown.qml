@@ -8,13 +8,13 @@ PanelWindow {
 
     required property var screen
     readonly property real cornerRadius: 20
-    readonly property real menuWidth: 260
+    readonly property real menuWidth: 280
     readonly property real edgePadding: 8
-    readonly property real ringSize: 150
+    readonly property real ringSize: 180
     readonly property real ringThickness: 8
     property string activeMetric: "cpu"
-    readonly property bool showPercent: true // bleibt bei allen aktiv
-    // ---------- Abgeleitete Werte ----------
+    // Volle Zielhöhe – wird für Container und Panel-Höhe gebraucht.
+    readonly property real fullHeight: content.implicitHeight + 24
     readonly property int activePercent: usagePercent(activeMetric)
     readonly property real ringProgress: activePercent / 100
     readonly property color ringColor: {
@@ -28,7 +28,6 @@ PanelWindow {
         return WalColors.color4;
     }
 
-    // ---------- Parsing-Helfer ----------
     function numFrom(s) {
         if (s === undefined || s === null)
             return 0;
@@ -37,41 +36,69 @@ PanelWindow {
         return m ? parseFloat(m[1]) : 0;
     }
 
-    function ratioFrom(s) {
-        if (s === undefined || s === null)
-            return 0;
-
-        const m = String(s).match(/([\d.]+)\s*\/\s*([\d.]+)/);
-        if (!m)
-            return 0;
-
-        const a = parseFloat(m[1]);
-        const b = parseFloat(m[2]);
-        if (!b)
-            return 0;
-
-        return Math.max(0, Math.min(1, a / b));
+    function fmtSize(gb, unit) {
+        let num;
+        let suffix;
+        if (unit === "TB") {
+            num = (gb / 1024).toFixed(2);
+            suffix = "TB";
+        } else {
+            num = gb.toFixed(1);
+            suffix = "GB";
+        }
+        num = num.replace(/\.?0+$/, "");
+        return num + suffix;
     }
 
-    // Wandelt MB in GB um UND entfernt eine eventuell vorhandene
-    // Prozentangabe aus dem String. Funktioniert fuer:
-    //   "5200 MB"                        -> "5.1 GB"
-    //   "5200 / 15600 MB"                -> "5.1 / 15.2 GB"
-    //   "5200 MB / 15600 MB (34%)"       -> "5.1 GB / 15.2 GB"
-    function cleanRamString(s) {
+    function parseMemory(s, unit) {
+        unit = unit || "GB";
+        const empty = {
+            "text": "",
+            "used": 0,
+            "total": 0,
+            "ratio": 0
+        };
         if (s === undefined || s === null)
-            return "";
+            return empty;
 
-        let out = String(s);
-        // Prozentangabe in Klammern oder alleinstehend entfernen
-        out = out.replace(/\s*[\(\[]?\s*\d+(?:\.\d+)?\s*%\s*[\)\]]?/g, "");
-        // MB -> GB
-        out = out.replace(/(\d+(?:\.\d+)?)\s*MB/gi, function(_, num) {
-            return (parseFloat(num) / 1024).toFixed(1) + " GB";
-        });
-        // Mehrfache Leerzeichen aufraeumen
-        out = out.replace(/\s+/g, " ").trim();
-        return out;
+        let str = String(s).trim();
+        str = str.replace(/[\(\[]?\s*\d+(?:\.\d+)?\s*%\s*[\)\]]?/g, " ").trim();
+        const values = [];
+        const re = /(\d+(?:\.\d+)?)\s*(GB|MB|GIB|MIB|TB|TIB|G|M|T)?/gi;
+        let m;
+        while ((m = re.exec(str)) !== null) {
+            const val = parseFloat(m[1]);
+            const u = (m[2] || "GB").toUpperCase();
+            let gb = val;
+            if (u.indexOf("M") === 0)
+                gb = val / 1024;
+            else if (u.indexOf("T") === 0)
+                gb = val * 1024;
+            values.push(gb);
+        }
+        if (values.length >= 2) {
+            const used = values[0];
+            const total = values[1];
+            return {
+                "text": fmtSize(used, unit) + " / " + fmtSize(total, unit),
+                "used": used,
+                "total": total,
+                "ratio": total > 0 ? Math.max(0, Math.min(1, used / total)) : 0
+            };
+        } else if (values.length === 1) {
+            return {
+                "text": fmtSize(values[0], unit),
+                "used": values[0],
+                "total": 0,
+                "ratio": 0
+            };
+        }
+        return {
+            "text": str,
+            "used": 0,
+            "total": 0,
+            "ratio": 0
+        };
     }
 
     function usagePercent(metric) {
@@ -81,9 +108,9 @@ PanelWindow {
         case "gpu":
             return Math.max(0, Math.min(100, numFrom(StatsProvider.gpuUsage)));
         case "ram":
-            return Math.round(ratioFrom(StatsProvider.ramText) * 100);
+            return Math.round(parseMemory(StatsProvider.ramText, "GB").ratio * 100);
         case "ssd":
-            return Math.round(ratioFrom(StatsProvider.diskText) * 100);
+            return Math.round(parseMemory(StatsProvider.diskText, "TB").ratio * 100);
         }
         return 0;
     }
@@ -98,7 +125,6 @@ PanelWindow {
         return 0;
     }
 
-    // Sekundaertext: Temp bei CPU/GPU, Speicherwert (in GB) bei RAM/SSD
     function secondaryString(metric) {
         switch (metric) {
         case "cpu":
@@ -106,9 +132,9 @@ PanelWindow {
         case "gpu":
             return StatsProvider.gpuTemp;
         case "ram":
-            return cleanRamString(StatsProvider.ramText);
+            return parseMemory(StatsProvider.ramText, "GB").text;
         case "ssd":
-            return cleanRamString(StatsProvider.diskText);
+            return parseMemory(StatsProvider.diskText, "TB").text;
         }
         return "";
     }
@@ -128,7 +154,7 @@ PanelWindow {
     }
 
     function secondaryColor(metric) {
-        if (showPercent) {
+        if (metric === "cpu" || metric === "gpu") {
             const t = tempCelsius(metric);
             if (t >= 80)
                 return WalColors.color1;
@@ -141,8 +167,17 @@ PanelWindow {
         return WalColors.withAlpha(WalColors.color7, 0.75);
     }
 
+    function secondaryFontSize(metric) {
+        if (metric === "ram" || metric === "ssd")
+            return 10;
+
+        return 11;
+    }
+
     implicitWidth: menuWidth + 2 * cornerRadius
-    implicitHeight: content.implicitHeight + 24
+    // Panel folgt der Container-Höhe. Bei geschlossenem Menü -> 0 px hoch,
+    // dadurch blockiert es keinen Hover für andere Dropdowns.
+    implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
@@ -160,14 +195,14 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: StatsState.dropdownOpen ? dropdown.implicitHeight : 0
+        height: StatsState.dropdownOpen ? dropdown.fullHeight : 0
         clip: true
 
         RoundedDropShape {
             anchors.top: parent.top
             cornerRadius: dropdown.cornerRadius
             menuWidth: dropdown.menuWidth
-            menuHeight: dropdown.implicitHeight
+            menuHeight: dropdown.fullHeight
         }
 
         Column {
@@ -182,7 +217,6 @@ PanelWindow {
                 horizontalCenter: parent.horizontalCenter
             }
 
-            // ---------- Tab-Switcher ----------
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 6
@@ -252,7 +286,6 @@ PanelWindow {
 
             }
 
-            // ---------- Ring mit Center-Content ----------
             Item {
                 id: ringArea
 
@@ -315,7 +348,7 @@ PanelWindow {
                 Column {
                     anchors.centerIn: parent
                     spacing: 4
-                    width: dropdown.ringSize - 30
+                    width: dropdown.ringSize - 40
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -344,7 +377,7 @@ PanelWindow {
                         elide: Text.ElideRight
                         color: dropdown.secondaryColor(dropdown.activeMetric)
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 11
+                        font.pixelSize: dropdown.secondaryFontSize(dropdown.activeMetric)
                     }
 
                 }
@@ -354,7 +387,12 @@ PanelWindow {
         }
 
         HoverHandler {
-            onHoveredChanged: StatsState.dropdownOpen = hovered
+            id: dropdownHover
+
+            onHoveredChanged: {
+                StatsState.dropdownHovered = hovered;
+                StatsState.updateHoverTimer();
+            }
         }
 
         Behavior on height {
