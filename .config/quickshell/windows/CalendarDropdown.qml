@@ -1,33 +1,39 @@
 import "../components"
 import QtQuick
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 
 PanelWindow {
     id: calendar
 
+    // Oeffnen: Hoehen-Animation (Behavior on height), wie bei den anderen
+    // Dropdowns. Schliessen: Huelle bleibt an der Bar haengen und schrumpft
+    // von unten nach oben (Fenster behaelt seine Groesse), nur das
+    // Kalender-Raster blendet aus. Erst danach springt die Hoehe auf 0.
+    property bool expanded: false
+    property bool heightAnimOn: false
+    property real closeFactor: 1
     required property var screen
     // ── Bar-Geometrie (identisch zu MainBar.qml) ─────────────────
     readonly property real barContainerWidth: screen.width / 1.333
-    readonly property real barHeight: screen.width / 64
-    readonly property real barRightEdgeX: (screen.width + barContainerWidth) / 2
-    // ── Kalender-Geometrie ───────────────────────────────────────
-    readonly property real topRadius: 20
+    readonly property real barLeftX: (screen.width - barContainerWidth) / 2
+    // Ende der flachen Bar-Unterkante (dort beginnt in der MainBar die
+    // Rundung nach oben: PathLine x = screen.width / 1.361).
+    readonly property real barFlatEndX: barLeftX + screen.width / 1.361
+    // Abstand zwischen rechter Flare-Spitze des Menues und diesem Punkt.
+    readonly property real rightInset: 8
+    readonly property real panelRightX: barFlatEndX - rightInset
+    // ── Menue-Geometrie ──────────────────────────────────────────
     readonly property real cornerRadius: 20
-    readonly property real hugRadius: 20
-    readonly property real sidePadding: 14
-    readonly property real topPadding: 10
-    readonly property real bottomPadding: 16
-    // Linke Panel-Kante liegt topRadius links vom Bar-Ende – dort sitzt
-    // später die Hug-Kurve, die sich an die Bar-Unterkante schmiegt.
-    readonly property real panelLeftX: barRightEdgeX - topRadius
-    // Volle (aufgezogene) Panelgröße – wächst mit der Bildschirmbreite
-    readonly property real fullWidth: screen.width - panelLeftX
-    readonly property real contentWidth: fullWidth - topRadius - 2 * sidePadding
-    readonly property real fullHeight: contentColumn.implicitHeight + topPadding + bottomPadding + hugRadius
-    // ── Animations-Zustand ───────────────────────────────────────
-    property real revealProgress: CalendarState.dropdownOpen ? 1 : 0
+    readonly property real menuWidth: 284
+    readonly property real edgePadding: 8
+    readonly property real sidePadding: 18
+    readonly property real topPadding: 14
+    readonly property real contentWidth: menuWidth - 2 * sidePadding
+    readonly property real cellWidth: contentWidth / 7
+    readonly property real cellSize: 32
+    // Volle Zielhoehe - Bezugsgroesse fuer Container und Panel-Hoehe.
+    readonly property real fullHeight: contentColumn.implicitHeight + cornerRadius
     // ── Kalender-Daten ───────────────────────────────────────────
     readonly property var monthNames: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     readonly property var weekdayLabels: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -88,284 +94,313 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell:calendar"
     WlrLayershell.layer: WlrLayer.Top
     exclusiveZone: -1
-    // ★ Das Fenster selbst wächst mit revealProgress.
-    //   Dadurch entsteht der "Kaugummi"-Effekt: die linke obere Ecke
-    //   bleibt fest am Griff, alles andere wird nach rechts/unten gezogen.
-    implicitWidth: fullWidth * revealProgress
-    implicitHeight: fullHeight * revealProgress
+    implicitWidth: menuWidth + 2 * cornerRadius
+    // Panel folgt der Container-Hoehe. Bei geschlossenem Menue -> 0 px hoch,
+    // dadurch blockiert es keinen Hover fuer andere Dropdowns.
+    implicitHeight: container.height
     color: "transparent"
-    visible: revealProgress > 0.001
 
     anchors {
         top: true
         left: true
     }
 
+    // Das Menue haengt rechtsbuendig unter der Uhr: seine rechte Flare-Spitze
+    // endet kurz vor dem Ende der flachen Bar-Unterkante.
     margins {
-        top: barHeight
-        left: panelLeftX
+        top: 40
+        left: {
+            const desired = panelRightX - implicitWidth;
+            return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
+        }
     }
 
-    // ── Hover-Erkennung (über das gesamte Panel) ─────────────────
+    Connections {
+        function onDropdownOpenChanged() {
+            if (CalendarState.dropdownOpen) {
+                const fresh = !calendar.expanded;
+                closeAnim.stop();
+                calendar.heightAnimOn = true;
+                calendar.expanded = true;
+                if (fresh) {
+                    // frisch geoeffnet: auf aktuellen Monat/Uhrzeit zuruecksetzen
+                    calendar.displayDate = new Date();
+                    calendar.cells = calendar.buildCells(calendar.displayDate.getFullYear(), calendar.displayDate.getMonth());
+                    calendarClock.updateTime();
+                }
+                // Hover waehrend des Schliessens: wieder aufklappen + Raster einblenden
+                if (calendar.closeFactor !== 1 || gridArea.opacity !== 1)
+                    reopenAnim.restart();
+
+            } else if (calendar.expanded) {
+                reopenAnim.stop();
+                closeAnim.restart();
+            }
+        }
+
+        target: CalendarState
+    }
+
+    ParallelAnimation {
+        id: reopenAnim
+
+        NumberAnimation {
+            target: calendar
+            property: "closeFactor"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: gridArea
+            property: "opacity"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    SequentialAnimation {
+        id: closeAnim
+
+        ParallelAnimation {
+            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
+            NumberAnimation {
+                target: calendar
+                property: "closeFactor"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutCubic
+            }
+
+            // nur das Kalender-Raster blendet aus, der Rest des Menues bleibt
+            NumberAnimation {
+                target: gridArea
+                property: "opacity"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutQuad
+            }
+
+        }
+
+        ScriptAction {
+            script: {
+                calendar.heightAnimOn = false; // erst Animation aus ...
+                calendar.expanded = false; // ... dann Hoehe auf 0
+                calendar.closeFactor = 1;
+                gridArea.opacity = 1;
+            }
+        }
+
+    }
+
     Item {
-        id: hitArea
+        id: container
 
-        anchors.fill: parent
+        width: parent.width
+        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
+        // Schliessen sofort und der Inhalt wird verzerrt.
+        height: calendar.expanded ? calendar.fullHeight : 0
+        clip: true
 
-        HoverHandler {
-            onHoveredChanged: {
-                CalendarState.dropdownHovered = hovered;
-                CalendarState.updateHoverTimer();
-            }
-        }
-
-    }
-
-    // ── Hintergrundform (volle Größe, wird vom Fenster beschnitten) ──
-    Shape {
-        id: bgShape
-
-        width: calendar.fullWidth
-        height: calendar.fullHeight
-        smooth: true
-        antialiasing: true
-        layer.enabled: true
-        layer.smooth: true
-        layer.samples: 16
-
-        ShapePath {
-            fillColor: WalColors.withAlpha(WalColors.color0, 1)
-            strokeColor: "transparent"
-            strokeWidth: 0
-
-            // Start: obere rechte Ecke des Kalenders
-            PathMove {
-                x: bgShape.width
-                y: 0
-            }
-
-            // Oberkante nach links bis zum Beginn der Hug-Kurve
-            PathLine {
-                x: 0
-                y: 0
-            }
-
-            // ★ Konkave Hug-Kurve: schmiegt sich um die untere rechte
-            //   Bar-Ecke. Startet an der Oberkante (0,0), endet an der
-            //   linken Körperkante (topRadius, topRadius). Der Kontroll-
-            //   punkt sitzt auf der "virtuellen" Ecke (topRadius, 0) –
-            //   dadurch wölbt sich die Kurve zum Bar-Corner hin.
-            PathQuad {
-                x: calendar.topRadius
-                y: calendar.topRadius
-                controlX: calendar.topRadius
-                controlY: 0
-            }
-
-            // Linke Körperkante nach unten
-            PathLine {
-                x: calendar.topRadius
-                y: bgShape.height - calendar.hugRadius - calendar.cornerRadius
-            }
-
-            // Konvexe Abrundung unten links
-            PathQuad {
-                x: calendar.topRadius + calendar.cornerRadius
-                y: bgShape.height - calendar.hugRadius
-                controlX: calendar.topRadius
-                controlY: bgShape.height - calendar.hugRadius
-            }
-
-            // Unterkante nach rechts
-            PathLine {
-                x: bgShape.width - calendar.hugRadius
-                y: bgShape.height - calendar.hugRadius
-            }
-
-            // Konkave Anschmiegung unten rechts
-            PathQuad {
-                x: bgShape.width
-                y: bgShape.height
-                controlX: bgShape.width
-                controlY: bgShape.height - calendar.hugRadius
-            }
-
-            // Rechte Kante zurück nach oben
-            PathLine {
-                x: bgShape.width
-                y: 0
-            }
-
-        }
-
-    }
-
-    // ── Inhalt (feste Position, wird vom wachsenden Fenster aufgedeckt) ──
-    Column {
-        id: contentColumn
-
-        x: calendar.topRadius + calendar.sidePadding
-        y: calendar.topPadding
-        width: calendar.contentWidth
-        spacing: 10
-
-        // Uhrzeit
+        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt),
+        // beim Schliessen schrumpft sie samt Rundungen von unten.
         Item {
+            id: body
+
             width: parent.width
-            height: 30
+            height: calendar.fullHeight * calendar.closeFactor
+            clip: true
 
-            Text {
-                id: calendarClock
-
-                function updateTime() {
-                    calendarClock.text = Qt.formatDateTime(new Date(), "hh:mm:ss");
-                }
-
-                anchors.centerIn: parent
-                color: WalColors.color2
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 14
-                font.bold: true
-                Component.onCompleted: updateTime()
-
-                Timer {
-                    interval: 1000
-                    running: true
-                    repeat: true
-                    onTriggered: calendarClock.updateTime()
-                }
-
+            RoundedDropShape {
+                anchors.top: parent.top
+                cornerRadius: calendar.cornerRadius
+                menuWidth: calendar.menuWidth
+                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
+                menuHeight: Math.max(2 * calendar.cornerRadius, calendar.fullHeight * calendar.closeFactor)
             }
 
-        }
+            Column {
+                id: contentColumn
 
-        // Monats-Navigation
-        Row {
-            width: parent.width
-            anchors.horizontalCenter: parent.horizontalCenter
+                width: calendar.contentWidth
+                topPadding: calendar.topPadding
+                spacing: 10
 
-            Text {
-                id: prevBtn
-
-                anchors.verticalCenter: parent.verticalCenter
-                text: "󰅁"
-                color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 16
-
-                MouseArea {
-                    id: prevMouse
-
-                    anchors.fill: parent
-                    anchors.margins: -8
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: calendar.goToPrevMonth()
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
 
-            }
+                // Uhrzeit
+                Item {
+                    width: parent.width
+                    height: 30
 
-            Text {
-                width: parent.width - prevBtn.width - nextBtn.width - 16
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignHCenter
-                text: calendar.monthNames[calendar.viewMonth] + " " + calendar.viewYear
-                color: WalColors.color7
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 14
-                font.bold: true
-            }
+                    Text {
+                        id: calendarClock
 
-            Text {
-                id: nextBtn
+                        function updateTime() {
+                            calendarClock.text = Qt.formatDateTime(new Date(), "hh:mm:ss");
+                        }
 
-                anchors.verticalCenter: parent.verticalCenter
-                text: "󰅂"
-                color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 16
-
-                MouseArea {
-                    id: nextMouse
-
-                    anchors.fill: parent
-                    anchors.margins: -8
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: calendar.goToNextMonth()
-                }
-
-            }
-
-        }
-
-        // Kalender-Grid
-        Column {
-            width: parent.width
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 6
-
-            Grid {
-                width: parent.width
-                columns: 7
-
-                Repeater {
-                    model: calendar.weekdayLabels
-
-                    delegate: Text {
-                        width: parent.width / 7
-                        horizontalAlignment: Text.AlignHCenter
-                        text: modelData
-                        color: WalColors.withAlpha(WalColors.color7, 0.45)
+                        anchors.centerIn: parent
+                        color: WalColors.color2
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
+                        font.pixelSize: 14
                         font.bold: true
+                        Component.onCompleted: updateTime()
+
+                        // tickt nur, solange das Menue sichtbar ist
+                        Timer {
+                            interval: 1000
+                            running: calendar.expanded
+                            repeat: true
+                            onTriggered: calendarClock.updateTime()
+                        }
+
                     }
 
                 }
 
-            }
+                // Monats-Navigation
+                Item {
+                    width: parent.width
+                    height: 24
 
-            Grid {
-                id: dayGrid
+                    Text {
+                        id: prevBtn
 
-                width: parent.width
-                columns: 7
-                rowSpacing: 4
-
-                Repeater {
-                    model: calendar.cells
-
-                    delegate: Rectangle {
-                        id: dayCell
-
-                        readonly property var cell: modelData
-
-                        width: dayGrid.width / 7
-                        height: width
-                        radius: width / 2
-                        color: cell.isToday ? WalColors.color4 : (dayMouse.containsMouse && cell.inMonth ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: cell.day
-                            color: cell.isToday ? WalColors.color0 : (cell.inMonth ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.25))
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            font.bold: cell.isToday
-                        }
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰅁"
+                        color: prevMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
 
                         MouseArea {
-                            id: dayMouse
+                            id: prevMouse
 
                             anchors.fill: parent
+                            anchors.margins: -8
                             hoverEnabled: true
-                            enabled: cell.inMonth
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calendar.goToPrevMonth()
                         }
 
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 100
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: calendar.monthNames[calendar.viewMonth] + " " + calendar.viewYear
+                        color: WalColors.color7
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+
+                    Text {
+                        id: nextBtn
+
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰅂"
+                        color: nextMouse.containsMouse ? WalColors.color4 : WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
+
+                        MouseArea {
+                            id: nextMouse
+
+                            anchors.fill: parent
+                            anchors.margins: -8
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calendar.goToNextMonth()
+                        }
+
+                    }
+
+                }
+
+                // Kalender-Raster (blendet beim Schliessen aus)
+                Column {
+                    id: gridArea
+
+                    width: parent.width
+                    spacing: 6
+
+                    Grid {
+                        columns: 7
+
+                        Repeater {
+                            model: calendar.weekdayLabels
+
+                            delegate: Text {
+                                width: calendar.cellWidth
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData
+                                color: WalColors.withAlpha(WalColors.color7, 0.45)
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+
+                        }
+
+                    }
+
+                    Grid {
+                        columns: 7
+                        rowSpacing: 4
+
+                        Repeater {
+                            model: calendar.cells
+
+                            delegate: Item {
+                                id: dayCell
+
+                                readonly property var cell: modelData
+
+                                width: calendar.cellWidth
+                                height: calendar.cellSize
+
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: calendar.cellSize - 2
+                                    height: width
+                                    radius: width / 2
+                                    color: dayCell.cell.isToday ? WalColors.color4 : (dayMouse.containsMouse && dayCell.cell.inMonth ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent")
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: dayCell.cell.day
+                                        color: dayCell.cell.isToday ? WalColors.color0 : (dayCell.cell.inMonth ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.25))
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 12
+                                        font.bold: dayCell.cell.isToday
+                                    }
+
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 100
+                                        }
+
+                                    }
+
+                                }
+
+                                MouseArea {
+                                    id: dayMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: dayCell.cell.inMonth
+                                }
+
                             }
 
                         }
@@ -376,25 +411,24 @@ PanelWindow {
 
             }
 
-        }
-
-    }
-
-    Connections {
-        function onDropdownOpenChanged() {
-            if (CalendarState.dropdownOpen) {
-                calendar.displayDate = new Date();
-                calendar.cells = calendar.buildCells(calendar.displayDate.getFullYear(), calendar.displayDate.getMonth());
+            // Hover-Bereich folgt der sichtbaren (schrumpfenden) Huelle.
+            HoverHandler {
+                onHoveredChanged: {
+                    CalendarState.dropdownHovered = hovered;
+                    CalendarState.updateHoverTimer();
+                }
             }
+
         }
 
-        target: CalendarState
-    }
+        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
+        // Hoehe erst nach dem Schrumpfen ohne Animation auf 0.
+        Behavior on height {
+            enabled: calendar.heightAnimOn
 
-    Behavior on revealProgress {
-        NumberAnimation {
-            duration: 260
-            easing.type: Easing.OutCubic
+            Anim {
+            }
+
         }
 
     }

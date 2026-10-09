@@ -6,6 +6,13 @@ import Quickshell
 PanelWindow {
     id: dropdown
 
+    // Oeffnen: Hoehen-Animation wie bisher (Behavior on height).
+    // Schliessen: Huelle bleibt an der Bar haengen und schrumpft von unten
+    // nach oben (Fenster behaelt seine Groesse), nur der Ring blendet aus.
+    // Erst danach wird die Hoehe ohne Animation auf 0 gesetzt.
+    property bool expanded: false
+    property bool heightAnimOn: false
+    property real closeFactor: 1
     required property var screen
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 275
@@ -185,6 +192,81 @@ PanelWindow {
     anchors.top: true
     anchors.left: true
 
+    Connections {
+        function onDropdownOpenChanged() {
+            if (StatsState.dropdownOpen) {
+                closeAnim.stop();
+                dropdown.heightAnimOn = true;
+                dropdown.expanded = true;
+                // Hover waehrend des Schliessens: wieder aufklappen + Ring einblenden
+                if (dropdown.closeFactor !== 1 || ringArea.opacity !== 1)
+                    reopenAnim.restart();
+
+            } else if (dropdown.expanded) {
+                reopenAnim.stop();
+                closeAnim.restart();
+            }
+        }
+
+        target: StatsState
+    }
+
+    ParallelAnimation {
+        id: reopenAnim
+
+        NumberAnimation {
+            target: dropdown
+            property: "closeFactor"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: ringArea
+            property: "opacity"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    SequentialAnimation {
+        id: closeAnim
+
+        ParallelAnimation {
+            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
+            NumberAnimation {
+                target: dropdown
+                property: "closeFactor"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutCubic
+            }
+
+            // nur der Ring blendet aus, der Rest des Menues bleibt
+            NumberAnimation {
+                target: ringArea
+                property: "opacity"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutQuad
+            }
+
+        }
+
+        ScriptAction {
+            script: {
+                dropdown.heightAnimOn = false; // erst Animation aus ...
+                dropdown.expanded = false; // ... dann Hoehe auf 0
+                dropdown.closeFactor = 1;
+                ringArea.opacity = 1;
+            }
+        }
+
+    }
+
     margins {
         top: 40
         left: {
@@ -197,411 +279,241 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: StatsState.dropdownOpen ? dropdown.fullHeight : 0
+        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
+        // Schliessen sofort und der Inhalt wird verzerrt.
+        height: dropdown.expanded ? dropdown.fullHeight : 0
         clip: true
 
-        RoundedDropShape {
-            anchors.top: parent.top
-            cornerRadius: dropdown.cornerRadius
-            menuWidth: dropdown.menuWidth
-            menuHeight: dropdown.fullHeight
-        }
+        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt wie
+        // bisher), beim Schliessen schrumpft sie samt Rundungen von unten.
+        Item {
+            id: body
 
-        Column {
-            id: content
+            width: parent.width
+            height: dropdown.fullHeight * dropdown.closeFactor
+            clip: true
 
-            spacing: 16
-            topPadding: 18
-            bottomPadding: 20
-
-            anchors {
-                top: parent.top
-                horizontalCenter: parent.horizontalCenter
+            RoundedDropShape {
+                anchors.top: parent.top
+                cornerRadius: dropdown.cornerRadius
+                menuWidth: dropdown.menuWidth
+                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
+                menuHeight: Math.max(2 * dropdown.cornerRadius, dropdown.fullHeight * dropdown.closeFactor)
             }
 
-            // ---------- Tab-Switcher (minimalistisch) ----------
-            Item {
-                id: tabBar
+            Column {
+                id: content
 
-                readonly property var tabs: [{
-                    "key": "cpu",
-                    "label": "CPU"
-                }, {
-                    "key": "gpu",
-                    "label": "GPU"
-                }, {
-                    "key": "ram",
-                    "label": "RAM"
-                }, {
-                    "key": "ssd",
-                    "label": "SSD"
-                }]
-                readonly property int tabWidth: 44
-                readonly property int tabSpacing: 8
-                readonly property int activeIndex: {
-                    for (let i = 0; i < tabs.length; ++i) {
-                        if (tabs[i].key === dropdown.activeMetric)
-                            return i;
+                spacing: 16
+                topPadding: 18
+                bottomPadding: 20
 
-                    }
-                    return 0;
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
-                readonly property real slideTargetX: activeIndex * (tabWidth + tabSpacing) + (tabWidth / 2)
 
-                width: tabs.length * tabWidth + (tabs.length - 1) * tabSpacing
-                height: 32
-                anchors.horizontalCenter: parent.horizontalCenter
+                // ---------- Tab-Switcher (minimalistisch) ----------
+                Item {
+                    id: tabBar
 
-                Row {
-                    anchors.fill: parent
-                    spacing: tabBar.tabSpacing
+                    readonly property var tabs: [{
+                        "key": "cpu",
+                        "label": "CPU"
+                    }, {
+                        "key": "gpu",
+                        "label": "GPU"
+                    }, {
+                        "key": "ram",
+                        "label": "RAM"
+                    }, {
+                        "key": "ssd",
+                        "label": "SSD"
+                    }]
+                    readonly property int tabWidth: 44
+                    readonly property int tabSpacing: 8
+                    readonly property int activeIndex: {
+                        for (let i = 0; i < tabs.length; ++i) {
+                            if (tabs[i].key === dropdown.activeMetric)
+                                return i;
 
-                    Repeater {
-                        model: tabBar.tabs
+                        }
+                        return 0;
+                    }
+                    readonly property real slideTargetX: activeIndex * (tabWidth + tabSpacing) + (tabWidth / 2)
 
-                        delegate: Item {
-                            id: tabItem
+                    width: tabs.length * tabWidth + (tabs.length - 1) * tabSpacing
+                    height: 32
+                    anchors.horizontalCenter: parent.horizontalCenter
 
-                            readonly property bool active: dropdown.activeMetric === modelData.key
-                            readonly property bool hovered: tabMouse.containsMouse && !active
+                    Row {
+                        anchors.fill: parent
+                        spacing: tabBar.tabSpacing
 
-                            width: tabBar.tabWidth
-                            height: tabBar.height
+                        Repeater {
+                            model: tabBar.tabs
 
-                            Text {
-                                anchors.centerIn: parent
-                                anchors.verticalCenterOffset: -2
-                                text: modelData.label
-                                color: tabItem.active ? WalColors.color4 : (tabItem.hovered ? WalColors.withAlpha(WalColors.color7, 0.9) : WalColors.withAlpha(WalColors.color7, 0.45))
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
-                                font.bold: tabItem.active
+                            delegate: Item {
+                                id: tabItem
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: 150
+                                readonly property bool active: dropdown.activeMetric === modelData.key
+                                readonly property bool hovered: tabMouse.containsMouse && !active
+
+                                width: tabBar.tabWidth
+                                height: tabBar.height
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    anchors.verticalCenterOffset: -2
+                                    text: modelData.label
+                                    color: tabItem.active ? WalColors.color4 : (tabItem.hovered ? WalColors.withAlpha(WalColors.color7, 0.9) : WalColors.withAlpha(WalColors.color7, 0.45))
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    font.bold: tabItem.active
+
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 150
+                                        }
+
                                     }
 
                                 }
 
-                            }
+                                MouseArea {
+                                    id: tabMouse
 
-                            MouseArea {
-                                id: tabMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: dropdown.activeMetric = modelData.key
+                                }
 
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: dropdown.activeMetric = modelData.key
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                // ---------- 3-Dot-Trail unter dem aktiven Tab ----------
-                Item {
-                    id: trailGroup
-
-                    width: 1
-                    height: 1
-                    // Position relativ zur Mitte des aktiven Tabs
-                    x: tabBar.slideTargetX
-                    y: tabBar.height - 2
-
-                    // Hinterer Punkt (folgt langsamer)
-                    Rectangle {
-                        id: trailLeft
-
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 4
-                        height: 4
-                        radius: 2
-                        x: -14
-                        color: WalColors.color4
-                        opacity: 0.4
-
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-
-                            NumberAnimation {
-                                to: 0.2
-                                duration: 1200
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                to: 0.5
-                                duration: 1200
-                                easing.type: Easing.InOutSine
                             }
 
                         }
 
                     }
 
-                    // Vorderer Punkt
-                    Rectangle {
-                        id: trailRight
+                    // ---------- 3-Dot-Trail unter dem aktiven Tab ----------
+                    Item {
+                        id: trailGroup
 
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 4
-                        height: 4
-                        radius: 2
-                        x: 10
-                        color: WalColors.color4
-                        opacity: 0.4
+                        width: 1
+                        height: 1
+                        // Position relativ zur Mitte des aktiven Tabs
+                        x: tabBar.slideTargetX
+                        y: tabBar.height - 2
 
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
+                        // Hinterer Punkt (folgt langsamer)
+                        Rectangle {
+                            id: trailLeft
 
-                            NumberAnimation {
-                                to: 0.5
-                                duration: 1200
-                                easing.type: Easing.InOutSine
-                            }
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 4
+                            height: 4
+                            radius: 2
+                            x: -14
+                            color: WalColors.color4
+                            opacity: 0.4
 
-                            NumberAnimation {
-                                to: 0.2
-                                duration: 1200
-                                easing.type: Easing.InOutSine
-                            }
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
 
-                        }
+                                NumberAnimation {
+                                    to: 0.2
+                                    duration: 1200
+                                    easing.type: Easing.InOutSine
+                                }
 
-                    }
+                                NumberAnimation {
+                                    to: 0.5
+                                    duration: 1200
+                                    easing.type: Easing.InOutSine
+                                }
 
-                    // Mittlerer Haupt-Punkt (groesser, pulsiert)
-                    Rectangle {
-                        id: trailCenter
-
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: WalColors.color4
-
-                        SequentialAnimation on scale {
-                            loops: Animation.Infinite
-
-                            NumberAnimation {
-                                to: 1.3
-                                duration: 900
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                to: 1
-                                duration: 900
-                                easing.type: Easing.InOutSine
                             }
 
                         }
 
-                    }
+                        // Vorderer Punkt
+                        Rectangle {
+                            id: trailRight
 
-                    // Glow hinter dem mittleren Punkt
-                    Rectangle {
-                        anchors.centerIn: trailCenter
-                        width: 14
-                        height: 14
-                        radius: 7
-                        color: WalColors.color4
-                        opacity: 0.25
-                        layer.enabled: true
-                        layer.samples: 4
-                    }
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 4
+                            height: 4
+                            radius: 2
+                            x: 10
+                            color: WalColors.color4
+                            opacity: 0.4
 
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: 320
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.15
-                        }
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
 
-                    }
+                                NumberAnimation {
+                                    to: 0.5
+                                    duration: 1200
+                                    easing.type: Easing.InOutSine
+                                }
 
-                }
+                                NumberAnimation {
+                                    to: 0.2
+                                    duration: 1200
+                                    easing.type: Easing.InOutSine
+                                }
 
-            }
-
-            // ---------- Ring mit Instrumenten-Look ----------
-            Item {
-                id: ringArea
-
-                width: dropdown.ringSize
-                height: dropdown.ringSize
-                anchors.horizontalCenter: parent.horizontalCenter
-
-                // Sanfter Farb-Glow im Hintergrund (pulsierend)
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.width * 0.7
-                    height: width
-                    radius: width / 2
-                    color: dropdown.ringColor
-                    opacity: 0.06
-
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-
-                        NumberAnimation {
-                            to: 0.1
-                            duration: 2000
-                            easing.type: Easing.InOutSine
-                        }
-
-                        NumberAnimation {
-                            to: 0.04
-                            duration: 2000
-                            easing.type: Easing.InOutSine
-                        }
-
-                    }
-
-                }
-
-                // Feiner matter Innenring (statisch)
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: dropdown.ringSize - dropdown.ringThickness * 5
-                    height: width
-                    radius: width / 2
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.05)
-                }
-
-                // ---------- Gepunktete Hintergrund-Marker ----------
-                // 36 Punkte, gleichmaessig verteilt. Ersetzt den flachen Track.
-                Repeater {
-                    model: 36
-
-                    delegate: Rectangle {
-                        readonly property real angleRad: (index * 10 - 90) * Math.PI / 180
-                        readonly property real r: dropdown.ringSize / 2 - dropdown.ringThickness / 2
-                        // Jeder 3. Punkt etwas groesser fuer einen Takt-Effekt
-                        readonly property bool major: (index % 3 === 0)
-
-                        width: major ? 3 : 2
-                        height: major ? 3 : 2
-                        radius: width / 2
-                        color: WalColors.withAlpha(WalColors.color7, major ? 0.35 : 0.18)
-                        x: dropdown.ringSize / 2 + r * Math.cos(angleRad) - width / 2
-                        y: dropdown.ringSize / 2 + r * Math.sin(angleRad) - height / 2
-                    }
-
-                }
-
-                // ---------- Fortschrittsbogen ----------
-                Shape {
-                    anchors.fill: parent
-                    antialiasing: true
-                    smooth: true
-                    layer.enabled: true
-                    layer.samples: 4
-
-                    ShapePath {
-                        strokeColor: dropdown.ringColor
-                        strokeWidth: dropdown.ringThickness
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathAngleArc {
-                            centerX: dropdown.ringSize / 2
-                            centerY: dropdown.ringSize / 2
-                            radiusX: dropdown.ringSize / 2 - dropdown.ringThickness / 2
-                            radiusY: dropdown.ringSize / 2 - dropdown.ringThickness / 2
-                            startAngle: -90
-                            sweepAngle: Math.max(0.001, 360 * dropdown.ringProgress)
-                        }
-
-                    }
-
-                }
-
-                // ---------- Leucht-Punkt am Ende des Bogens ----------
-                Item {
-                    id: tipContainer
-
-                    x: dropdown.tipX
-                    y: dropdown.tipY
-                    width: 0
-                    height: 0
-                    visible: dropdown.ringProgress > 0.005
-
-                    // Aussen-Glow (pulsierend)
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: dropdown.ringColor
-                        opacity: 0.3
-                        layer.enabled: true
-                        layer.samples: 4
-
-                        SequentialAnimation on scale {
-                            loops: Animation.Infinite
-
-                            NumberAnimation {
-                                to: 1.4
-                                duration: 1400
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                to: 1
-                                duration: 1400
-                                easing.type: Easing.InOutSine
                             }
 
                         }
 
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
+                        // Mittlerer Haupt-Punkt (groesser, pulsiert)
+                        Rectangle {
+                            id: trailCenter
 
-                            NumberAnimation {
-                                to: 0.15
-                                duration: 1400
-                                easing.type: Easing.InOutSine
-                            }
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 6
+                            height: 6
+                            radius: 3
+                            color: WalColors.color4
 
-                            NumberAnimation {
-                                to: 0.35
-                                duration: 1400
-                                easing.type: Easing.InOutSine
+                            SequentialAnimation on scale {
+                                loops: Animation.Infinite
+
+                                NumberAnimation {
+                                    to: 1.3
+                                    duration: 900
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 900
+                                    easing.type: Easing.InOutSine
+                                }
+
                             }
 
                         }
 
-                    }
-
-                    // Innerer heller Kern
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: dropdown.ringThickness + 2
-                        height: width
-                        radius: width / 2
-                        color: dropdown.ringColor
-                        border.width: 2
-                        border.color: WalColors.withAlpha(WalColors.color0, 0.8)
+                        // Glow hinter dem mittleren Punkt
+                        Rectangle {
+                            anchors.centerIn: trailCenter
+                            width: 14
+                            height: 14
+                            radius: 7
+                            color: WalColors.color4
+                            opacity: 0.25
+                            layer.enabled: true
+                            layer.samples: 4
+                        }
 
                         Behavior on x {
                             NumberAnimation {
-                                duration: 250
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                        Behavior on y {
-                            NumberAnimation {
-                                duration: 250
-                                easing.type: Easing.OutCubic
+                                duration: 320
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.15
                             }
 
                         }
@@ -610,40 +522,224 @@ PanelWindow {
 
                 }
 
-                // ---------- Inhalt in der Mitte ----------
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 4
-                    width: dropdown.ringSize - 60
+                // ---------- Ring mit Instrumenten-Look ----------
+                Item {
+                    id: ringArea
 
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: dropdown.metricName(dropdown.activeMetric)
-                        color: WalColors.withAlpha(WalColors.color7, 0.5)
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 11
-                    }
+                    width: dropdown.ringSize
+                    height: dropdown.ringSize
+                    anchors.horizontalCenter: parent.horizontalCenter
 
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: dropdown.activePercent + "%"
+                    // Sanfter Farb-Glow im Hintergrund (pulsierend)
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width * 0.7
+                        height: width
+                        radius: width / 2
                         color: dropdown.ringColor
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 32
-                        font.bold: true
+                        opacity: 0.06
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+
+                            NumberAnimation {
+                                to: 0.1
+                                duration: 2000
+                                easing.type: Easing.InOutSine
+                            }
+
+                            NumberAnimation {
+                                to: 0.04
+                                duration: 2000
+                                easing.type: Easing.InOutSine
+                            }
+
+                        }
+
                     }
 
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
-                        text: dropdown.secondaryString(dropdown.activeMetric)
-                        visible: text !== ""
-                        wrapMode: Text.NoWrap
-                        elide: Text.ElideRight
-                        color: dropdown.secondaryColor(dropdown.activeMetric)
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: dropdown.secondaryFontSize(dropdown.activeMetric)
+                    // Feiner matter Innenring (statisch)
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: dropdown.ringSize - dropdown.ringThickness * 5
+                        height: width
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.05)
+                    }
+
+                    // ---------- Gepunktete Hintergrund-Marker ----------
+                    // 36 Punkte, gleichmaessig verteilt. Ersetzt den flachen Track.
+                    Repeater {
+                        model: 36
+
+                        delegate: Rectangle {
+                            readonly property real angleRad: (index * 10 - 90) * Math.PI / 180
+                            readonly property real r: dropdown.ringSize / 2 - dropdown.ringThickness / 2
+                            // Jeder 3. Punkt etwas groesser fuer einen Takt-Effekt
+                            readonly property bool major: (index % 3 === 0)
+
+                            width: major ? 3 : 2
+                            height: major ? 3 : 2
+                            radius: width / 2
+                            color: WalColors.withAlpha(WalColors.color7, major ? 0.35 : 0.18)
+                            x: dropdown.ringSize / 2 + r * Math.cos(angleRad) - width / 2
+                            y: dropdown.ringSize / 2 + r * Math.sin(angleRad) - height / 2
+                        }
+
+                    }
+
+                    // ---------- Fortschrittsbogen ----------
+                    Shape {
+                        anchors.fill: parent
+                        antialiasing: true
+                        smooth: true
+                        layer.enabled: true
+                        layer.samples: 4
+
+                        ShapePath {
+                            strokeColor: dropdown.ringColor
+                            strokeWidth: dropdown.ringThickness
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: dropdown.ringSize / 2
+                                centerY: dropdown.ringSize / 2
+                                radiusX: dropdown.ringSize / 2 - dropdown.ringThickness / 2
+                                radiusY: dropdown.ringSize / 2 - dropdown.ringThickness / 2
+                                startAngle: -90
+                                sweepAngle: Math.max(0.001, 360 * dropdown.ringProgress)
+                            }
+
+                        }
+
+                    }
+
+                    // ---------- Leucht-Punkt am Ende des Bogens ----------
+                    Item {
+                        id: tipContainer
+
+                        x: dropdown.tipX
+                        y: dropdown.tipY
+                        width: 0
+                        height: 0
+                        visible: dropdown.ringProgress > 0.005
+
+                        // Aussen-Glow (pulsierend)
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            radius: 10
+                            color: dropdown.ringColor
+                            opacity: 0.3
+                            layer.enabled: true
+                            layer.samples: 4
+
+                            SequentialAnimation on scale {
+                                loops: Animation.Infinite
+
+                                NumberAnimation {
+                                    to: 1.4
+                                    duration: 1400
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 1400
+                                    easing.type: Easing.InOutSine
+                                }
+
+                            }
+
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
+
+                                NumberAnimation {
+                                    to: 0.15
+                                    duration: 1400
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                NumberAnimation {
+                                    to: 0.35
+                                    duration: 1400
+                                    easing.type: Easing.InOutSine
+                                }
+
+                            }
+
+                        }
+
+                        // Innerer heller Kern
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: dropdown.ringThickness + 2
+                            height: width
+                            radius: width / 2
+                            color: dropdown.ringColor
+                            border.width: 2
+                            border.color: WalColors.withAlpha(WalColors.color0, 0.8)
+
+                            Behavior on x {
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                            Behavior on y {
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                    // ---------- Inhalt in der Mitte ----------
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        width: dropdown.ringSize - 60
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: dropdown.metricName(dropdown.activeMetric)
+                            color: WalColors.withAlpha(WalColors.color7, 0.5)
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: dropdown.activePercent + "%"
+                            color: dropdown.ringColor
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 32
+                            font.bold: true
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            text: dropdown.secondaryString(dropdown.activeMetric)
+                            visible: text !== ""
+                            wrapMode: Text.NoWrap
+                            elide: Text.ElideRight
+                            color: dropdown.secondaryColor(dropdown.activeMetric)
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: dropdown.secondaryFontSize(dropdown.activeMetric)
+                        }
+
                     }
 
                 }
@@ -661,7 +757,11 @@ PanelWindow {
             }
         }
 
+        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
+        // Hoehe erst nach dem Schrumpfen ohne Animation auf 0.
         Behavior on height {
+            enabled: dropdown.heightAnimOn
+
             Anim {
             }
 

@@ -7,6 +7,13 @@ import Quickshell.Io
 PanelWindow {
     id: dropdown
 
+    // Oeffnen: Hoehen-Animation wie bisher (Behavior on height).
+    // Schliessen: Huelle bleibt an der Bar haengen und schrumpft von unten
+    // nach oben (Fenster behaelt seine Groesse), nur das Cover blendet aus.
+    // Erst danach wird die Hoehe ohne Animation auf 0 gesetzt.
+    property bool expanded: false
+    property bool heightAnimOn: false
+    property real closeFactor: 1
     required property var screen
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 220
@@ -22,34 +29,92 @@ PanelWindow {
     readonly property real cavaGamma: 0.45
     readonly property real cavaNoiseFloor: 0.05
     property var cavaValues: new Array(cavaBars).fill(0)
-    // Volle Zielhöhe – wird für Container und Panel-Höhe gebraucht.
+    // Volle Zielhoehe - wird fuer Container und Panel-Hoehe gebraucht.
     readonly property real fullHeight: content.implicitHeight + 24
-    // ---- Animation ----
-    readonly property int openDuration: 380
-    readonly property int closeDuration: 280
-    readonly property real openOvershoot: 1.3 // Bounce beim Oeffnen (0 = keiner)
-    readonly property real closeOvershoot: 1 // kleiner "Anlauf" beim Schliessen (0 = keiner)
-    readonly property real startWidthScale: 0.82 // Breite des Inhalts zu Beginn (1 = nicht schmaler)
-    // Platz unter dem Menue, damit der Bounce nicht abgeschnitten wird
-    readonly property real overshootPad: fullHeight * 0.14
-
-    function resetCava() {
-        if (cavaValues.some((v) => {
-            return v > 0;
-        }))
-            cavaValues = new Array(cavaBars).fill(0);
-
-    }
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    // Fenster behaelt IMMER dieselbe Groesse (plus Platz fuer den Bounce).
-    // Die Bewegung entsteht nur durch eine Transformation des Inhalts, nicht
-    // durch ein Fenster, das pro Frame seine Groesse aendert.
-    implicitHeight: fullHeight + overshootPad
+    // Panel folgt der Container-Hoehe. Bei geschlossenem Menue -> 0 px hoch,
+    // dadurch blockiert es keinen Hover fuer andere Dropdowns.
+    implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
     anchors.top: true
     anchors.left: true
+
+    Connections {
+        function onDropdownOpenChanged() {
+            if (AudioState.dropdownOpen) {
+                closeAnim.stop();
+                dropdown.heightAnimOn = true;
+                dropdown.expanded = true;
+                // Hover waehrend des Schliessens: wieder aufklappen + Cover einblenden
+                if (dropdown.closeFactor !== 1 || coverArea.opacity !== 1)
+                    reopenAnim.restart();
+
+            } else if (dropdown.expanded) {
+                reopenAnim.stop();
+                closeAnim.restart();
+            }
+        }
+
+        target: AudioState
+    }
+
+    ParallelAnimation {
+        id: reopenAnim
+
+        NumberAnimation {
+            target: dropdown
+            property: "closeFactor"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: coverArea
+            property: "opacity"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    SequentialAnimation {
+        id: closeAnim
+
+        ParallelAnimation {
+            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
+            NumberAnimation {
+                target: dropdown
+                property: "closeFactor"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutCubic
+            }
+
+            // nur das Cover blendet aus, der Rest des Menues bleibt
+            NumberAnimation {
+                target: coverArea
+                property: "opacity"
+                to: 0
+                duration: 280
+                easing.type: Easing.InOutQuad
+            }
+
+        }
+
+        ScriptAction {
+            script: {
+                dropdown.heightAnimOn = false; // erst Animation aus ...
+                dropdown.expanded = false; // ... dann Hoehe auf 0
+                dropdown.closeFactor = 1;
+                coverArea.opacity = 1;
+            }
+        }
+
+    }
 
     margins {
         top: 40
@@ -63,40 +128,10 @@ PanelWindow {
         id: container
 
         width: parent.width
-        height: parent.height
-
-        // Einziger animierter Wert: 0 = zu, 1 = offen (kurz > 1 beim Bounce)
-        Item {
-            id: motion
-
-            property real p: AudioState.dropdownOpen ? 1 : 0
-
-            // Erst wenn komplett zu, die Balken zuruecksetzen (nicht schon
-            // beim Start des Schliessens, sonst kollabieren sie sichtbar).
-            onPChanged: {
-                if (p <= 0.001 && !AudioState.dropdownOpen)
-                    dropdown.resetCava();
-
-            }
-
-            Behavior on p {
-                NumberAnimation {
-                    duration: AudioState.dropdownOpen ? dropdown.openDuration : dropdown.closeDuration
-                    easing.type: AudioState.dropdownOpen ? Easing.OutBack : Easing.InBack
-                    easing.overshoot: AudioState.dropdownOpen ? dropdown.openOvershoot : dropdown.closeOvershoot
-                }
-
-            }
-
-        }
-
-        // Klickflaeche: waechst und schrumpft mit dem Menue
-        Item {
-            id: hitBox
-
-            width: parent.width
-            height: Math.min(1, Math.max(0, motion.p)) * dropdown.fullHeight
-        }
+        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
+        // Schliessen sofort und das Cover wird verzerrt.
+        height: dropdown.expanded ? dropdown.fullHeight : 0
+        clip: true
 
         Process {
             id: cavaProcess
@@ -104,10 +139,8 @@ PanelWindow {
             running: AudioState.dropdownOpen && AudioState.isPlaying
             command: ["sh", "-c", "printf '%s\\n' '[general]' 'bars=" + dropdown.cavaBars + "' 'framerate=40' 'sleep_timer=3' '[output]' 'method=raw' 'raw_target=/dev/stdout' 'data_format=ascii' 'ascii_max_range=100' 'channels=mono' > /tmp/qs-cava-audio.conf && exec cava -p /tmp/qs-cava-audio.conf"]
             onRunningChanged: {
-                // Nur zuruecksetzen, wenn die Wiedergabe endet (Pause),
-                // nicht schon beim Schliessen des Menues.
-                if (!running && !AudioState.isPlaying)
-                    dropdown.resetCava();
+                if (!running)
+                    dropdown.cavaValues = new Array(dropdown.cavaBars).fill(0);
 
             }
 
@@ -128,21 +161,21 @@ PanelWindow {
 
         }
 
-        // Inhalt: wird von oben her "aufgezogen" (von klein/gestaucht zu normal),
-        // beim Schliessen exakt rueckwaerts.
+        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt wie
+        // bisher), beim Schliessen schrumpft sie samt Rundungen von unten.
         Item {
-            id: pop
+            id: body
 
             width: parent.width
-            height: dropdown.fullHeight
-            opacity: Math.min(1, motion.p * 3)
-            visible: motion.p > 0.001
+            height: dropdown.fullHeight * dropdown.closeFactor
+            clip: true
 
             RoundedDropShape {
                 anchors.top: parent.top
                 cornerRadius: dropdown.cornerRadius
                 menuWidth: dropdown.menuWidth
-                menuHeight: dropdown.fullHeight
+                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
+                menuHeight: Math.max(2 * dropdown.cornerRadius, dropdown.fullHeight * dropdown.closeFactor)
             }
 
             Column {
@@ -209,9 +242,9 @@ PanelWindow {
                                     opacity: 0.45 + 0.55 * parent.cleanedLevel
 
                                     Behavior on height {
-                                        NumberAnimation {
-                                            duration: 60
-                                            easing.type: Easing.OutQuad
+                                        enabled: dropdown.heightAnimOn
+
+                                        Anim {
                                         }
 
                                     }
@@ -494,13 +527,6 @@ PanelWindow {
 
             }
 
-            transform: Scale {
-                origin.x: pop.width / 2
-                origin.y: 0
-                xScale: Math.min(1.03, dropdown.startWidthScale + (1 - dropdown.startWidthScale) * motion.p)
-                yScale: Math.max(0, motion.p)
-            }
-
         }
 
         Timer {
@@ -517,6 +543,16 @@ PanelWindow {
             }
         }
 
+        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
+        // Hoehe erst nach dem Hochfahren ohne Animation auf 0.
+        Behavior on height {
+            enabled: dropdown.heightAnimOn
+
+            Anim {
+            }
+
+        }
+
     }
 
     HoverHandler {
@@ -526,12 +562,6 @@ PanelWindow {
             AudioState.dropdownHovered = hovered;
             AudioState.updateHoverTimer();
         }
-    }
-
-    // Nur die sichtbare Flaeche nimmt Mausereignisse an. Das (transparente)
-    // Fenster blockiert damit keinen Hover fuer andere Dropdowns.
-    mask: Region {
-        item: hitBox
     }
 
 }
