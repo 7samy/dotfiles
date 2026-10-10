@@ -1,39 +1,69 @@
-pragma Singleton
-
 import QtQuick
 import Quickshell
 import Quickshell.Io
+pragma Singleton
 
 Singleton {
     id: root
 
-    // ---- Picker-Zustand ----
+    // ---- Picker state ----
     property bool open: false
     property string searchText: ""
-
-    // ---- VPN-Daten ----
-    // [{ name: "proton-nl", code: "nl", label: "Niederlande" }, ...]
+    // ---- VPN data ----
+    // [{ name: "proton-nl", code: "nl", label: "Netherlands" }, ...]
     property var connections: []
     property string activeConnection: ""
     property string lastConnection: "proton"
     property bool busy: false
+    readonly property var countryNames: ({
+        "at": "Austria",
+        "au": "Australia",
+        "be": "Belgium",
+        "br": "Brazil",
+        "ca": "Canada",
+        "ch": "Switzerland",
+        "cz": "Czechia",
+        "de": "Germany",
+        "dk": "Denmark",
+        "ee": "Estonia",
+        "es": "Spain",
+        "fi": "Finland",
+        "fr": "France",
+        "gb": "United Kingdom",
+        "uk": "United Kingdom",
+        "gr": "Greece",
+        "hk": "Hong Kong",
+        "hu": "Hungary",
+        "ie": "Ireland",
+        "il": "Israel",
+        "in": "India",
+        "is": "Iceland",
+        "it": "Italy",
+        "jp": "Japan",
+        "kr": "South Korea",
+        "li": "Liechtenstein",
+        "lt": "Lithuania",
+        "lu": "Luxembourg",
+        "lv": "Latvia",
+        "mx": "Mexico",
+        "nl": "Netherlands",
+        "no": "Norway",
+        "nz": "New Zealand",
+        "pl": "Poland",
+        "pt": "Portugal",
+        "ro": "Romania",
+        "rs": "Serbia",
+        "ru": "Russia",
+        "se": "Sweden",
+        "sg": "Singapore",
+        "sk": "Slovakia",
+        "tr": "Turkey",
+        "ua": "Ukraine",
+        "us": "USA",
+        "za": "South Africa"
+    })
 
     signal switched()
-
-    readonly property var countryNames: ({
-        "at": "Österreich", "au": "Australien", "be": "Belgien", "br": "Brasilien",
-        "ca": "Kanada", "ch": "Schweiz", "cz": "Tschechien", "de": "Deutschland",
-        "dk": "Dänemark", "ee": "Estland", "es": "Spanien", "fi": "Finnland",
-        "fr": "Frankreich", "gb": "Großbritannien", "uk": "Großbritannien",
-        "gr": "Griechenland", "hk": "Hongkong", "hu": "Ungarn", "ie": "Irland",
-        "il": "Israel", "in": "Indien", "is": "Island", "it": "Italien",
-        "jp": "Japan", "kr": "Südkorea", "lt": "Litauen", "lu": "Luxemburg",
-        "lv": "Lettland", "mx": "Mexiko", "nl": "Niederlande", "no": "Norwegen",
-        "nz": "Neuseeland", "pl": "Polen", "pt": "Portugal", "ro": "Rumänien",
-        "rs": "Serbien", "ru": "Russland", "se": "Schweden", "sg": "Singapur",
-        "sk": "Slowakei", "tr": "Türkei", "ua": "Ukraine", "us": "USA",
-        "za": "Südafrika"
-    })
 
     // "proton-nl" -> "nl"
     function codeOf(name) {
@@ -44,6 +74,7 @@ Singleton {
     function labelOf(name, code) {
         if (code !== "")
             return countryNames[code] ?? code.toUpperCase();
+
         return name;
     }
 
@@ -68,21 +99,18 @@ Singleton {
         listProcess.running = true;
     }
 
-    // Wechselt auf die gewaehlte Verbindung (alte wird vorher getrennt)
+    // Switch to the selected connection (old one is taken down first)
     function connectTo(name) {
         if (busy || name === "")
             return ;
+
         lastConnection = name;
         if (name === activeConnection) {
             close();
             return ;
         }
         busy = true;
-        switchProcess.command = [
-            "bash", "-c",
-            'if [ -n "$1" ]; then nmcli connection down "$1" >/dev/null 2>&1; fi; nmcli connection up "$2"',
-            "_", activeConnection, name
-        ];
+        switchProcess.command = ["bash", "-c", 'if [ -n "$1" ]; then nmcli connection down "$1" >/dev/null 2>&1; fi; nmcli connection up "$2"', "_", activeConnection, name];
         switchProcess.running = true;
         close();
     }
@@ -114,10 +142,12 @@ Singleton {
                     }
                     if (!line.endsWith(":wireguard"))
                         continue;
+
                     const name = line.slice(0, line.length - ":wireguard".length);
                     if (inActive) {
                         if (active === "")
                             active = name;
+
                     } else {
                         const code = root.codeOf(name);
                         all.push({
@@ -127,15 +157,20 @@ Singleton {
                         });
                     }
                 }
-                all.sort((a, b) => a.label.localeCompare(b.label, "de"));
+                all.sort((a, b) => {
+                    return a.label.localeCompare(b.label, "en");
+                });
                 root.connections = all;
                 root.activeConnection = active;
                 if (active !== "")
                     root.lastConnection = active;
-                else if (!all.some((c) => c.name === root.lastConnection) && all.length > 0)
+                else if (!all.some((c) => {
+                    return c.name === root.lastConnection;
+                }) && all.length > 0)
                     root.lastConnection = all[0].name;
             }
         }
+
     }
 
     Process {
@@ -149,4 +184,5 @@ Singleton {
             }
         }
     }
+
 }

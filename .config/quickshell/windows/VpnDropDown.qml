@@ -7,14 +7,15 @@ import Quickshell
 PanelWindow {
     id: dropdown
 
-    // Oeffnen: Hoehen-Animation wie bisher (Behavior on height).
-    // Schliessen: Huelle bleibt an der Bar haengen und schrumpft von unten
-    // nach oben (Fenster behaelt seine Groesse), nur der Globus blendet aus.
+    // Opening: height animation as before (Behavior on height).
+    // Closing: the shell stays attached to the bar and shrinks from
+    // bottom to top (window keeps its size), only the globe fades out.
+    // Only after that is the height set to 0 without animation.
     property bool expanded: false
     property bool heightAnimOn: false
     property real closeFactor: 1
-    // IP-Anzeige: standardmaessig maskiert, per Klick auf die Zeile
-    // in Klartext umschaltbar. Reset beim Schliessen.
+    // IP display: masked by default, click the row to reveal it
+    // in plaintext. Reset when closing.
     property bool ipRevealed: false
     required property var screen
     readonly property real cornerRadius: 20
@@ -35,37 +36,59 @@ PanelWindow {
             "united states": "us",
             "usa": "us",
             "germany": "de",
-            "deutschland": "de",
             "netherlands": "nl",
-            "niederlande": "nl",
             "japan": "jp",
             "united kingdom": "gb",
             "uk": "gb",
             "france": "fr",
-            "frankreich": "fr",
             "switzerland": "ch",
-            "schweiz": "ch",
             "austria": "at",
-            "oesterreich": "at",
             "sweden": "se",
-            "schweden": "se",
             "norway": "no",
-            "norwegen": "no",
             "canada": "ca",
-            "kanada": "ca",
             "australia": "au",
-            "australien": "au",
             "singapore": "sg",
-            "singapur": "sg"
+            "liechtenstein": "li",
+            "belgium": "be",
+            "brazil": "br",
+            "czechia": "cz",
+            "czech republic": "cz",
+            "denmark": "dk",
+            "estonia": "ee",
+            "spain": "es",
+            "finland": "fi",
+            "greece": "gr",
+            "hong kong": "hk",
+            "hungary": "hu",
+            "ireland": "ie",
+            "israel": "il",
+            "india": "in",
+            "iceland": "is",
+            "italy": "it",
+            "south korea": "kr",
+            "lithuania": "lt",
+            "luxembourg": "lu",
+            "latvia": "lv",
+            "mexico": "mx",
+            "new zealand": "nz",
+            "poland": "pl",
+            "portugal": "pt",
+            "romania": "ro",
+            "serbia": "rs",
+            "russia": "ru",
+            "slovakia": "sk",
+            "turkey": "tr",
+            "ukraine": "ua",
+            "south africa": "za"
         };
         return map[c.toLowerCase()] || "";
     }
     readonly property string flagSource: countryCode !== "" ? "../resources/flags/" + countryCode + ".svg" : ""
-    // Status-Farbe: gruen bei verbunden, rot bei getrennt.
+    // Status color: green when connected, red when disconnected.
     readonly property color statusColor: VpnState.connected ? "#8fd18f" : "#e08c8c"
 
-    // Ersetzt jede Ziffer durch '*', laesst Punkte stehen.
-    // Aus "185.123.45.67" wird "***.***.**.**".
+    // Replaces every digit with '*', keeps dots.
+    // "185.123.45.67" becomes "***.***.**.**".
     function maskIp(ip) {
         if (!ip)
             return "";
@@ -147,7 +170,7 @@ PanelWindow {
                 dropdown.expanded = false;
                 dropdown.closeFactor = 1;
                 globe.opacity = 1;
-                // IP beim naechsten Oeffnen wieder verstecken
+                // Hide IP again on next open
                 dropdown.ipRevealed = false;
             }
         }
@@ -282,6 +305,7 @@ PanelWindow {
                         font.pixelSize: 44
                     }
 
+                    // Globe grid overlay (meridians + parallels)
                     Shape {
                         anchors.fill: globeBg
                         antialiasing: true
@@ -291,6 +315,7 @@ PanelWindow {
                         layer.enabled: true
                         layer.samples: 4
 
+                        // Vertical center line (prime meridian)
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.55)
                             strokeWidth: 1
@@ -309,6 +334,7 @@ PanelWindow {
 
                         }
 
+                        // Left meridian curve
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.4)
                             strokeWidth: 1
@@ -329,6 +355,7 @@ PanelWindow {
 
                         }
 
+                        // Right meridian curve
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.4)
                             strokeWidth: 1
@@ -349,6 +376,7 @@ PanelWindow {
 
                         }
 
+                        // Equator
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.45)
                             strokeWidth: 1
@@ -367,6 +395,7 @@ PanelWindow {
 
                         }
 
+                        // Upper parallel
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.3)
                             strokeWidth: 1
@@ -387,6 +416,7 @@ PanelWindow {
 
                         }
 
+                        // Lower parallel
                         ShapePath {
                             strokeColor: Qt.rgba(1, 1, 1, 0.3)
                             strokeWidth: 1
@@ -409,6 +439,7 @@ PanelWindow {
 
                     }
 
+                    // Highlight (3D effect, top-left)
                     Rectangle {
                         anchors.left: globeBg.left
                         anchors.top: globeBg.top
@@ -508,7 +539,7 @@ PanelWindow {
 
                 }
 
-                // ---------- IP (click to toggle mask) ----------
+                // ---------- IP ADDRESS (click to toggle mask) ----------
                 Item {
                     id: ipSection
 
@@ -533,6 +564,7 @@ PanelWindow {
                             width: parent.width
                             height: 14
 
+                            // Masked
                             Text {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
@@ -553,6 +585,7 @@ PanelWindow {
 
                             }
 
+                            // Plaintext
                             Text {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
@@ -576,7 +609,7 @@ PanelWindow {
 
                     }
 
-                    // Klick-Toggle über der ganzen Section
+                    // Click toggle over the whole section
                     MouseArea {
                         anchors.fill: parent
                         hoverEnabled: true

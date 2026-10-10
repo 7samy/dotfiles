@@ -10,7 +10,7 @@ PanelWindow {
     readonly property real cellW: 380
     readonly property real cellH: 100
     readonly property int visibleCols: 2
-    // Passt sich automatisch an die Bildschirmhöhe an (mind. 3 Zeilen)
+    // Adapts automatically to the screen height (min. 3 rows)
     readonly property int visibleRows: Math.max(3, Math.floor((screen.height - 240) / cellH))
     readonly property var filtered: {
         const q = VpnPickerState.searchText.toLowerCase();
@@ -18,7 +18,7 @@ PanelWindow {
             return c.label.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || c.code.includes(q);
         });
     }
-    // 0 = zu, 1 = offen (fuer Ein-/Ausblenden)
+    // 0 = closed, 1 = open (for fade in/out)
     property real show: VpnPickerState.open ? 1 : 0
 
     WlrLayershell.namespace: "quickshell:vpn-picker"
@@ -52,7 +52,7 @@ PanelWindow {
         target: VpnPickerState
     }
 
-    // Abdunkeln, Klick daneben schliesst
+    // Dim background, click outside closes
     Rectangle {
         anchors.fill: parent
         color: WalColors.withAlpha(WalColors.color0, 0.6)
@@ -91,7 +91,7 @@ PanelWindow {
             anchors.fill: parent
         }
 
-        // ==== Suchleiste ====
+        // ==== Search bar ====
         Rectangle {
             id: searchBar
 
@@ -166,7 +166,7 @@ PanelWindow {
                 anchors.left: parent.left
                 anchors.leftMargin: 54
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Land suchen"
+                text: "Search country"
                 color: WalColors.withAlpha(WalColors.color7, 0.35)
                 font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 14
@@ -182,7 +182,7 @@ PanelWindow {
 
         }
 
-        // ==== Verbindungs-Grid (2 Spalten) ====
+        // ==== Connection grid (2 columns) ====
         Item {
             id: gridArea
 
@@ -207,7 +207,7 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     horizontalAlignment: Text.AlignHCenter
-                    text: VpnPickerState.connections.length === 0 ? "Keine WireGuard-Verbindungen gefunden\nimport-vpn.sh ausführen" : "Kein Land gefunden"
+                    text: VpnPickerState.connections.length === 0 ? "No WireGuard connections found\nrun import-vpn.sh" : "No country found"
                     color: WalColors.withAlpha(WalColors.color7, 0.45)
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 14
@@ -295,7 +295,7 @@ PanelWindow {
 
                             Text {
                                 width: parent.width
-                                text: delegateItem.isActive ? "Verbunden" : modelData.name
+                                text: delegateItem.isActive ? "Connected" : modelData.name
                                 color: delegateItem.isActive ? WalColors.color2 : WalColors.withAlpha(WalColors.color7, 0.5)
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 12
