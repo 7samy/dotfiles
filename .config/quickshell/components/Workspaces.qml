@@ -1,179 +1,291 @@
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: workspaceWidget
-    implicitWidth: bg.implicitWidth
-    implicitHeight: 40
 
-    property var steamTitleMap: ({})
-    property var steamNormalizedMap: ({})
-    property var steamIconMap: ({})
-    property bool acfDone: false
-    property bool iconsDone: false
-    property bool mapsReady: acfDone && iconsDone
-
+    // ------------------------------------------------------------------
+    // Steam-Daten (werden von scripts/steam_scan.sh geliefert)
+    // ------------------------------------------------------------------
+    property var steamTitleMap: ({})       // exakter Titel -> appid
+    property var steamNormalizedMap: ({})  // normalisierter Titel -> appid
+    property var steamIconMap: ({})        // appid -> file://-URL
+    // Wird bei jedem fertigen Scan erhoeht -> Bindings werten neu aus
+    property int mapsVersion: 0
+    property var _tmpTitles: ({})
+    property var _tmpNormalized: ({})
+    property var _tmpIcons: ({})
+    property var _rescanned: ({})
+    property double lastScan: Date.now()
+    readonly property string scanScript: Qt.resolvedUrl("../scripts/steam_scan.sh").toString().replace("file://", "")
+    // Ordner mit den eigenen Icons (relativ zu diesem File, kein /home/azu hartkodiert)
+    readonly property string iconDir: Qt.resolvedUrl("../resources/icons/").toString()
     readonly property int tabletWorkspaceId: 11
-    readonly property string tabletIconPath: "file:///home/azu/.config/quickshell/resources/icons/digital-art.png"
+    readonly property string tabletIconPath: iconDir + "digital-art.png"
     readonly property bool tabletWorkspaceFocused: Hyprland.focusedMonitor?.activeWorkspace?.id === tabletWorkspaceId
 
-    function safeSteamThemeIcon(name) {
-        var path = Quickshell.iconPath(name);
-        return path ? "file://" + path : "";
-    }
-
+    // ------------------------------------------------------------------
+    // Hilfsfunktionen
+    // ------------------------------------------------------------------
     function normalizeTitle(title) {
-        return title.replace(/[™®©]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+        return String(title || "").toLowerCase().replace(/[™®©]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
     }
 
-    // Zentrale Funktion für den Workspace-Wechsel
+    // Icon-Theme-Lookup. Liefert eine verwendbare Image-Quelle oder "" wenn
+    // es das Icon nicht gibt (verhindert das violett-schwarze Platzhalter-Icon).
+    function themeIcon(name) {
+        if (!name)
+            return "";
+
+        let p = "";
+        try {
+            p = Quickshell.iconPath(name, true);
+        } catch (e) {
+            p = "";
+        }
+        if (!p)
+            return "";
+
+        return p.startsWith("/") ? "file://" + p : p;
+    }
+
+    // Absoluter Pfad ODER Theme-Name -> Image-Quelle
+    function iconUrl(ref) {
+        if (!ref)
+            return "";
+
+        if (ref.startsWith("file://") || ref.startsWith("image://"))
+            return ref;
+
+        if (ref.startsWith("/"))
+            return "file://" + ref;
+
+        return themeIcon(ref);
+    }
+
     function focusWorkspace(id) {
-        console.log("Wechsle zu Workspace:", id);
         Quickshell.execDetached(["hyprctl", "dispatch", "workspace", id.toString()]);
     }
 
-    // Rechtsklick auf einen Workspace öffnet die Overview
+    // Rechtsklick auf einen Workspace oeffnet die Overview
     function openOverview() {
-        console.log("Öffne Workspace Overview");
         Quickshell.execDetached(["qs", "ipc", "call", "workspaceoverview", "toggle"]);
     }
 
-    Process {
-        id: acfParser
-        command: ["bash", "-c", "awk -F'\"' '/^\\t\"appid\"/{appid=$4} /^\\t\"name\"/{print appid \"|\" $4}' ~/.local/share/Steam/steamapps/appmanifest_*.acf"]
-        running: true
-        stdout: SplitParser {
-            onRead: data => {
-                var idx = data.indexOf("|");
-                if (idx === -1) return;
-                var appId = data.substring(0, idx).trim();
-                var name = data.substring(idx + 1).trim();
-                if (!appId || !name) return;
-                workspaceWidget.steamTitleMap[name] = appId;
-                workspaceWidget.steamNormalizedMap[workspaceWidget.normalizeTitle(name)] = appId;
-            }
-        }
-        onExited: (exitCode, exitStatus) => { workspaceWidget.acfDone = true; }
-    }
+    function requestRescan() {
+        if (steamScan.running)
+            return ;
 
-    Process {
-        id: iconScanner
-        command: ["bash", "-c", [
-            "for d in ~/.local/share/Steam/appcache/librarycache/*/; do",
-            "  appid=$(basename \"$d\");",
-            "  icon=$(ls \"$d\" | grep -vE '^(header|library_|logo|icon)' | grep '\\.jpg$' | head -1);",
-            "  if [ -n \"$icon\" ]; then echo \"$appid|$d$icon\"; fi;",
-            "done"
-        ].join(" ")]
-        running: true
-        stdout: SplitParser {
-            onRead: data => {
-                var idx = data.indexOf("|");
-                if (idx === -1) return;
-                var appId = data.substring(0, idx).trim();
-                var path = data.substring(idx + 1).trim();
-                if (!appId || !path) return;
-                workspaceWidget.steamIconMap[appId] = "file://" + path;
-            }
-        }
-        onExited: (exitCode, exitStatus) => { workspaceWidget.iconsDone = true; }
-    }
+        if (Date.now() - lastScan < 15000)
+            return ;
 
-    function getSteamIcon(appId) {
-        if (workspaceWidget.steamIconMap[appId])
-            return workspaceWidget.steamIconMap[appId];
-        var generic = workspaceWidget.safeSteamThemeIcon("steam");
-        return generic ? generic : "";
-    }
-
-    function getCustomIconForWindow(winClass, winTitle) {
-        // ---- 1) Exakte Treffer (schneller Objekt-Lookup) ----
-        var exactByTitle = {
-            "tmux_nvim": "file:///home/azu/.config/quickshell/resources/icons/neovim_1.png",
-            "wallpaper-picker": "file:///home/azu/.config/quickshell/resources/icons/Senjogahara.png",
-            "Modrinth App": "file:///home/azu/.config/quickshell/resources/icons/modrinth.png"
-        };
-
-        if (winTitle && exactByTitle[winTitle])
-            return exactByTitle[winTitle];
-
-        // ---- 2) Regex-Fallbacks (für sich ändernde Klassen/Titel) ----
-        // Minecraft-Klasse ändert sich mit der Version (z.B. "Minecraft* 26.2"),
-        // daher per Regex matchen statt exaktem Key.
-        if (winClass && /^Minecraft\*/.test(winClass))
-            return "file:///home/azu/.config/quickshell/resources/icons/minecraft.png";
-
-        // Fallback über den Titel (falls Klasse mal abweicht)
-        if (winTitle && /Minecraft/i.test(winTitle))
-            return "file:///home/azu/.config/quickshell/resources/icons/minecraft.png";
-
-        // ---- 3) Gamescope / Steam-Sonderfälle ----
-        if (winClass === "gamescope" && winTitle) {
-            var appId = workspaceWidget.steamTitleMap[winTitle];
-            if (!appId)
-                appId = workspaceWidget.steamNormalizedMap[workspaceWidget.normalizeTitle(winTitle)];
-            if (!appId)
-                appId = workspaceWidget.findAppIdByTitleSubstring(winTitle);
-            if (appId) return workspaceWidget.getSteamIcon(appId);
-            return "steam";
-        }
-
-        if (winClass && winClass.startsWith("steam_app_")) {
-            var appId2 = winClass.replace("steam_app_", "");
-            return workspaceWidget.getSteamIcon(appId2);
-        }
-
-        // ---- 4) Exakte Klassen-Map ----
-        var classMap = {
-            "code-oss":              "code-oss",
-            "com.obsproject.Studio": "com.obsproject.Studio",
-            "zen-alpha":             "zen-browser",
-            "zen":                   "zen-browser",
-            "openrgb":               "openrgb",
-            "obs-studio":            "com.obsproject.Studio",
-            "yazi":                  "yazi",
-            "fzfwindows":            "yazi"
-        };
-        if (winClass && classMap[winClass])
-            return classMap[winClass];
-
-        // ---- 5) Heuristik über Desktop-Einträge ----
-        if (winClass) {
-            var entry = DesktopEntries.heuristicLookup(winClass);
-            if (entry && entry.icon) return entry.icon;
-            return winClass.toLowerCase();
-        }
-        return "";
+        lastScan = Date.now();
+        _tmpTitles = ({});
+        _tmpNormalized = ({});
+        _tmpIcons = ({});
+        steamScan.running = true;
     }
 
     function findAppIdByTitleSubstring(title) {
-        if (!title) return "";
-        var lowerTitle = title.toLowerCase();
-        var bestMatchId = "";
-        var bestMatchLen = 0;
-        for (var rawName in workspaceWidget.steamTitleMap) {
-            var lowerRaw = rawName.toLowerCase();
-            if (lowerTitle.includes(lowerRaw) && lowerRaw.length > bestMatchLen) {
-                bestMatchId = workspaceWidget.steamTitleMap[rawName];
-                bestMatchLen = lowerRaw.length;
+        if (!title)
+            return "";
+
+        const lowerTitle = title.toLowerCase();
+        const normTitle = normalizeTitle(title);
+        let bestId = "";
+        let bestLen = 0;
+        for (const raw in steamTitleMap) {
+            const l = raw.toLowerCase();
+            if (l.length >= 4 && l.length > bestLen && lowerTitle.includes(l)) {
+                bestId = steamTitleMap[raw];
+                bestLen = l.length;
             }
         }
-        if (!bestMatchId) {
-            for (var normName in workspaceWidget.steamNormalizedMap) {
-                if (lowerTitle.includes(normName) && normName.length > bestMatchLen) {
-                    bestMatchId = workspaceWidget.steamNormalizedMap[normName];
-                    bestMatchLen = normName.length;
+        if (!bestId && normTitle !== "") {
+            for (const n in steamNormalizedMap) {
+                if (n.length >= 4 && n.length > bestLen && normTitle.includes(n)) {
+                    bestId = steamNormalizedMap[n];
+                    bestLen = n.length;
                 }
             }
         }
-        return bestMatchId;
+        return bestId;
+    }
+
+    // Steam-appid fuer ein Fenster ermitteln (Proton-Klasse oder Gamescope-Titel)
+    function steamAppIdFor(cls, title) {
+        if (cls.indexOf("steam_app_") === 0) {
+            const id = cls.substring(10);
+            if (/^[0-9]+$/.test(id) && id !== "0")
+                return id;
+
+        }
+        if (!(cls === "gamescope" || cls.indexOf("steam_app_") === 0) || !title)
+            return "";
+
+        if (steamTitleMap[title])
+            return steamTitleMap[title];
+
+        const norm = normalizeTitle(title);
+        if (norm !== "" && steamNormalizedMap[norm])
+            return steamNormalizedMap[norm];
+
+        return findAppIdByTitleSubstring(title);
+    }
+
+    // Reihenfolge: Theme-Icon "steam_icon_<id>" -> gecachtes Bild -> Steam-Logo
+    function steamCandidates(appId) {
+        const out = [];
+        const t = themeIcon("steam_icon_" + appId);
+        if (t)
+            out.push(t);
+
+        const cached = steamIconMap[appId];
+        if (cached) {
+            out.push(cached);
+        } else if (!_rescanned[appId]) {
+            // Neu installiertes Spiel? Einmal pro appid neu scannen.
+            _rescanned[appId] = true;
+            Qt.callLater(requestRescan);
+        }
+        const g = themeIcon("steam");
+        if (g)
+            out.push(g);
+
+        return out;
+    }
+
+    // Liefert eine KETTE von Icon-Quellen. Das erste, das sich laden laesst,
+    // wird angezeigt (siehe candIdx im Delegate).
+    function iconCandidatesFor(win, _version) {
+        const list = [];
+        if (!win)
+            return list;
+
+        const cls = win.class || "";
+        const title = win.title || "";
+        const lc = cls.toLowerCase();
+        const add = (u) => {
+            if (u && list.indexOf(u) === -1)
+                list.push(u);
+
+        };
+        // ---- 1) Eigene Overrides ----
+        const byTitle = {
+            "tmux_nvim": "neovim_1.png",
+            "wallpaper-picker": "Senjogahara.png",
+            "Modrinth App": "modrinth.png"
+        };
+        if (byTitle[title])
+            add(iconDir + byTitle[title]);
+
+        // Minecraft-Klasse aendert sich mit der Version ("Minecraft* 26.2")
+        if (/^minecraft/i.test(cls) || (lc.indexOf("java") !== -1 && /minecraft/i.test(title)))
+            add(iconDir + "minecraft.png");
+
+        // ---- 2) Discord (auch Vesktop & Co. zeigen das normale Discord-Icon) ----
+        if (["vesktop", "discord", "webcord", "armcord", "legcord", "equibop"].indexOf(lc) !== -1) {
+            add(iconDir + "discord.svg");
+            add(themeIcon("discord"));
+            add(themeIcon("com.discordapp.Discord"));
+        }
+        // ---- 3) Steam-Spiele ----
+        const appId = steamAppIdFor(cls, title);
+        if (appId) {
+            for (const c of steamCandidates(appId)) add(c)
+        } else if (cls === "gamescope") {
+            add(themeIcon("steam"));
+        }
+        // ---- 4) Bekannte Klassen -> Theme-Icon ----
+        const classMap = {
+            "code-oss": "code-oss",
+            "com.obsproject.studio": "com.obsproject.Studio",
+            "obs-studio": "com.obsproject.Studio",
+            "zen-alpha": "zen-browser",
+            "zen": "zen-browser",
+            "openrgb": "openrgb",
+            "yazi": "yazi",
+            "fzfwindows": "yazi"
+        };
+        if (classMap[lc])
+            add(themeIcon(classMap[lc]));
+
+        // ---- 5) Heuristik ueber Desktop-Eintraege + Klassenname ----
+        if (cls) {
+            try {
+                const entry = DesktopEntries.heuristicLookup(cls);
+                if (entry && entry.icon)
+                    add(iconUrl(entry.icon));
+
+            } catch (e) {
+            }
+            add(themeIcon(cls));
+            add(themeIcon(lc));
+            add(themeIcon(lc.replace(/\.exe$/, "")));
+        }
+        // ---- 6) Eigene Fallback-Icons, falls das Theme nichts hat ----
+        const localMap = {
+            "zen": "zen-browser.png",
+            "zen-alpha": "zen-browser.png",
+            "kitty": "kitty.png",
+            "firefox": "firefox.svg",
+            "google-chrome": "chrome.svg",
+            "chromium": "chrome.svg"
+        };
+        if (localMap[lc])
+            add(iconDir + localMap[lc]);
+
+        return list;
+    }
+
+    implicitWidth: bg.implicitWidth
+    implicitHeight: 40
+
+    Process {
+        id: steamScan
+
+        command: ["bash", workspaceWidget.scanScript]
+        running: true
+        onExited: (exitCode, exitStatus) => {
+            // Erst jetzt in einem Rutsch uebernehmen (sauberes Change-Signal)
+            workspaceWidget.steamTitleMap = workspaceWidget._tmpTitles;
+            workspaceWidget.steamNormalizedMap = workspaceWidget._tmpNormalized;
+            workspaceWidget.steamIconMap = workspaceWidget._tmpIcons;
+            workspaceWidget.mapsVersion++;
+        }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                const parts = data.split("|");
+                if (parts.length < 3)
+                    return ;
+
+                const kind = parts[0];
+                const appId = parts[1].trim();
+                const rest = parts.slice(2).join("|").trim();
+                if (!appId || !rest)
+                    return ;
+
+                if (kind === "T") {
+                    workspaceWidget._tmpTitles[rest] = appId;
+                    const n = workspaceWidget.normalizeTitle(rest);
+                    if (n !== "")
+                        workspaceWidget._tmpNormalized[n] = appId;
+
+                } else if (kind === "I") {
+                    workspaceWidget._tmpIcons[appId] = "file://" + rest;
+                }
+            }
+        }
+
     }
 
     Rectangle {
         id: bg
+
         anchors.centerIn: parent
         implicitWidth: mainRow.implicitWidth + 16
         height: 40
@@ -184,110 +296,124 @@ Item {
 
         Row {
             id: mainRow
+
             anchors.centerIn: parent
             spacing: 0
 
             Row {
                 id: row
+
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 0
 
                 Repeater {
                     model: Hyprland.workspaces
+
                     delegate: Item {
                         id: wsDelegate
-                        required property HyprlandWorkspace modelData
 
+                        required property HyprlandWorkspace modelData
                         readonly property bool isTabletWs: modelData.id === workspaceWidget.tabletWorkspaceId
                         readonly property bool isFocused: modelData.id === Hyprland.focusedMonitor?.activeWorkspace?.id
                         readonly property var biggestWindow: HyprlandData.biggestWindowForWorkspace(modelData.id)
-
-                        readonly property string resolvedIconId: {
-                            var _ = workspaceWidget.mapsReady;
-                            var win = biggestWindow;
-                            if (!win) return "";
-                            var custom = workspaceWidget.getCustomIconForWindow(win.class, win.title);
-                            if (custom) return custom;
-                            return "";
-                        }
-
-                        property bool iconValid: false
+                        // Kette moeglicher Icon-Quellen; candIdx zeigt auf die aktuell probierte.
+                        // Wichtig: source bleibt IMMER gebunden (frueher wurde das Binding bei
+                        // einem Ladefehler ueberschrieben, danach aktualisierte sich das Icon nie wieder).
+                        readonly property var iconCandidates: workspaceWidget.iconCandidatesFor(biggestWindow, workspaceWidget.mapsVersion)
+                        readonly property string iconKey: iconCandidates.join("|")
+                        property int candIdx: 0
+                        readonly property string iconSource: candIdx < iconCandidates.length ? iconCandidates[candIdx] : ""
+                        readonly property bool iconReady: dynamicIcon.status === Image.Ready
+                        readonly property bool iconExhausted: !!biggestWindow && iconSource === ""
 
                         visible: !isTabletWs
                         width: isTabletWs ? 0 : (35 + (isFocused ? 20 : 0))
                         height: isTabletWs ? 0 : 40
-                        Behavior on width { NumberAnimation { duration: 300 } }
+                        onIconKeyChanged: candIdx = 0
 
                         Rectangle {
                             id: iconBg
+
                             anchors.centerIn: parent
                             width: isFocused ? 36 : 35
                             height: isFocused ? 36 : 35
                             radius: 11
                             color: isFocused ? "#33ffffff" : "transparent"
-                            Behavior on width { NumberAnimation { duration: 300 } }
-                            Behavior on height { NumberAnimation { duration: 300 } }
 
+                            // Workspace-Nummer: wenn leer ODER kein Icon gefunden wurde
                             Text {
                                 anchors.centerIn: parent
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: isFocused ? 14 : 13
                                 color: isFocused ? "white" : WalColors.withAlpha(WalColors.color2, 0.6)
-                                text: biggestWindow ? "" : modelData.id.toString()
-                                visible: !wsDelegate.iconValid
-                                Behavior on font.pixelSize { NumberAnimation { duration: 300 } }
+                                text: modelData.id.toString()
+                                visible: !wsDelegate.iconReady && (!wsDelegate.biggestWindow || wsDelegate.iconExhausted)
+
+                                Behavior on font.pixelSize {
+                                    NumberAnimation {
+                                        duration: 300
+                                    }
+
+                                }
+
                             }
 
                             Item {
                                 anchors.fill: parent
-                                visible: wsDelegate.iconValid
+                                visible: wsDelegate.iconReady
                                 anchors.margins: isFocused ? 4 : 6
-                                Behavior on anchors.margins { NumberAnimation { duration: 300 } }
 
                                 Image {
                                     id: dynamicIcon
+
                                     anchors.fill: parent
-                                    source: {
-                                        if (wsDelegate.resolvedIconId.startsWith("file://"))
-                                            return wsDelegate.resolvedIconId;
-                                        else if (wsDelegate.resolvedIconId !== "")
-                                            return "image://icon/" + wsDelegate.resolvedIconId;
-                                        else
-                                            return "";
-                                    }
-                                    sourceSize: Qt.size(48, 48)
+                                    source: wsDelegate.iconSource
+                                    sourceSize: Qt.size(64, 64)
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
+                                    asynchronous: true
+                                    // Laden fehlgeschlagen -> naechster Kandidat
                                     onStatusChanged: {
-                                        if (status === Image.Ready) {
-                                            wsDelegate.iconValid = true;
-                                        } else if (status === Image.Error) {
-                                            var src = source.toString();
-                                            if (src.includes("librarycache") && !src.includes("/logo.png") && !src.includes("/header.jpg") && !src.includes("image://")) {
-                                                var steamPath = workspaceWidget.safeSteamThemeIcon("steam");
-                                                if (steamPath) {
-                                                    source = steamPath;
-                                                } else {
-                                                    wsDelegate.iconValid = false;
-                                                }
-                                            } else {
-                                                wsDelegate.iconValid = false;
-                                            }
-                                        }
+                                        if (status === Image.Error)
+                                            wsDelegate.candIdx++;
+
                                     }
                                 }
 
                                 Desaturate {
                                     anchors.fill: dynamicIcon
                                     source: dynamicIcon
-                                    desaturation: isFocused ? 0.0 : 1.0
-                                    opacity: isFocused ? 1.0 : 0.5
+                                    desaturation: isFocused ? 0 : 1
+                                    opacity: isFocused ? 1 : 0.5
                                 }
+
+                                Behavior on anchors.margins {
+                                    NumberAnimation {
+                                        duration: 300
+                                    }
+
+                                }
+
                             }
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 300
+                                }
+
+                            }
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: 300
+                                }
+
+                            }
+
                         }
 
                         // Click-Handler mit hohem z-Index, damit nichts
-                        // darüberliegendes den Klick abfängt.
+                        // darueberliegendes den Klick abfaengt.
                         MouseArea {
                             anchors.fill: parent
                             z: 100
@@ -295,7 +421,6 @@ Item {
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                             cursorShape: Qt.PointingHandCursor
                             onClicked: (mouse) => {
-                                console.log("WS clicked:", modelData.id, "button:", mouse.button);
                                 if (mouse.button === Qt.LeftButton) {
                                     workspaceWidget.focusWorkspace(modelData.id);
                                     mouse.accepted = true;
@@ -306,13 +431,22 @@ Item {
                             }
                         }
 
-                        onResolvedIconIdChanged: iconValid = false
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 300
+                            }
+
+                        }
+
                     }
+
                 }
+
             }
 
             Item {
                 id: tabletSeparator
+
                 width: 13
                 height: 40
 
@@ -322,26 +456,27 @@ Item {
                     height: 20
                     color: WalColors.withAlpha(WalColors.color2, 0.35)
                 }
+
             }
 
             Item {
                 id: tabletItem
+
                 width: 35 + (workspaceWidget.tabletWorkspaceFocused ? 20 : 0)
                 height: 40
-                Behavior on width { NumberAnimation { duration: 300 } }
 
                 Rectangle {
                     id: tabletBg
+
                     anchors.centerIn: parent
                     width: workspaceWidget.tabletWorkspaceFocused ? 36 : 35
                     height: workspaceWidget.tabletWorkspaceFocused ? 36 : 35
                     radius: 11
                     color: workspaceWidget.tabletWorkspaceFocused ? "#33ffffff" : "transparent"
-                    Behavior on width { NumberAnimation { duration: 300 } }
-                    Behavior on height { NumberAnimation { duration: 300 } }
 
                     Image {
                         id: tabletIcon
+
                         anchors.fill: parent
                         anchors.margins: workspaceWidget.tabletWorkspaceFocused ? 4 : 6
                         source: workspaceWidget.tabletIconPath
@@ -349,9 +484,22 @@ Item {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         asynchronous: true
-                        opacity: workspaceWidget.tabletWorkspaceFocused ? 1.0 : 0.55
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
-                        Behavior on anchors.margins { NumberAnimation { duration: 300 } }
+                        opacity: workspaceWidget.tabletWorkspaceFocused ? 1 : 0.55
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 200
+                            }
+
+                        }
+
+                        Behavior on anchors.margins {
+                            NumberAnimation {
+                                duration: 300
+                            }
+
+                        }
+
                     }
 
                     Text {
@@ -362,9 +510,24 @@ Item {
                         font.pixelSize: 16
                         color: workspaceWidget.tabletWorkspaceFocused ? "white" : WalColors.withAlpha(WalColors.color2, 0.6)
                     }
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 300
+                        }
+
+                    }
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 300
+                        }
+
+                    }
+
                 }
 
-                // Click-Handler für das Tablet-Icon
+                // Click-Handler fuer das Tablet-Icon
                 MouseArea {
                     anchors.fill: parent
                     z: 100
@@ -372,7 +535,6 @@ Item {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
                     onClicked: (mouse) => {
-                        console.log("Tablet clicked, button:", mouse.button);
                         if (mouse.button === Qt.LeftButton) {
                             workspaceWidget.focusWorkspace(workspaceWidget.tabletWorkspaceId);
                             mouse.accepted = true;
@@ -382,7 +544,18 @@ Item {
                         }
                     }
                 }
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: 300
+                    }
+
+                }
+
             }
+
         }
+
     }
+
 }
