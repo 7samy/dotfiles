@@ -5,7 +5,7 @@ import QtQuick
 Item {
     id: root
 
-    // ───────────────────────── Layout-Konstanten ─────────────────────────
+    // ───────────────────────── Layout constants ─────────────────────────
     readonly property real pad: 16
     readonly property real bleed: 8
     readonly property real cardSize: 120
@@ -18,9 +18,9 @@ Item {
     readonly property real panelWidth: Math.min(680, width - 48)
     readonly property real innerWidth: panelWidth - 2 * pad
     readonly property string mono: "JetBrainsMono Nerd Font"
-    // ───────────────────────── Zustand ─────────────────────────
+    // ───────────────────────── State ─────────────────────────
     property string filter: "all"
-    property string zone: "text" // "text" | "images"
+    property string zone: "text"
     property int textIndex: 0
     property int imageIndex: 0
     property string flashId: ""
@@ -30,7 +30,7 @@ Item {
     property real shown: 0
     property real lastMouseX: -1
     property real lastMouseY: -1
-    // ───────────────────────── Daten ─────────────────────────
+    // ───────────────────────── Data ─────────────────────────
     readonly property string needle: PickerManager.searchText.toLowerCase()
     readonly property var entries: ClipboardState.entries
     readonly property var allImages: entries.filter((e) => {
@@ -45,13 +45,13 @@ Item {
     readonly property real textTotal: allTexts.length * rowStride
     readonly property var filterModel: [{
         "key": "all",
-        "label": "Alle"
+        "label": "All"
     }, {
         "key": "text",
         "label": "Text"
     }, {
         "key": "images",
-        "label": "Bilder"
+        "label": "Images"
     }]
 
     function matches(e) {
@@ -62,7 +62,7 @@ Item {
         searchInput.forceActiveFocus();
     }
 
-    // ───────────────────────── Auswahl ─────────────────────────
+    // ───────────────────────── Selection ─────────────────────────
     function normalizeZone() {
         if (zone === "images" && !showImages)
             zone = "text";
@@ -83,7 +83,6 @@ Item {
         imageIndex = 0;
         textList.contentY = 0;
         strip.contentX = -strip.leftMargin;
-        // Startet dort, wo der neueste Eintrag liegt.
         const fi = allImages.length > 0 ? entries.findIndex((e) => {
             return e.id === allImages[0].id;
         }) : 1e+09;
@@ -121,7 +120,7 @@ Item {
             imageIndex = idx;
     }
 
-    // ───────────────────────── Scrollen (animiert) ─────────────────────────
+    // ───────────────────────── Scrolling (animated) ─────────────────────────
     function animateListTo(y) {
         const maxY = Math.max(0, textTotal - rowGap - textList.height);
         listScroll.stop();
@@ -199,7 +198,7 @@ Item {
         }
     }
 
-    // ───────────────────────── Aktionen ─────────────────────────
+    // ───────────────────────── Actions ─────────────────────────
     function currentEntry() {
         if (zone === "images" && showImages)
             return allImages[imageIndex];
@@ -278,7 +277,7 @@ Item {
 
     }
 
-    // ───────────────────────── Timer & Animationen ─────────────────────────
+    // ───────────────────────── Timers & animations ─────────────────────────
     Timer {
         id: introTimer
 
@@ -290,7 +289,7 @@ Item {
     Timer {
         id: closeTimer
 
-        // Nur noch Feedback-Dauer: nach dem Kopieren bleibt der Picker offen.
+        // Feedback duration only: after copying, the picker stays open.
         interval: 900
         onTriggered: root.flashId = ""
     }
@@ -349,7 +348,7 @@ Item {
         target: PickerManager
     }
 
-    // Klick neben das Panel schliesst den Picker.
+    // Click outside the panel closes the picker.
     MouseArea {
         anchors.fill: parent
         onClicked: PickerManager.close()
@@ -367,7 +366,7 @@ Item {
         scale: 0.95 + 0.05 * root.shown
         transformOrigin: Item.Top
 
-        // weicher Schatten aus gestapelten Rechtecken (guenstiger als DropShadow)
+        // Soft shadow from stacked rectangles (cheaper than DropShadow)
         Repeater {
             model: 5
 
@@ -393,7 +392,7 @@ Item {
             border.color: WalColors.withAlpha(WalColors.color7, 0.09)
         }
 
-        // schluckt Klicks auf dem Panel, damit der Backdrop nicht schliesst
+        // Swallows clicks on the panel so the backdrop doesn't close it.
         MouseArea {
             anchors.fill: parent
         }
@@ -406,7 +405,7 @@ Item {
             width: root.innerWidth
             spacing: 0
 
-            // ───────────── Header: Suche + Filter ─────────────
+            // ───────────── Header: search + filter ─────────────
             Item {
                 id: header
 
@@ -524,7 +523,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 48
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Zwischenablage durchsuchen…"
+                        text: "Search clipboard…"
                         font.family: root.mono
                         font.pixelSize: 14
                         color: WalColors.withAlpha(WalColors.color7, 0.3)
@@ -539,7 +538,7 @@ Item {
 
                     }
 
-                    // Clear-Button
+                    // Clear button
                     Rectangle {
                         anchors.right: parent.right
                         anchors.rightMargin: 12
@@ -610,7 +609,7 @@ Item {
 
                 }
 
-                // iOS-Segmented-Control mit federnder Pille
+                // iOS-style segmented control with springy pill
                 Rectangle {
                     id: segmented
 
@@ -691,7 +690,7 @@ Item {
 
             }
 
-            // ───────────── Bilder-Leiste ─────────────
+            // ───────────── Image strip ─────────────
             Item {
                 id: imgSection
 
@@ -778,7 +777,7 @@ Item {
                             opacity: card.dying ? 0 : 1
                             scale: (card.selected ? 1.05 : 1) * (cardMouse.pressed ? 0.96 : 1)
 
-                            // Platzhalter, bis das Bild geladen ist
+                            // Placeholder until image is loaded
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 18
@@ -839,7 +838,7 @@ Item {
 
                             }
 
-                            // Auswahlring
+                            // Selection ring
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 18
@@ -857,7 +856,7 @@ Item {
 
                             }
 
-                            // Meta-Pille (Aufloesung · Groesse)
+                            // Meta pill (resolution · size)
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.bottom: parent.bottom
@@ -888,7 +887,7 @@ Item {
 
                             }
 
-                            // Flash beim Kopieren
+                            // Copy flash
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 18
@@ -1008,7 +1007,7 @@ Item {
 
             }
 
-            // ───────────── Text-Liste ─────────────
+            // ───────────── Text list ─────────────
             Item {
                 id: textSection
 
@@ -1031,7 +1030,7 @@ Item {
                     highlightFollowsCurrentItem: false
                     onMovementStarted: listScroll.stop()
 
-                    // Eine einzige Auswahl-Pille, die per Feder zur aktuellen Zeile gleitet.
+                    // Single selection pill that slides to current row via spring.
                     highlight: Rectangle {
                         y: root.textIndex * root.rowStride
                         width: textList.width
@@ -1118,7 +1117,7 @@ Item {
 
                             }
 
-                            // Typ-Badge: Farbfeld, Link oder Text
+                            // Type badge: color swatch, link, or text
                             Rectangle {
                                 id: badge
 
@@ -1220,7 +1219,7 @@ Item {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: row.flashing
-                                    text: "Kopiert ✓"
+                                    text: "Copied ✓"
                                     font.family: root.mono
                                     font.pixelSize: 11
                                     font.bold: true
@@ -1277,7 +1276,7 @@ Item {
 
                 }
 
-                // Fade am unteren Rand, solange noch mehr Zeilen folgen
+                // Fade at bottom while more rows follow
                 Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
@@ -1322,7 +1321,7 @@ Item {
 
             }
 
-            // ───────────── Leerzustand ─────────────
+            // ───────────── Empty state ─────────────
             Item {
                 id: emptyState
 
@@ -1345,7 +1344,7 @@ Item {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: PickerManager.searchText === "" ? "Zwischenablage ist leer" : "Nichts gefunden"
+                        text: PickerManager.searchText === "" ? "Clipboard is empty" : "Nothing found"
                         font.family: root.mono
                         font.pixelSize: 12
                         color: WalColors.withAlpha(WalColors.color7, 0.38)
@@ -1382,7 +1381,7 @@ Item {
                     y: 14
                     height: 18
                     verticalAlignment: Text.AlignVCenter
-                    text: root.confirmWipe ? "Nochmal klicken zum Löschen" : "Alles löschen"
+                    text: root.confirmWipe ? "Click again to clear" : "Clear all"
                     font.family: root.mono
                     font.pixelSize: 10
                     color: root.confirmWipe ? WalColors.color1 : WalColors.withAlpha(WalColors.color7, wipeArea.containsMouse ? 0.75 : 0.32)
@@ -1422,7 +1421,7 @@ Item {
 
     }
 
-    // ───────────────────────── Wiederverwendbare Bausteine ─────────────────────────
+    // ───────────────────────── Reusable components ─────────────────────────
     component Smooth: NumberAnimation {
         duration: 320
         easing.type: Easing.BezierSpline

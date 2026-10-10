@@ -19,6 +19,7 @@ hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exec_cmd("qs"))
 hl.bind(mainMod .. " + M", hl.dsp.global("quickshell:toggle_music_picker"))
 hl.bind(mainMod .. " + G", hl.dsp.global("quickshell:toggle_wallpaper"))
 hl.bind(mainMod .. " + SPACE", hl.dsp.global("quickshell:toggle_launcher"))
+hl.bind(mainMod .. " + V", hl.dsp.global("quickshell:toggle_clipboard"))
 
 -- Benutzerdefinierte Skripte ausführen
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("/home/azu/.config/hypr/scripts/filemanager.sh"))

@@ -7,25 +7,17 @@ Singleton {
     id: root
 
     readonly property string tempDir: "/tmp/qs-clip-images"
-    // Wie viele Eintraege der Picker maximal zeigt (Performance + /tmp-Platz)
     readonly property int imageLimit: 40
     readonly property int textLimit: 300
     readonly property bool pickerVisible: PickerManager.isOpen("clipboard")
-    // Eintrag: { id, preview, hay, label, isImage, ext, mime, path, kind, meta }
-    //   kind: "image" | "text" | "url" | "color"
     property var entries: []
     property bool loaded: false
     property string signature: ""
-    // id -> true, sobald die Bilddatei dekodiert auf der Platte liegt.
-    // Wird bewusst NICHT im entries-Array gehalten: So bleibt das Listen-Model
-    // stabil und die Delegates behalten ihren Zustand, waehrend Bilder nachladen.
     property var readyIds: ({
     })
     property var attempted: ({
     })
     property bool decodeQueued: false
-    // Ein einziger bash-Prozess dekodiert alle fehlenden Bilder nacheinander
-    // und meldet jede fertige ID per stdout.
     readonly property string decodeScript: 'dir="$1"; shift; mkdir -p "$dir"; for spec in "$@"; do id="${spec%%:*}"; ext="${spec##*:}"; f="$dir/$id.$ext"; if [ -s "$f" ] || { cliphist decode "$id" > "$f" 2>/dev/null && [ -s "$f" ]; }; then echo "$id"; else rm -f "$f"; fi; done'
 
     function refresh() {
@@ -34,9 +26,7 @@ Singleton {
 
     }
 
-    // ==== Aktionen ====
     function copyEntry(e) {
-        // Bilder mit explizitem MIME-Type, damit wl-copy nicht raten muss.
         Quickshell.execDetached(["bash", "-c", 'if [ -n "$2" ]; then cliphist decode "$1" | wl-copy -t "$2"; else cliphist decode "$1" | wl-copy; fi', "qs-clip", String(e.id), e.mime || ""]);
     }
 
@@ -45,7 +35,6 @@ Singleton {
     }
 
     function deleteEntry(id) {
-        // Optimistisch sofort aus der Liste nehmen ...
         entries = entries.filter((e) => {
             return e.id !== id;
         });
@@ -56,7 +45,6 @@ Singleton {
         }, readyIds);
         delete r[id];
         readyIds = r;
-        // ... `cliphist delete` liest die Zeile aus stdin (nicht als Argument!).
         Quickshell.execDetached(["bash", "-c", 'printf "%s\\tx\\n" "$1" | cliphist delete; rm -f "$2"/"$1".*', "qs-clip", String(id), tempDir]);
     }
 
@@ -70,7 +58,6 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", 'cliphist wipe; rm -rf "$1"', "qs-clip", tempDir]);
     }
 
-    // ==== Parsing ====
     function detectExt(preview) {
         if (!preview.startsWith("[[ binary data"))
             return "";
@@ -155,8 +142,6 @@ Singleton {
                 });
             }
         }
-        // Nur neu zuweisen, wenn sich wirklich etwas geaendert hat -> kein
-        // Model-Reset, keine flackernden Delegates beim erneuten Oeffnen.
         const sig = parsed.map((e) => {
             return e.id;
         }).join(",");
@@ -168,7 +153,6 @@ Singleton {
         startDecode();
     }
 
-    // ==== Bild-Dekodierung ====
     function startDecode() {
         const specs = [];
         let seen = 0;
@@ -206,7 +190,6 @@ Singleton {
         readyIds = c;
     }
 
-    // ==== Kompatibilitaet zum PickerManager ====
     function toggle() {
         PickerManager.toggle("clipboard");
     }
@@ -227,7 +210,10 @@ Singleton {
         command: ["cliphist", "list"]
 
         stdout: StdioCollector {
-            onStreamFinished: root.parseList(text)
+            onStreamFinished: {
+                console.log("[ClipboardState] listProc finished, bytes:", text.length);
+                root.parseList(text);
+            }
         }
 
     }
@@ -250,7 +236,7 @@ Singleton {
 
     }
 
-    // Beim Oeffnen sofort neu einlesen (laeuft parallel zum Aufbau des Pickers).
+    // Refresh einmal beim Öffnen
     Connections {
         function onActivePickerChanged() {
             if (PickerManager.activePicker === "clipboard")
@@ -259,6 +245,17 @@ Singleton {
         }
 
         target: PickerManager
+    }
+
+    // NEU: Refresh laufend alle 500ms, solange Picker offen ist.
+    // cliphist hat keinen Watch-Mechanismus, deshalb pollen wir.
+    Timer {
+        id: liveRefreshTimer
+
+        interval: 500
+        running: root.pickerVisible
+        repeat: true
+        onTriggered: root.refresh()
     }
 
 }
