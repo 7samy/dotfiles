@@ -1,23 +1,11 @@
 import QtQuick
 import Quickshell
 
+// Uhr in der Bar. Ein Linksklick sendet `clicked()`; MainBar verwandelt sich dann in den Kalender.
 Item {
     id: clockRoot
 
-    // X-Zentrum der Uhr in Bildschirmkoordinaten – wird von CalendarDropdown
-    // gelesen, um sich darunter zu zentrieren.
-    readonly property real globalCenterX: windowX(clockRoot) + width / 2
-    property bool hideClock: false
-
-    function windowX(item) {
-        var x = 0;
-        var it = item;
-        while (it && it.parent) {
-            x += it.x;
-            it = it.parent;
-        }
-        return x;
-    }
+    signal clicked()
 
     function updateTime() {
         timeText.text = Qt.formatDateTime(new Date(), "hh:mm AP");
@@ -27,13 +15,23 @@ Item {
     implicitWidth: clockColumn.implicitWidth
     implicitHeight: parent ? parent.height : 40
     Component.onCompleted: updateTime()
-    opacity: hideClock ? 0 : 1
 
-    // Position live an CalendarState melden
-    Binding {
-        target: CalendarState
-        property: "iconCenterX"
-        value: clockRoot.globalCenterX
+    // dezente Hover-Pille als Hinweis, dass die Uhr klickbar ist
+    Rectangle {
+        anchors.centerIn: parent
+        width: clockColumn.implicitWidth + 24
+        height: 32
+        radius: height / 2
+        color: WalColors.withAlpha(WalColors.color4, clockHover.hovered ? 0.07 : 0)
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     Column {
@@ -73,57 +71,15 @@ Item {
         onTriggered: clockRoot.updateTime()
     }
 
-    Timer {
-        id: openDelay
-
-        interval: 120
-        repeat: false
-        onTriggered: CalendarState.dropdownOpen = true
-    }
-
-    Timer {
-        id: showDelay
-
-        interval: 220
-        repeat: false
-        onTriggered: clockRoot.hideClock = false
-    }
-
-    Connections {
-        function onDropdownOpenChanged() {
-            if (CalendarState.dropdownOpen) {
-                showDelay.stop();
-                clockRoot.hideClock = true;
-            } else {
-                showDelay.restart();
-            }
-        }
-
-        target: CalendarState
-    }
-
     HoverHandler {
-        onHoveredChanged: {
-            CalendarState.buttonHovered = hovered;
-            if (hovered) {
-                clockRoot.hideClock = true;
-                openDelay.restart();
-            } else {
-                openDelay.stop();
-                if (!CalendarState.dropdownOpen)
-                    showDelay.restart();
+        id: clockHover
 
-            }
-            CalendarState.updateHoverTimer();
-        }
+        cursorShape: Qt.PointingHandCursor
     }
 
-    Behavior on opacity {
-        NumberAnimation {
-            duration: 180
-            easing.type: Easing.InOutCubic
-        }
-
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        onTapped: clockRoot.clicked()
     }
 
 }

@@ -6,7 +6,6 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    // Wenn false: keine eigene Hover-Box (Sliding-Pill im Parent uebernimmt).
     property bool hoverBoxEnabled: true
     readonly property real globalCenterX: windowX(root) + width / 2
 
@@ -28,12 +27,6 @@ Rectangle {
         target: AudioState
         property: "iconCenterX"
         value: root.globalCenterX
-    }
-
-    Process {
-        id: muteProcess
-
-        command: ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]
     }
 
     Rectangle {
@@ -83,8 +76,9 @@ Rectangle {
             if (mouse.button === Qt.LeftButton) {
                 MusicPickerState.toggle();
             } else if (mouse.button === Qt.RightButton) {
-                AudioState.muted = !AudioState.muted;
-                muteProcess.running = true;
+                // Dropdown schliessen, Volume-Slider oeffnen
+                AudioState.dropdownOpen = false;
+                VolumeSliderState.toggle();
             }
         }
         onEntered: {

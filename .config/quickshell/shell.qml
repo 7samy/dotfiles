@@ -62,6 +62,8 @@ ShellRoot {
                 console.log("Variant delegate created, modelData:", modelData && modelData.name ? modelData.name : modelData);
             }
 
+            // Der Kalender steckt jetzt in der MainBar (Bar verwandelt sich in den Kalender),
+            // CalendarDropdown wird nicht mehr instanziiert.
             MainBar {
                 screen: modelData
             }
@@ -82,7 +84,8 @@ ShellRoot {
                 screen: modelData
             }
 
-            CalendarDropdown {
+            // Volume-Slider-Popup unten am Bildschirmrand (Rechtsklick aufs Audio-Icon)
+            VolumeSliderPopup {
                 screen: modelData
             }
 
