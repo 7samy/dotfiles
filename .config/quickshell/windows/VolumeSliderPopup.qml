@@ -16,7 +16,6 @@ PanelWindow {
     readonly property real baseHeight: 60
     readonly property real cornerR: 18
     readonly property real sideMargin: 32
-    // ---- Mixer-Geometrie ----
     readonly property real rowHeight: 56
     readonly property real headerHeight: 34
     readonly property real mixerPadding: 10
@@ -24,9 +23,7 @@ PanelWindow {
     readonly property int streamsMaxVisible: 5
     readonly property int streamCount: streamModel.count
     readonly property real listTarget: streamCount === 0 ? emptyHeight : Math.min(streamCount, streamsMaxVisible) * rowHeight
-    // Feste Fensterhoehe: Basis + groesstmoeglicher Mixer + Luft fuer Overshoot/Slide
     readonly property real windowHeight: baseHeight + headerHeight + streamsMaxVisible * rowHeight + mixerPadding + 32
-    // ---- Animierte Werte ----
     property real shown: VolumeSliderState.open ? 1 : 0
     property real expandT: VolumeSliderState.expanded ? 1 : 0
     property real listHeight: listTarget
@@ -34,14 +31,16 @@ PanelWindow {
     readonly property real mixerHeight: Math.max(0, expandT * mixerContentHeight)
     readonly property real panelHeight: baseHeight + mixerHeight
 
-    // Haelt das ListModel in-place synchron mit VolumeSliderState.streams
+    // Haelt das ListModel in-place synchron mit VolumeSliderState.streams.
+    // Jetzt gruppiert: pro App ein Eintrag, `skey` als stabile ID.
     function syncStreams() {
         const arr = VolumeSliderState.streams;
+        // 1) Entfernen was nicht mehr da ist
         for (let i = streamModel.count - 1; i >= 0; i--) {
-            const sid = streamModel.get(i).sid;
+            const sk = streamModel.get(i).skey;
             let keep = false;
             for (let k = 0; k < arr.length; k++) {
-                if (arr[k].id === sid) {
+                if (arr[k].key === sk) {
                     keep = true;
                     break;
                 }
@@ -50,18 +49,19 @@ PanelWindow {
                 streamModel.remove(i);
 
         }
+        // 2) Einfuegen/Aktualisieren in Reihenfolge
         for (let i = 0; i < arr.length; i++) {
             const s = arr[i];
             let at = -1;
             for (let j = i; j < streamModel.count; j++) {
-                if (streamModel.get(j).sid === s.id) {
+                if (streamModel.get(j).skey === s.key) {
                     at = j;
                     break;
                 }
             }
             if (at === -1) {
                 streamModel.insert(i, {
-                    "sid": s.id,
+                    "skey": s.key,
                     "name": s.name,
                     "subtitle": s.subtitle,
                     "icon": s.icon,
@@ -235,8 +235,6 @@ PanelWindow {
             spacing: 0
 
             // ---------- Mixer (nur wenn expanded) ----------
-            // Der Inhalt haengt unten am Container: Die Panel-Oberkante faehrt
-            // wie ein Vorhang nach oben und deckt ihn auf, nichts rutscht mit.
             Item {
                 id: mixer
 
@@ -253,7 +251,6 @@ PanelWindow {
                     anchors.bottom: parent.bottom
                     opacity: Math.max(0, Math.min(1, (popup.expandT - 0.2) / 0.8))
 
-                    // ---- Header ----
                     Item {
                         id: mixerHeader
 
@@ -318,7 +315,6 @@ PanelWindow {
 
                     }
 
-                    // ---- Stream-Liste ----
                     ListView {
                         id: streamList
 
@@ -387,7 +383,7 @@ PanelWindow {
                             id: row
 
                             required property int index
-                            required property int sid
+                            required property string skey
                             required property string name
                             required property string subtitle
                             required property string icon
@@ -402,7 +398,6 @@ PanelWindow {
                             width: ListView.view ? ListView.view.width : 0
                             height: popup.rowHeight
 
-                            // Dezente Hover-Pille statt fester Karte
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.topMargin: 2
@@ -423,7 +418,7 @@ PanelWindow {
                                 id: cardHover
                             }
 
-                            // ---- Ring-Icon: Lautstaerke als Bogen, Klick = Mute ----
+                            // ---- Ring-Icon ----
                             Item {
                                 id: ring
 
@@ -439,7 +434,6 @@ PanelWindow {
                                 height: size
                                 scale: ringMouse.pressed ? 0.94 : (ringMouse.containsMouse ? 1.06 : 1)
 
-                                // Spur
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: width / 2
@@ -448,7 +442,6 @@ PanelWindow {
                                     border.color: WalColors.withAlpha(WalColors.color7, 0.08)
                                 }
 
-                                // Fortschrittsbogen
                                 Shape {
                                     anchors.fill: parent
                                     antialiasing: true
@@ -474,7 +467,6 @@ PanelWindow {
 
                                 }
 
-                                // Leuchtpunkt am Bogenende
                                 Rectangle {
                                     visible: row.shownV > 0.02 && row.shownV < 0.995 && !row.muted
                                     width: 7
@@ -487,7 +479,6 @@ PanelWindow {
                                     y: ring.size / 2 + ring.r * Math.sin(ring.tipRad) - height / 2
                                 }
 
-                                // App-Icon im Kern
                                 Rectangle {
                                     id: tile
 
@@ -531,7 +522,6 @@ PanelWindow {
 
                                 }
 
-                                // Mute-Badge: bei Mute immer, sonst bei Hover
                                 Rectangle {
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
@@ -580,7 +570,8 @@ PanelWindow {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        VolumeSliderState.toggleStreamMute(row.sid);
+                                        // Gruppen-Key statt einzelner Stream-ID
+                                        VolumeSliderState.toggleStreamMute(row.skey);
                                         VolumeSliderState.restartAutoClose();
                                     }
                                 }
@@ -658,7 +649,6 @@ PanelWindow {
 
                                 }
 
-                                // Ansteigende Balken (wie ein Lautstaerke-Icon), links nach rechts gefuellt
                                 Item {
                                     id: sl
 
@@ -700,7 +690,8 @@ PanelWindow {
                                         function update(me) {
                                             const v = Math.max(0, Math.min(me.x / width, 1));
                                             row.localV = v;
-                                            VolumeSliderState.setStreamVolume(row.sid, v);
+                                            // Gruppen-Key statt Stream-ID
+                                            VolumeSliderState.setStreamVolume(row.skey, v);
                                             VolumeSliderState.restartAutoClose();
                                         }
 
@@ -710,7 +701,8 @@ PanelWindow {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onPressed: (mouse) => {
-                                            VolumeSliderState.draggingStreamId = row.sid;
+                                            // Gruppen-Key zum Drag-Schutz
+                                            VolumeSliderState.draggingGroupKey = row.skey;
                                             update(mouse);
                                         }
                                         onPositionChanged: (mouse) => {
@@ -721,18 +713,18 @@ PanelWindow {
                                         }
                                         onExited: sl.hoverIdx = -1
                                         onReleased: {
-                                            if (VolumeSliderState.draggingStreamId === row.sid)
-                                                VolumeSliderState.draggingStreamId = -1;
+                                            if (VolumeSliderState.draggingGroupKey === row.skey)
+                                                VolumeSliderState.draggingGroupKey = "";
 
                                         }
                                         onCanceled: {
-                                            if (VolumeSliderState.draggingStreamId === row.sid)
-                                                VolumeSliderState.draggingStreamId = -1;
+                                            if (VolumeSliderState.draggingGroupKey === row.skey)
+                                                VolumeSliderState.draggingGroupKey = "";
 
                                         }
                                         onWheel: (wheel) => {
                                             const d = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
-                                            VolumeSliderState.setStreamVolume(row.sid, Math.max(0, Math.min(1, row.volume + d)));
+                                            VolumeSliderState.setStreamVolume(row.skey, Math.max(0, Math.min(1, row.volume + d)));
                                             VolumeSliderState.restartAutoClose();
                                         }
                                     }
@@ -752,7 +744,6 @@ PanelWindow {
 
                     }
 
-                    // ---- Leerer Zustand ----
                     Column {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: mixerHeader.bottom
@@ -786,7 +777,6 @@ PanelWindow {
 
                     }
 
-                    // ---- Trenner zur Top-Row ----
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -816,7 +806,6 @@ PanelWindow {
                     onRightClicked: VolumeSliderState.toggleExpanded()
                 }
 
-                // Slider (System-Volume)
                 Item {
                     id: sliderArea
 
@@ -992,7 +981,6 @@ PanelWindow {
 
                 }
 
-                // Prozent rechts
                 Item {
                     id: percentLabel
 
@@ -1027,9 +1015,6 @@ PanelWindow {
 
         }
 
-        // Schmaler Streifen ganz unten: liegt genau ueber der Trigger-Zone.
-        // Da das offene Popup die Trigger-Zone in der Mitte verdeckt, schliesst
-        // ein erneuter Klick hier das Popup (wie ein Toggle).
         Item {
             id: closeStrip
 
@@ -1063,7 +1048,6 @@ PanelWindow {
 
     }
 
-    // Nur die Form selbst faengt Eingaben ab
     mask: Region {
         item: panelBody
     }
@@ -1076,17 +1060,15 @@ PanelWindow {
 
     }
 
-    // Aufklappen mit leichtem Overshoot, Zuklappen weich ohne Nachschwingen
     Behavior on expandT {
         NumberAnimation {
             duration: VolumeSliderState.expanded ? 460 : 320
-            easing.type: VolumeSliderState.expanded ? Easing.OutBack : Easing.InOutCubic
+            easing.type: Easing.expanded ? Easing.OutBack : Easing.InOutCubic
             easing.overshoot: 0.9
         }
 
     }
 
-    // Hoehe der Liste folgt der Stream-Anzahl weich
     Behavior on listHeight {
         NumberAnimation {
             duration: 320

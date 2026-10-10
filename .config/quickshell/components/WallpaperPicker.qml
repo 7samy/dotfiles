@@ -8,7 +8,6 @@ import Quickshell.Io
 Item {
     id: root
 
-    // Wandert aus dem State, nicht mehr aus eigenem Process
     property var allWallpapers: WallpaperPickerState.allWallpapers
     property var filteredWallpapers: allWallpapers.filter((w) => {
         return w.name.toLowerCase().includes(PickerManager.searchText.toLowerCase());
@@ -28,15 +27,13 @@ Item {
     function setWallpaper(url) {
         let path = url.toString().replace(/^file:\/\//, "");
         path = decodeURIComponent(path);
-        let cmd = `awww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /usr/bin/killall -SIGUSR1 nvim; spicetify apply --no-restart; nohup /home/azu/.config/hypr/scripts/wallpaper-spotify.sh "${path}" >/dev/null 2>&1 & disown`;
+        let cmd = `awww img "${path}" --transition-type simple --transition-duration 0.8 --transition-fps 60 && wal -n -i "${path}" && wpg -s "${path}"; /home/azu/.config/wal/gen-obsidian-wal.sh "/home/azu/Documents/日本語/日本語" >/dev/null 2>&1; /usr/bin/killall -SIGUSR1 nvim; spicetify apply --no-restart; nohup /home/azu/.config/hypr/scripts/wallpaper-spotify.sh "${path}" >/dev/null 2>&1 & disown`;
         wallpaperSetter.command = ["sh", "-c", cmd];
         wallpaperSetter.running = true;
         PickerManager.close();
     }
 
     Component.onCompleted: {
-        // Sicherstellen, dass die Liste geladen ist (falls der Picker
-        // als erstes geoeffnet wird und der Singleton noch nichts hat)
         WallpaperPickerState.loadWallpapers();
     }
     onFilteredWallpapersChanged: grid.currentIndex = 0

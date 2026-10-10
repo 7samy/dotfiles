@@ -12,14 +12,13 @@ QtObject {
     // ==== System-Volume (0..1) ====
     property real systemVolume: 0
     property bool systemMuted: false
-    // ==== Aktive Audio-Streams ====
-    // Jeder: { id, name, subtitle, icon, volume, muted }
+    // ==== Aktive Audio-Streams (nach App gruppiert) ====
+    // Jeder: { key, name, subtitle, icon, volume, muted, ids: [int] }
     property var streams: []
-    // Stream, der gerade per Drag veraendert wird (Poll darf ihn nicht ueberschreiben)
-    property int draggingStreamId: -1
+    // Key der Gruppe, die gerade gezogen wird (Poll darf sie nicht ueberschreiben)
+    property string draggingGroupKey: ""
     property var _pendingStreamVol: null
     property var _pendingSystemVol: null
-    // Eigene Icons als Fallback (Pfade relativ zu resources/icons)
     readonly property var localIcons: ({
         "firefox": "firefox.svg",
         "zen": "zen-browser.png",
@@ -36,7 +35,6 @@ QtObject {
     property Timer autoCloseTimer
     property Timer pollTimer
     property Timer streamsRefreshTimer
-    // ==== Prozesse ====
     property Process getProc
     property Process setProc
     property Process muteProc
@@ -45,7 +43,6 @@ QtObject {
     property Process muteStreamProc
 
     // ==== Icon-Aufloesung ====
-    // Reihenfolge: Icon-Theme -> Desktop-Entry -> eigene Icons -> "" (Popup zeigt Buchstaben)
     function resolveIcon(props) {
         const cands = [];
         const push = (s) => {
@@ -101,6 +98,24 @@ QtObject {
         return "";
     }
 
+    // ==== Gruppen-Key fuer einen sink-input ====
+    // Alle Streams derselben App landen in einer Gruppe.
+    function groupKeyFor(props) {
+        const name = (props["application.name"] || "").toLowerCase().trim();
+        if (name !== "")
+            return "app:" + name;
+
+        const bin = (props["application.process.binary"] || "").toLowerCase().trim();
+        if (bin !== "")
+            return "bin:" + bin;
+
+        const node = (props["node.name"] || "").toLowerCase().trim();
+        if (node !== "")
+            return "node:" + node;
+
+        return "unknown";
+    }
+
     // ==== Popup oeffnen/schliessen ====
     function toggle() {
         if (open)
@@ -122,7 +137,7 @@ QtObject {
         open = false;
         hovered = false;
         expanded = false;
-        draggingStreamId = -1;
+        draggingGroupKey = "";
         autoCloseTimer.stop();
     }
 
@@ -130,7 +145,6 @@ QtObject {
         autoCloseTimer.restart();
     }
 
-    // ==== Expand toggle ====
     function toggleExpanded() {
         expanded = !expanded;
         if (expanded) {
@@ -139,7 +153,7 @@ QtObject {
         }
     }
 
-    // ==== System-Volume Aktionen ====
+    // ==== System-Volume ====
     function _runSystemVol(v) {
         setProc.command = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", v.toFixed(3)];
         setProc.running = true;
@@ -160,16 +174,20 @@ QtObject {
         muteProc.running = true;
     }
 
-    // ==== Stream-Aktionen ====
-    function _runStreamVol(id, val) {
-        setStreamVolProc.command = ["pactl", "set-sink-input-volume", String(id), Math.round(val * 100) + "%"];
-        setStreamVolProc.running = true;
+    // ==== Stream-Aktionen (arbeiten auf Gruppen) ====
+    function _findGroup(key) {
+        for (let i = 0; i < streams.length; i++) {
+            if (streams[i].key === key)
+                return streams[i];
+
+        }
+        return null;
     }
 
-    function _patchStream(id, patch) {
+    function _patchStream(key, patch) {
         const arr = streams.slice();
         for (let i = 0; i < arr.length; i++) {
-            if (arr[i].id === id) {
+            if (arr[i].key === key) {
                 arr[i] = Object.assign({
                 }, arr[i], patch);
                 break;
@@ -178,37 +196,53 @@ QtObject {
         streams = arr;
     }
 
-    function setStreamVolume(id, val) {
+    // Setzt die Lautstaerke fuer alle Streams einer Gruppe auf einmal.
+    function _runStreamVol(ids, val) {
+        const pct = Math.round(val * 100) + "%";
+        // pactl kennt nur einen Sink-Input pro Aufruf -> bash-Loop.
+        const cmds = ids.map((id) => {
+            return "pactl set-sink-input-volume " + id + " " + pct;
+        }).join("; ");
+        setStreamVolProc.command = ["bash", "-c", cmds];
+        setStreamVolProc.running = true;
+    }
+
+    function setStreamVolume(key, val) {
         const safeVal = Math.max(0, Math.min(val, 1));
-        // Laeuft gerade ein Prozess, merken wir uns nur den letzten Wert,
-        // statt Updates zu verlieren oder Prozesse zu stapeln.
+        const group = _findGroup(key);
+        if (!group)
+            return ;
+
         if (setStreamVolProc.running)
             _pendingStreamVol = {
-            "id": id,
+            "key": key,
             "val": safeVal
         };
         else
-            _runStreamVol(id, safeVal);
-        _patchStream(id, {
+            _runStreamVol(group.ids, safeVal);
+        _patchStream(key, {
             "volume": safeVal
         });
     }
 
-    function toggleStreamMute(id) {
-        let target = null;
-        for (let i = 0; i < streams.length; i++) {
-            if (streams[i].id === id) {
-                target = streams[i];
-                break;
-            }
-        }
-        if (!target)
+    // Toggelt Mute fuer alle Streams einer Gruppe.
+    function _runStreamMute(ids, muteOn) {
+        const arg = muteOn ? "1" : "0";
+        const cmds = ids.map((id) => {
+            return "pactl set-sink-input-mute " + id + " " + arg;
+        }).join("; ");
+        muteStreamProc.command = ["bash", "-c", cmds];
+        muteStreamProc.running = true;
+    }
+
+    function toggleStreamMute(key) {
+        const group = _findGroup(key);
+        if (!group)
             return ;
 
-        const newMuted = !target.muted;
-        muteStreamProc.command = ["pactl", "set-sink-input-mute", String(id), newMuted ? "1" : "0"];
-        muteStreamProc.running = true;
-        _patchStream(id, {
+        const newMuted = !group.muted;
+        _runStreamMute(group.ids, newMuted);
+        _patchStream(key, {
             "muted": newMuted
         });
     }
@@ -249,12 +283,14 @@ QtObject {
             onStreamFinished: {
                 try {
                     const data = JSON.parse(text);
-                    const arr = [];
+                    const groups = {
+                    };
                     for (const item of data) {
                         const props = item.properties || {
                         };
                         const appName = props["application.name"] || props["media.name"] || "Unknown";
                         const mediaName = props["media.name"] || "";
+                        const key = root.groupKeyFor(props);
                         let vol = 0.5;
                         if (item.volume) {
                             const ch = Object.keys(item.volume)[0];
@@ -262,26 +298,64 @@ QtObject {
                                 vol = parseFloat(item.volume[ch].value_percent) / 100;
 
                         }
-                        // Waehrend eines Drags den lokalen Wert behalten
-                        if (item.index === root.draggingStreamId) {
-                            for (const s of root.streams) {
-                                if (s.id === item.index) {
-                                    vol = s.volume;
-                                    break;
-                                }
-                            }
+                        if (!groups[key])
+                            groups[key] = {
+                                "key": key,
+                                "name": appName,
+                                "subtitle": mediaName !== appName ? mediaName : "",
+                                "icon": root.resolveIcon(props),
+                                "ids": [],
+                                "vols": [],
+                                "mutedCount": 0,
+                                "total": 0
+                            };
+
+                        const g = groups[key];
+                        g.ids.push(item.index);
+                        g.vols.push(vol);
+                        g.total += 1;
+                        if (item.mute)
+                            g.mutedCount += 1;
+
+                    }
+                    const arr = [];
+                    for (const k in groups) {
+                        const g = groups[k];
+                        // Durchschnitts-Volume, aber wenn die Gruppe gerade
+                        // gezogen wird, den lokalen Wert behalten.
+                        let avg = 0;
+                        if (g.vols.length > 0) {
+                            for (const v of g.vols) avg += v
+                            avg = avg / g.vols.length;
                         }
+                        if (k === root.draggingGroupKey) {
+                            const existing = root._findGroup(k);
+                            if (existing)
+                                avg = existing.volume;
+
+                        }
+                        // Als "muted" zaehlt nur, wenn ALLE Streams gemutet sind.
+                        const allMuted = g.mutedCount === g.total;
+                        // Subtitle: bei mehreren Streams "N streams" anzeigen.
+                        let subtitle = g.subtitle;
+                        if (g.total > 1)
+                            subtitle = g.total + " streams";
+
                         arr.push({
-                            "id": item.index,
-                            "name": appName,
-                            "subtitle": mediaName !== appName ? mediaName : "",
-                            "icon": root.resolveIcon(props),
-                            "volume": vol,
-                            "muted": item.mute || false
+                            "key": g.key,
+                            "name": g.name,
+                            "subtitle": subtitle,
+                            "icon": g.icon,
+                            "volume": avg,
+                            "muted": allMuted,
+                            "ids": g.ids
                         });
                     }
                     arr.sort((a, b) => {
-                        return a.id - b.id;
+                        if (a.ids.length === 0 || b.ids.length === 0)
+                            return 0;
+
+                        return a.ids[0] - b.ids[0];
                     });
                     root.streams = arr;
                 } catch (e) {
@@ -298,7 +372,10 @@ QtObject {
             if (!running && root._pendingStreamVol !== null) {
                 const p = root._pendingStreamVol;
                 root._pendingStreamVol = null;
-                root._runStreamVol(p.id, p.val);
+                const group = root._findGroup(p.key);
+                if (group)
+                    root._runStreamVol(group.ids, p.val);
+
             }
         }
     }
@@ -310,7 +387,7 @@ QtObject {
     autoCloseTimer: Timer {
         interval: 4000
         onTriggered: {
-            if (!root.hovered && root.draggingStreamId < 0)
+            if (!root.hovered && root.draggingGroupKey === "")
                 root.close();
             else
                 root.restartAutoClose();
@@ -329,8 +406,9 @@ QtObject {
     }
 
     streamsRefreshTimer: Timer {
+        // Pausiert waehrend eines Drags, damit der Slider nicht springt.
         interval: 800
-        running: root.expanded && root.open
+        running: root.expanded && root.open && root.draggingGroupKey === ""
         repeat: true
         onTriggered: {
             if (!getStreamsProc.running)
