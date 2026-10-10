@@ -1,40 +1,37 @@
 import "../components"
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 
 PanelWindow {
     id: calendar
 
-    // Oeffnen: Hoehen-Animation (Behavior on height), wie bei den anderen
-    // Dropdowns. Schliessen: Huelle bleibt an der Bar haengen und schrumpft
-    // von unten nach oben (Fenster behaelt seine Groesse), nur das
-    // Kalender-Raster blendet aus. Erst danach springt die Hoehe auf 0.
     property bool expanded: false
     property bool heightAnimOn: false
     property real closeFactor: 1
     required property var screen
-    // ── Bar-Geometrie (identisch zu MainBar.qml) ─────────────────
-    readonly property real barContainerWidth: screen.width / 1.333
-    readonly property real barLeftX: (screen.width - barContainerWidth) / 2
-    // Ende der flachen Bar-Unterkante (dort beginnt in der MainBar die
-    // Rundung nach oben: PathLine x = screen.width / 1.361).
-    readonly property real barFlatEndX: barLeftX + screen.width / 1.361
-    // Abstand zwischen rechter Flare-Spitze des Menues und diesem Punkt.
-    readonly property real rightInset: 8
-    readonly property real panelRightX: barFlatEndX - rightInset
-    // ── Menue-Geometrie ──────────────────────────────────────────
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 284
     readonly property real edgePadding: 8
     readonly property real sidePadding: 18
     readonly property real topPadding: 14
+    // Höhe der Bar: links setzt das Menü hier an (mit Kurve), rechts geht es bis y = 0
+    readonly property real barHeight: 40
+    // Breite des rechten Bereichs, der bis zum Bildschirmrand hochgezogen wird.
+    // Bei Bedarf anpassen (von der rechten Menükante nach links gemessen).
+    readonly property real rightFillWidth: 110
+    // 0..1: wie weit das Menü gerade offen ist (folgt Öffnen UND Schließen).
+    // Der Streifen oben rechts wächst/schrumpft damit, so wirkt es, als würde
+    // sich die Bar selbst um den Kalender erweitern bzw. wieder zusammenziehen.
+    readonly property real fillFactor: Math.max(0, Math.min(1, container.height / (fullHeight + barHeight), closeFactor))
+    readonly property real currentFillWidth: rightFillWidth * fillFactor
+    // Füllfarbe: auf die Farbe deiner RoundedDropShape.qml setzen, falls sie abweicht
+    readonly property color shapeColor: WalColors.color0
     readonly property real contentWidth: menuWidth - 2 * sidePadding
     readonly property real cellWidth: contentWidth / 7
     readonly property real cellSize: 32
-    // Volle Zielhoehe - Bezugsgroesse fuer Container und Panel-Hoehe.
     readonly property real fullHeight: contentColumn.implicitHeight + cornerRadius
-    // ── Kalender-Daten ───────────────────────────────────────────
     readonly property var monthNames: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     readonly property var weekdayLabels: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
     property date displayDate: new Date()
@@ -90,13 +87,10 @@ PanelWindow {
         cells = buildCells(displayDate.getFullYear(), displayDate.getMonth());
     }
 
-    // ── Fenster-Setup ────────────────────────────────────────────
     WlrLayershell.namespace: "quickshell:calendar"
     WlrLayershell.layer: WlrLayer.Top
     exclusiveZone: -1
     implicitWidth: menuWidth + 2 * cornerRadius
-    // Panel folgt der Container-Hoehe. Bei geschlossenem Menue -> 0 px hoch,
-    // dadurch blockiert es keinen Hover fuer andere Dropdowns.
     implicitHeight: container.height
     color: "transparent"
 
@@ -105,12 +99,17 @@ PanelWindow {
         left: true
     }
 
-    // Das Menue haengt rechtsbuendig unter der Uhr: seine rechte Flare-Spitze
-    // endet kurz vor dem Ende der flachen Bar-Unterkante.
+    // Zentriert unter der Uhr. Position kommt aus CalendarState.iconCenterX,
+    // das von Clock.qml per Binding live aktualisiert wird.
+    // Fallback auf ~86% der Bildschirmbreite, falls der Wert noch 0 ist
+    // (passiert nur im allerersten Frame, bevor die Binding feuert).
+    // top: 0, weil rechts bis zum Bildschirmrand gezeichnet wird; der linke
+    // Versatz um die Bar-Höhe steckt in der Shape selbst.
     margins {
-        top: 40
+        top: 0
         left: {
-            const desired = panelRightX - implicitWidth;
+            const centerX = (CalendarState.iconCenterX > 0) ? CalendarState.iconCenterX : screen.width * 0.86;
+            const desired = centerX - implicitWidth / 2;
             return Math.max(edgePadding, Math.min(desired, screen.width - implicitWidth - edgePadding));
         }
     }
@@ -123,12 +122,10 @@ PanelWindow {
                 calendar.heightAnimOn = true;
                 calendar.expanded = true;
                 if (fresh) {
-                    // frisch geoeffnet: auf aktuellen Monat/Uhrzeit zuruecksetzen
                     calendar.displayDate = new Date();
                     calendar.cells = calendar.buildCells(calendar.displayDate.getFullYear(), calendar.displayDate.getMonth());
                     calendarClock.updateTime();
                 }
-                // Hover waehrend des Schliessens: wieder aufklappen + Raster einblenden
                 if (calendar.closeFactor !== 1 || gridArea.opacity !== 1)
                     reopenAnim.restart();
 
@@ -166,7 +163,6 @@ PanelWindow {
         id: closeAnim
 
         ParallelAnimation {
-            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
             NumberAnimation {
                 target: calendar
                 property: "closeFactor"
@@ -175,7 +171,6 @@ PanelWindow {
                 easing.type: Easing.InOutCubic
             }
 
-            // nur das Kalender-Raster blendet aus, der Rest des Menues bleibt
             NumberAnimation {
                 target: gridArea
                 property: "opacity"
@@ -188,8 +183,8 @@ PanelWindow {
 
         ScriptAction {
             script: {
-                calendar.heightAnimOn = false; // erst Animation aus ...
-                calendar.expanded = false; // ... dann Hoehe auf 0
+                calendar.heightAnimOn = false;
+                calendar.expanded = false;
                 calendar.closeFactor = 1;
                 gridArea.opacity = 1;
             }
@@ -201,26 +196,104 @@ PanelWindow {
         id: container
 
         width: parent.width
-        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
-        // Schliessen sofort und der Inhalt wird verzerrt.
-        height: calendar.expanded ? calendar.fullHeight : 0
+        height: calendar.expanded ? calendar.fullHeight + calendar.barHeight : 0
         clip: true
 
-        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt),
-        // beim Schliessen schrumpft sie samt Rundungen von unten.
         Item {
             id: body
 
             width: parent.width
-            height: calendar.fullHeight * calendar.closeFactor
+            height: calendar.fullHeight * calendar.closeFactor + calendar.barHeight
             clip: true
 
-            RoundedDropShape {
+            // Eigene Form:
+            //  - links: konkave Kurve unter der Bar (wie vorher)
+            //  - rechts: gerade Kante bis y = 0 (Bildschirmrand), kein Anschluss an die Bar
+            Shape {
+                id: dropShape
+
+                readonly property real cr: calendar.cornerRadius
+                readonly property real w: calendar.implicitWidth
+                readonly property real t: calendar.barHeight
+                readonly property real h: calendar.barHeight + Math.max(2 * cr, calendar.fullHeight * calendar.closeFactor)
+                readonly property real fw: calendar.currentFillWidth
+
                 anchors.top: parent.top
-                cornerRadius: calendar.cornerRadius
-                menuWidth: calendar.menuWidth
-                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
-                menuHeight: Math.max(2 * calendar.cornerRadius, calendar.fullHeight * calendar.closeFactor)
+                anchors.left: parent.left
+                width: w
+                height: h
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    strokeWidth: -1
+                    fillColor: calendar.shapeColor
+                    startX: 0
+                    startY: dropShape.t
+
+                    // konkave Kurve links oben
+                    PathArc {
+                        x: dropShape.cr
+                        y: dropShape.t + dropShape.cr
+                        radiusX: dropShape.cr
+                        radiusY: dropShape.cr
+                        direction: PathArc.Clockwise
+                    }
+
+                    // linke Kante nach unten
+                    PathLine {
+                        x: dropShape.cr
+                        y: dropShape.h - dropShape.cr
+                    }
+
+                    // Ecke unten links
+                    PathArc {
+                        x: 2 * dropShape.cr
+                        y: dropShape.h
+                        radiusX: dropShape.cr
+                        radiusY: dropShape.cr
+                        direction: PathArc.Counterclockwise
+                    }
+
+                    // untere Kante
+                    PathLine {
+                        x: dropShape.w - 2 * dropShape.cr
+                        y: dropShape.h
+                    }
+
+                    // Ecke unten rechts
+                    PathArc {
+                        x: dropShape.w - dropShape.cr
+                        y: dropShape.h - dropShape.cr
+                        radiusX: dropShape.cr
+                        radiusY: dropShape.cr
+                        direction: PathArc.Counterclockwise
+                    }
+
+                    // rechte Kante gerade bis zum Bildschirmrand
+                    PathLine {
+                        x: dropShape.w - dropShape.cr
+                        y: 0
+                    }
+
+                    // oben entlang zurück (nur der rechte Füllbereich)
+                    PathLine {
+                        x: dropShape.w - dropShape.cr - dropShape.fw
+                        y: 0
+                    }
+
+                    PathLine {
+                        x: dropShape.w - dropShape.cr - dropShape.fw
+                        y: dropShape.t
+                    }
+
+                    // zurück zum Start (Unterkante der Bar)
+                    PathLine {
+                        x: 0
+                        y: dropShape.t
+                    }
+
+                }
+
             }
 
             Column {
@@ -232,10 +305,10 @@ PanelWindow {
 
                 anchors {
                     top: parent.top
+                    topMargin: calendar.barHeight
                     horizontalCenter: parent.horizontalCenter
                 }
 
-                // Uhrzeit
                 Item {
                     width: parent.width
                     height: 30
@@ -254,7 +327,6 @@ PanelWindow {
                         font.bold: true
                         Component.onCompleted: updateTime()
 
-                        // tickt nur, solange das Menue sichtbar ist
                         Timer {
                             interval: 1000
                             running: calendar.expanded
@@ -266,7 +338,6 @@ PanelWindow {
 
                 }
 
-                // Monats-Navigation
                 Item {
                     width: parent.width
                     height: 24
@@ -326,7 +397,6 @@ PanelWindow {
 
                 }
 
-                // Kalender-Raster (blendet beim Schliessen aus)
                 Column {
                     id: gridArea
 
@@ -411,7 +481,6 @@ PanelWindow {
 
             }
 
-            // Hover-Bereich folgt der sichtbaren (schrumpfenden) Huelle.
             HoverHandler {
                 onHoveredChanged: {
                     CalendarState.dropdownHovered = hovered;
@@ -421,14 +490,29 @@ PanelWindow {
 
         }
 
-        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
-        // Hoehe erst nach dem Schrumpfen ohne Animation auf 0.
         Behavior on height {
             enabled: calendar.heightAnimOn
 
             Anim {
             }
 
+        }
+
+    }
+
+    // Nur das sichtbare Menü nimmt Eingaben an, der transparente Bereich
+    // über der Bar (links) blockiert die Bar nicht.
+    mask: Region {
+        x: calendar.cornerRadius
+        y: calendar.barHeight
+        width: container.height > 0 ? calendar.menuWidth : 0
+        height: Math.max(0, container.height - calendar.barHeight)
+
+        Region {
+            x: calendar.implicitWidth - calendar.cornerRadius - calendar.currentFillWidth
+            y: 0
+            width: container.height > 0 ? calendar.currentFillWidth : 0
+            height: container.height > 0 ? calendar.barHeight : 0
         }
 
     }

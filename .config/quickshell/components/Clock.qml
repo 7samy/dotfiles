@@ -4,21 +4,37 @@ import Quickshell
 Item {
     id: clockRoot
 
-    // Eigener Zustand: wird beim Hover true, erst nach Ende der
-    // Kalender-Schließanimation wieder false.
+    // X-Zentrum der Uhr in Bildschirmkoordinaten – wird von CalendarDropdown
+    // gelesen, um sich darunter zu zentrieren.
+    readonly property real globalCenterX: windowX(clockRoot) + width / 2
     property bool hideClock: false
+
+    function windowX(item) {
+        var x = 0;
+        var it = item;
+        while (it && it.parent) {
+            x += it.x;
+            it = it.parent;
+        }
+        return x;
+    }
 
     function updateTime() {
         timeText.text = Qt.formatDateTime(new Date(), "hh:mm AP");
         dateText.text = Qt.formatDateTime(new Date(), "MMMM d, yyyy");
     }
 
-    // Wird vom Hover-Handler gesetzt und von CalendarState gelesen.
     implicitWidth: clockColumn.implicitWidth
-    implicitHeight: parent.height
+    implicitHeight: parent ? parent.height : 40
     Component.onCompleted: updateTime()
-    // Alles zusammen ausblenden/einblenden beim Kalender-Öffnen
     opacity: hideClock ? 0 : 1
+
+    // Position live an CalendarState melden
+    Binding {
+        target: CalendarState
+        property: "iconCenterX"
+        value: clockRoot.globalCenterX
+    }
 
     Column {
         id: clockColumn
@@ -57,7 +73,6 @@ Item {
         onTriggered: clockRoot.updateTime()
     }
 
-    // Verzögert das Öffnen des Kalenders leicht, damit die Uhr zuerst faded
     Timer {
         id: openDelay
 
@@ -66,8 +81,6 @@ Item {
         onTriggered: CalendarState.dropdownOpen = true
     }
 
-    // Wartet das Ende der Kalender-Schließanimation ab,
-    // bevor die Uhr wieder eingeblendet wird.
     Timer {
         id: showDelay
 
@@ -76,7 +89,6 @@ Item {
         onTriggered: clockRoot.hideClock = false
     }
 
-    // Reagiert auf das tatsächliche Öffnen/Schließen des Kalenders
     Connections {
         function onDropdownOpenChanged() {
             if (CalendarState.dropdownOpen) {

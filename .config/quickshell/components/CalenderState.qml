@@ -7,6 +7,10 @@ QtObject {
     property bool buttonHovered: false
     property bool dropdownHovered: false
     property bool dropdownOpen: false
+    // X-Zentrum der Uhr in Bildschirmkoordinaten. Wird von Clock.qml
+    // per Binding live aktualisiert, damit CalendarDropdown sich darunter
+    // zentrieren kann.
+    property real iconCenterX: 0
     property Timer hideTimer
 
     function updateHoverTimer() {
