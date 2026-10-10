@@ -72,6 +72,10 @@ ShellRoot {
                 screen: modelData
             }
 
+            VolumeTriggerZone {
+                screen: modelData
+            }
+
             VpnDropDown {
                 screen: modelData
             }
@@ -84,7 +88,6 @@ ShellRoot {
                 screen: modelData
             }
 
-            // Volume-Slider-Popup unten am Bildschirmrand (Rechtsklick aufs Audio-Icon)
             VolumeSliderPopup {
                 screen: modelData
             }

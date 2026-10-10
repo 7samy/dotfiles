@@ -8,3 +8,4 @@ VpnDropDown 1.0 VpnDropDown.qml
 AudioDropdown 1.0 AudioDropdown.qml
 StatsDropdown 1.0 StatsDropdown.qml
 VolumeSliderPopup 1.0 VolumeSliderPopup.qml
+VolumeTriggerZone 1.0 VolumeTriggerZone.qml
