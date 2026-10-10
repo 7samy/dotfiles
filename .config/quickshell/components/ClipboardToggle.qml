@@ -8,6 +8,8 @@ Rectangle {
     // Wenn false: keine eigene Hover-Box (Morph-Pill im Parent übernimmt).
     property bool hoverBoxEnabled: true
     readonly property real globalCenterX: windowX(root) + width / 2
+    readonly property bool hot: mouseArea.containsMouse
+    readonly property color ink: WalColors.color2
 
     function windowX(item) {
         var x = 0;
@@ -22,22 +24,93 @@ Rectangle {
     width: 32
     height: 32
     radius: 6
-    color: (root.hoverBoxEnabled && mouseArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
+    color: (root.hoverBoxEnabled && root.hot) ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
 
-    Text {
-        id: clipText
+    // Selbstgezeichnetes Klemmbrett-Icon (keine Font-Abhängigkeit)
+    Item {
+        id: icon
 
         anchors.centerIn: parent
-        text: "󰅇"
-        color: WalColors.color2
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 16
-        scale: mouseArea.containsMouse ? 1.15 : 1
+        width: 18
+        height: 20
+        scale: root.hot ? 1.1 : 1
+
+        // Brett
+        Rectangle {
+            x: 1
+            y: 3
+            width: 16
+            height: 16
+            radius: 4
+            color: "transparent"
+            border.width: 1.6
+            border.color: root.ink
+        }
+
+        // Textzeilen – wachsen beim Hover
+        Rectangle {
+            x: 5
+            y: 9
+            width: root.hot ? 8 : 5
+            height: 1.6
+            radius: 0.8
+            color: root.ink
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: 220
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
+        Rectangle {
+            x: 5
+            y: 13
+            width: root.hot ? 5 : 8
+            height: 1.6
+            radius: 0.8
+            color: WalColors.withAlpha(root.ink, 0.65)
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
+        // Klammer – hebt sich leicht, mit Aussparung zum Brett
+        Rectangle {
+            x: 5
+            y: root.hot ? 0 : 1
+            width: 8
+            height: 5
+            radius: 2.5
+            color: root.ink
+            border.width: 2
+            border.color: root.color === "transparent" || root.color.a === 0 ? WalColors.color0 : root.color
+
+            Behavior on y {
+                SpringAnimation {
+                    spring: 6
+                    damping: 0.4
+                    epsilon: 0.1
+                }
+
+            }
+
+        }
 
         Behavior on scale {
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.OutCubic
+            SpringAnimation {
+                spring: 5.5
+                damping: 0.4
+                epsilon: 0.01
             }
 
         }

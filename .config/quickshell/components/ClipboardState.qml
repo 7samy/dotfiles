@@ -3,218 +3,216 @@ import Quickshell
 import Quickshell.Io
 pragma Singleton
 
-QtObject {
+Singleton {
     id: root
 
-    readonly property bool pickerVisible: PickerManager.isOpen("clipboard")
     readonly property string tempDir: "/tmp/qs-clip-images"
+    // Wie viele Eintraege der Picker maximal zeigt (Performance + /tmp-Platz)
+    readonly property int imageLimit: 40
+    readonly property int textLimit: 300
+    readonly property bool pickerVisible: PickerManager.isOpen("clipboard")
+    // Eintrag: { id, preview, hay, label, isImage, ext, mime, path, kind, meta }
+    //   kind: "image" | "text" | "url" | "color"
     property var entries: []
     property bool loaded: false
-    // Session-Cache: cliphist-ID -> Dateipfad (bleibt ueber Reopens erhalten)
-    property var imageCache: ({
+    property string signature: ""
+    // id -> true, sobald die Bilddatei dekodiert auf der Platte liegt.
+    // Wird bewusst NICHT im entries-Array gehalten: So bleibt das Listen-Model
+    // stabil und die Delegates behalten ihren Zustand, waehrend Bilder nachladen.
+    property var readyIds: ({
     })
-    // Decode-Queue (eine zur Zeit, nie mehrere parallel)
-    property var pendingImages: []
-    property bool imageLoaderBusy: false
-    // ==== Prozesse ====
-    property Process listProcess
-
-    listProcess: Process {
-        command: ["cliphist", "list"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.parseList(text)
-        }
-
-    }
-
-    property Process copyProcess
-
-    copyProcess: Process {
-    }
-
-    property Process deleteProcess
-
-    deleteProcess: Process {
-    }
-
-    property Process wipeProcess
-
-    wipeProcess: Process {
-        command: ["bash", "-c", "cliphist wipe; rm -rf " + tempDir]
-        onRunningChanged: {
-            if (!running) {
-                root.imageCache = ({
-                });
-                root.refresh();
-            }
-        }
-    }
-
-    property Process imageLoader
-
-    imageLoader: Process {
-        property string entryId: ""
-        property int entryIndex: -1
-        property string imagePath: ""
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const result = text.trim();
-                console.log("[ClipboardState] decode", imageLoader.entryId, "->", imageLoader.imagePath, "| result:", result);
-                if (result === "ok")
-                    root.markImageReady(imageLoader.entryIndex, imageLoader.entryId, imageLoader.imagePath);
-
-                root.imageLoaderBusy = false;
-                root.processNextImage();
-            }
-        }
-
-    }
-
-    property Timer refreshTimer
-
-    refreshTimer: Timer {
-        interval: 80
-        onTriggered: root.refresh()
-    }
+    property var attempted: ({
+    })
+    property bool decodeQueued: false
+    // Ein einziger bash-Prozess dekodiert alle fehlenden Bilder nacheinander
+    // und meldet jede fertige ID per stdout.
+    readonly property string decodeScript: 'dir="$1"; shift; mkdir -p "$dir"; for spec in "$@"; do id="${spec%%:*}"; ext="${spec##*:}"; f="$dir/$id.$ext"; if [ -s "$f" ] || { cliphist decode "$id" > "$f" 2>/dev/null && [ -s "$f" ]; }; then echo "$id"; else rm -f "$f"; fi; done'
 
     function refresh() {
-        listProcess.running = true;
+        if (!listProc.running)
+            listProc.running = true;
+
     }
 
-    function copyEntry(id) {
-        copyProcess.command = ["bash", "-c", "cliphist decode " + id + " | wl-copy"];
-        copyProcess.running = true;
-        PickerManager.close();
+    // ==== Aktionen ====
+    function copyEntry(e) {
+        // Bilder mit explizitem MIME-Type, damit wl-copy nicht raten muss.
+        Quickshell.execDetached(["bash", "-c", 'if [ -n "$2" ]; then cliphist decode "$1" | wl-copy -t "$2"; else cliphist decode "$1" | wl-copy; fi', "qs-clip", String(e.id), e.mime || ""]);
     }
 
-    function openImage(id) {
-        const cached = imageCache[id];
-        if (!cached) {
-            console.warn("[ClipboardState] openImage: kein Pfad fuer id", id);
-            return ;
-        }
-        Quickshell.execDetached(["swayimg", cached]);
-        PickerManager.close();
+    function openImage(e) {
+        Quickshell.execDetached(["swayimg", e.path]);
     }
 
     function deleteEntry(id) {
-        const c = Object.assign({
-        }, imageCache);
-        delete c[id];
-        imageCache = c;
-        deleteProcess.command = ["bash", "-c", "cliphist delete " + id + "; rm -f " + tempDir + "/" + id + ".*"];
-        deleteProcess.running = true;
-        refreshTimer.restart();
+        // Optimistisch sofort aus der Liste nehmen ...
+        entries = entries.filter((e) => {
+            return e.id !== id;
+        });
+        signature = entries.map((e) => {
+            return e.id;
+        }).join(",");
+        const r = Object.assign({
+        }, readyIds);
+        delete r[id];
+        readyIds = r;
+        // ... `cliphist delete` liest die Zeile aus stdin (nicht als Argument!).
+        Quickshell.execDetached(["bash", "-c", 'printf "%s\\tx\\n" "$1" | cliphist delete; rm -f "$2"/"$1".*', "qs-clip", String(id), tempDir]);
     }
 
     function wipe() {
-        wipeProcess.running = true;
+        entries = [];
+        signature = "";
+        readyIds = ({
+        });
+        attempted = ({
+        });
+        Quickshell.execDetached(["bash", "-c", 'cliphist wipe; rm -rf "$1"', "qs-clip", tempDir]);
     }
 
-    // ==== Erkennung & Parsing ====
-    function detectMime(preview) {
+    // ==== Parsing ====
+    function detectExt(preview) {
         if (!preview.startsWith("[[ binary data"))
             return "";
 
-        const lower = preview.toLowerCase();
-        if (lower.indexOf(" png ") !== -1)
-            return "png";
+        const m = preview.toLowerCase().match(/\b(png|jpe?g|gif|webp|bmp)\b/);
+        if (!m)
+            return "";
 
-        if (lower.indexOf(" jpeg ") !== -1 || lower.indexOf(" jpg ") !== -1)
-            return "jpg";
+        return m[1] === "jpeg" ? "jpg" : m[1];
+    }
 
-        if (lower.indexOf(" gif ") !== -1)
-            return "gif";
-
-        if (lower.indexOf(" webp ") !== -1)
-            return "webp";
-
-        if (lower.indexOf(" bmp ") !== -1)
-            return "bmp";
-
+    function mimeFor(ext) {
+        switch (ext) {
+        case "png":
+            return "image/png";
+        case "jpg":
+            return "image/jpeg";
+        case "gif":
+            return "image/gif";
+        case "webp":
+            return "image/webp";
+        case "bmp":
+            return "image/bmp";
+        }
         return "";
     }
 
+    function imageMeta(preview) {
+        const m = preview.match(/binary data\s+([\d.]+\s*\S+)\s+\S+\s+(\d+)x(\d+)/i);
+        return m ? (m[2] + "×" + m[3] + "  ·  " + m[1]) : "";
+    }
+
+    function textKind(t) {
+        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t))
+            return "color";
+
+        if (/^(https?|ftp):\/\/\S+$/i.test(t) || /^www\.\S+$/i.test(t))
+            return "url";
+
+        return "text";
+    }
+
     function parseList(text) {
-        const lines = text.split('\n').filter((l) => {
-            return l.trim() !== '';
-        });
         const parsed = [];
-        for (const line of lines) {
-            // Robust: erste Zahl ist die ID, Rest ist Preview.
-            // Funktioniert mit Tab ODER Space als Trenner.
+        for (const line of text.split("\n")) {
             const m = line.match(/^(\d+)\s+(.*)$/);
             if (!m)
                 continue;
 
             const id = m[1];
             const preview = m[2].replace(/\r$/, "");
-            const ext = detectMime(preview);
-            const isImage = ext !== "";
-            const cached = (isImage && imageCache[id]) ? imageCache[id] : "";
-            parsed.push({
-                "id": id,
-                "preview": preview,
-                "isImage": isImage,
-                "ext": ext,
-                "imagePath": cached || (isImage ? tempDir + "/" + id + "." + ext : ""),
-                "imageReady": isImage && cached !== ""
-            });
-        }
-        entries = parsed;
-        loaded = true;
-        console.log("[ClipboardState] parsed:", parsed.length, "entries,", parsed.filter((e) => {
-            return e.isImage;
-        }).length, "images");
-        queueImageLoads();
-    }
-
-    function queueImageLoads() {
-        const queue = [];
-        for (let i = 0; i < entries.length; i++) {
-            const e = entries[i];
-            if (e.isImage && !e.imageReady)
-                queue.push({
-                    "id": e.id,
-                    "index": i,
-                    "path": e.imagePath
+            const ext = detectExt(preview);
+            if (ext !== "") {
+                parsed.push({
+                    "id": id,
+                    "preview": preview,
+                    "hay": preview.toLowerCase(),
+                    "label": preview,
+                    "isImage": true,
+                    "ext": ext,
+                    "mime": mimeFor(ext),
+                    "path": tempDir + "/" + id + "." + ext,
+                    "kind": "image",
+                    "meta": imageMeta(preview)
                 });
+            } else {
+                const label = preview.replace(/\s+/g, " ").trim();
+                if (label === "")
+                    continue;
 
+                parsed.push({
+                    "id": id,
+                    "preview": preview,
+                    "hay": label.toLowerCase(),
+                    "label": label,
+                    "isImage": false,
+                    "ext": "",
+                    "mime": "",
+                    "path": "",
+                    "kind": textKind(label),
+                    "meta": ""
+                });
+            }
         }
-        pendingImages = queue;
-        processNextImage();
+        // Nur neu zuweisen, wenn sich wirklich etwas geaendert hat -> kein
+        // Model-Reset, keine flackernden Delegates beim erneuten Oeffnen.
+        const sig = parsed.map((e) => {
+            return e.id;
+        }).join(",");
+        if (sig !== signature) {
+            entries = parsed;
+            signature = sig;
+        }
+        loaded = true;
+        startDecode();
     }
 
-    function processNextImage() {
-        if (imageLoaderBusy || pendingImages.length === 0)
+    // ==== Bild-Dekodierung ====
+    function startDecode() {
+        const specs = [];
+        let seen = 0;
+        for (const e of entries) {
+            if (!e.isImage)
+                continue;
+
+            if (++seen > imageLimit)
+                break;
+
+            if (readyIds[e.id] || attempted[e.id])
+                continue;
+
+            specs.push(e.id + ":" + e.ext);
+        }
+        if (specs.length === 0)
             return ;
 
-        imageLoaderBusy = true;
-        const next = pendingImages.shift();
-        imageLoader.entryId = next.id;
-        imageLoader.entryIndex = next.index;
-        imageLoader.imagePath = next.path;
-        imageLoader.command = ["bash", "-c", "mkdir -p " + tempDir + " && cliphist decode " + next.id + " > \"" + next.path + "\" 2>/dev/null && test -s \"" + next.path + "\" && echo ok || echo fail"];
-        imageLoader.running = true;
+        if (decodeProc.running) {
+            decodeQueued = true;
+            return ;
+        }
+        for (const s of specs) attempted[s.split(":")[0]] = true
+        decodeProc.command = ["bash", "-c", decodeScript, "qs-clip", tempDir].concat(specs);
+        decodeProc.running = true;
     }
 
-    function markImageReady(index, id, path) {
+    function markReady(id) {
+        if (id === "" || readyIds[id])
+            return ;
+
         const c = Object.assign({
-        }, imageCache);
-        c[id] = path;
-        imageCache = c;
-        const newEntries = entries.slice();
-        const updated = Object.assign({
-        }, newEntries[index]);
-        updated.imageReady = true;
-        newEntries[index] = updated;
-        entries = newEntries;
+        }, readyIds);
+        c[id] = true;
+        readyIds = c;
     }
 
+    // ==== Kompatibilitaet zum PickerManager ====
     function toggle() {
         PickerManager.toggle("clipboard");
+    }
+
+    function open() {
+        PickerManager.open("clipboard");
     }
 
     function close() {
@@ -223,8 +221,44 @@ QtObject {
 
     }
 
-    function open() {
-        PickerManager.open("clipboard");
+    Process {
+        id: listProc
+
+        command: ["cliphist", "list"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parseList(text)
+        }
+
+    }
+
+    Process {
+        id: decodeProc
+
+        onRunningChanged: {
+            if (!running && root.decodeQueued) {
+                root.decodeQueued = false;
+                root.startDecode();
+            }
+        }
+
+        stdout: SplitParser {
+            onRead: (line) => {
+                return root.markReady(line.trim());
+            }
+        }
+
+    }
+
+    // Beim Oeffnen sofort neu einlesen (laeuft parallel zum Aufbau des Pickers).
+    Connections {
+        function onActivePickerChanged() {
+            if (PickerManager.activePicker === "clipboard")
+                root.refresh();
+
+        }
+
+        target: PickerManager
     }
 
 }
