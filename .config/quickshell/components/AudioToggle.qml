@@ -6,6 +6,8 @@ import Quickshell.Io
 Rectangle {
     id: root
 
+    // Wenn false: keine eigene Hover-Box (Sliding-Pill im Parent uebernimmt).
+    property bool hoverBoxEnabled: true
     readonly property real globalCenterX: windowX(root) + width / 2
 
     function windowX(item) {
@@ -38,7 +40,8 @@ Rectangle {
         anchors.fill: parent
         radius: 10
         color: WalColors.withAlpha(WalColors.color2, 1)
-        opacity: mouseArea.containsMouse ? 0.15 : 0
+        visible: root.hoverBoxEnabled
+        opacity: (root.hoverBoxEnabled && mouseArea.containsMouse) ? 0.15 : 0
 
         Behavior on opacity {
             NumberAnimation {
@@ -78,10 +81,8 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: (mouse) => {
             if (mouse.button === Qt.LeftButton) {
-                // Linksklick: Music Picker öffnen
                 MusicPickerState.toggle();
             } else if (mouse.button === Qt.RightButton) {
-                // Rechtsklick: Mute toggeln
                 AudioState.muted = !AudioState.muted;
                 muteProcess.running = true;
             }

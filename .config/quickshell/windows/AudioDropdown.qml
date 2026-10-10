@@ -26,7 +26,7 @@ PanelWindow {
     readonly property real barGap: 3
     readonly property real barMinLen: 5
     readonly property real barMaxLen: 25
-    readonly property real cavaGamma: 0.45
+    readonly property real cavaGamma: 0.3
     readonly property real cavaNoiseFloor: 0.05
     property var cavaValues: new Array(cavaBars).fill(0)
     // Volle Zielhoehe - wird fuer Container und Panel-Hoehe gebraucht.

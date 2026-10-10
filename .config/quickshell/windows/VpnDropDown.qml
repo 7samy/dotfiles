@@ -10,17 +10,18 @@ PanelWindow {
     // Oeffnen: Hoehen-Animation wie bisher (Behavior on height).
     // Schliessen: Huelle bleibt an der Bar haengen und schrumpft von unten
     // nach oben (Fenster behaelt seine Groesse), nur der Globus blendet aus.
-    // Erst danach wird die Hoehe ohne Animation auf 0 gesetzt.
     property bool expanded: false
     property bool heightAnimOn: false
     property real closeFactor: 1
+    // IP-Anzeige: standardmaessig maskiert, per Klick auf die Zeile
+    // in Klartext umschaltbar. Reset beim Schliessen.
+    property bool ipRevealed: false
     required property var screen
     readonly property real cornerRadius: 20
     readonly property real menuWidth: 200
     readonly property real edgePadding: 8
-    readonly property real contentBottomPadding: 16
+    readonly property real contentBottomPadding: 20
     readonly property real globeSize: 100
-    // Volle Zielhöhe – Bezugsgröße für Container und Panel-Höhe.
     readonly property real fullHeight: infoColumn.implicitHeight + contentBottomPadding + 24
     readonly property string countryCode: {
         const c = (VpnState.vpnCountry || "").trim();
@@ -60,9 +61,19 @@ PanelWindow {
         return map[c.toLowerCase()] || "";
     }
     readonly property string flagSource: countryCode !== "" ? "../resources/flags/" + countryCode + ".svg" : ""
+    // Status-Farbe: gruen bei verbunden, rot bei getrennt.
+    readonly property color statusColor: VpnState.connected ? "#8fd18f" : "#e08c8c"
+
+    // Ersetzt jede Ziffer durch '*', laesst Punkte stehen.
+    // Aus "185.123.45.67" wird "***.***.**.**".
+    function maskIp(ip) {
+        if (!ip)
+            return "";
+
+        return String(ip).replace(/\d/g, "*");
+    }
 
     implicitWidth: menuWidth + 2 * cornerRadius
-    // Panel folgt der Container-Höhe. Bei geschlossenem Menü -> 0 px hoch.
     implicitHeight: container.height
     color: "transparent"
     exclusiveZone: -1
@@ -75,7 +86,6 @@ PanelWindow {
                 closeAnim.stop();
                 dropdown.heightAnimOn = true;
                 dropdown.expanded = true;
-                // Hover waehrend des Schliessens: wieder aufklappen + Globus einblenden
                 if (dropdown.closeFactor !== 1 || globe.opacity !== 1)
                     reopenAnim.restart();
 
@@ -113,7 +123,6 @@ PanelWindow {
         id: closeAnim
 
         ParallelAnimation {
-            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
             NumberAnimation {
                 target: dropdown
                 property: "closeFactor"
@@ -122,7 +131,6 @@ PanelWindow {
                 easing.type: Easing.InOutCubic
             }
 
-            // nur der Globus blendet aus, der Rest des Menues bleibt
             NumberAnimation {
                 target: globe
                 property: "opacity"
@@ -135,10 +143,12 @@ PanelWindow {
 
         ScriptAction {
             script: {
-                dropdown.heightAnimOn = false; // erst Animation aus ...
-                dropdown.expanded = false; // ... dann Hoehe auf 0
+                dropdown.heightAnimOn = false;
+                dropdown.expanded = false;
                 dropdown.closeFactor = 1;
                 globe.opacity = 1;
+                // IP beim naechsten Oeffnen wieder verstecken
+                dropdown.ipRevealed = false;
             }
         }
 
@@ -156,13 +166,9 @@ PanelWindow {
         id: container
 
         width: parent.width
-        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
-        // Schliessen sofort und der Inhalt wird verzerrt.
         height: dropdown.expanded ? dropdown.fullHeight : 0
         clip: true
 
-        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt wie
-        // bisher), beim Schliessen schrumpft sie samt Rundungen von unten.
         Item {
             id: body
 
@@ -174,24 +180,24 @@ PanelWindow {
                 anchors.top: parent.top
                 cornerRadius: dropdown.cornerRadius
                 menuWidth: dropdown.menuWidth
-                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
                 menuHeight: Math.max(2 * dropdown.cornerRadius, dropdown.fullHeight * dropdown.closeFactor)
             }
 
             Column {
                 id: infoColumn
 
-                spacing: 10
-                topPadding: 18
+                spacing: 14
+                topPadding: 22
 
                 anchors {
                     top: parent.top
                     left: parent.left
                     right: parent.right
-                    leftMargin: cornerRadius + 14
-                    rightMargin: cornerRadius + 14
+                    leftMargin: cornerRadius + 16
+                    rightMargin: cornerRadius + 16
                 }
 
+                // ---------- Globe with flag ----------
                 Item {
                     id: globe
 
@@ -200,15 +206,13 @@ PanelWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     Rectangle {
-                        id: pulseRing
-
                         anchors.centerIn: parent
                         width: globe.width + 12
                         height: globe.height + 12
                         radius: width / 2
                         color: "transparent"
                         border.width: 2
-                        border.color: WalColors.color4
+                        border.color: dropdown.statusColor
                         opacity: 0.5
 
                         SequentialAnimation on opacity {
@@ -263,8 +267,6 @@ PanelWindow {
                     }
 
                     OpacityMask {
-                        id: globeFlag
-
                         anchors.fill: globeBg
                         source: flagRaw
                         maskSource: globeMask
@@ -422,61 +424,182 @@ PanelWindow {
 
                 }
 
+                // ---------- Country name ----------
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: VpnState.vpnCountry !== "" ? VpnState.vpnCountry : "Not connected"
+                    color: WalColors.color7
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                // ---------- Status indicator ----------
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 6
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 7
+                        height: 7
+                        radius: 3.5
+                        color: dropdown.statusColor
+
+                        SequentialAnimation on scale {
+                            loops: Animation.Infinite
+                            running: VpnState.connected
+
+                            NumberAnimation {
+                                to: 1.3
+                                duration: 1200
+                                easing.type: Easing.InOutSine
+                            }
+
+                            NumberAnimation {
+                                to: 1
+                                duration: 1200
+                                easing.type: Easing.InOutSine
+                            }
+
+                        }
+
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: VpnState.connected ? "CONNECTED" : "DISCONNECTED"
+                        color: dropdown.statusColor
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 9
+                        font.letterSpacing: 1.5
+                    }
+
+                }
+
+                // ---------- Divider ----------
                 Rectangle {
                     width: parent.width
                     height: 1
-                    color: WalColors.withAlpha(WalColors.color7, 0.15)
+                    color: WalColors.withAlpha(WalColors.color7, 0.1)
                 }
 
-                Repeater {
-                    model: [{
-                        "icon": "󰇧",
-                        "value": VpnState.vpnCountry !== "" ? VpnState.vpnCountry : "—"
-                    }, {
-                        "icon": "󰖟",
-                        "value": VpnState.vpnOrg !== "" ? VpnState.vpnOrg : "—"
-                    }, {
-                        "icon": "󰩟",
-                        "value": VpnState.vpnIp !== "" ? VpnState.vpnIp : "—"
-                    }]
+                // ---------- PROVIDER ----------
+                Column {
+                    width: parent.width
+                    spacing: 2
 
-                    delegate: Row {
-                        required property var modelData
+                    Text {
+                        text: "PROVIDER"
+                        color: WalColors.withAlpha(WalColors.color7, 0.35)
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 8
+                        font.letterSpacing: 1.2
+                    }
 
-                        spacing: 8
+                    Text {
+                        width: parent.width
+                        text: VpnState.vpnOrg !== "" ? VpnState.vpnOrg : "—"
+                        color: WalColors.color2
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+
+                }
+
+                // ---------- IP (click to toggle mask) ----------
+                Item {
+                    id: ipSection
+
+                    width: parent.width
+                    height: ipColumn.implicitHeight
+
+                    Column {
+                        id: ipColumn
+
+                        width: parent.width
+                        spacing: 2
 
                         Text {
-                            text: modelData.icon
-                            color: WalColors.color4
+                            text: "IP ADDRESS"
+                            color: WalColors.withAlpha(WalColors.color7, 0.35)
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 13
+                            font.pixelSize: 8
+                            font.letterSpacing: 1.2
                         }
 
-                        Text {
-                            text: modelData.value
-                            color: WalColors.color2
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            width: 140
-                            elide: Text.ElideRight
+                        Item {
+                            width: parent.width
+                            height: 14
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: dropdown.maskIp(VpnState.vpnIp !== "" ? VpnState.vpnIp : "—")
+                                color: WalColors.withAlpha(WalColors.color2, 0.6)
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 12
+                                font.letterSpacing: 1
+                                opacity: dropdown.ipRevealed ? 0 : 1
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                }
+
+                            }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: VpnState.vpnIp !== "" ? VpnState.vpnIp : "—"
+                                color: WalColors.color2
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 12
+                                opacity: dropdown.ipRevealed ? 1 : 0
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                }
+
+                            }
+
                         }
 
+                    }
+
+                    // Klick-Toggle über der ganzen Section
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: dropdown.ipRevealed = !dropdown.ipRevealed
                     }
 
                 }
 
             }
 
-            // Hover-Bereich folgt der sichtbaren (schrumpfenden) Huelle, damit
-            // der leere Bereich darunter beim Schliessen nicht wieder oeffnet.
             HoverHandler {
-                onHoveredChanged: VpnState.dropdownOpen = hovered
+                onHoveredChanged: {
+                    VpnState.dropdownHovered = hovered;
+                    if (hovered)
+                        VpnState.dropdownOpen = true;
+
+                    VpnState.updateHoverTimer();
+                }
             }
 
         }
 
-        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
-        // Hoehe erst nach dem Schrumpfen ohne Animation auf 0.
         Behavior on height {
             enabled: dropdown.heightAnimOn
 

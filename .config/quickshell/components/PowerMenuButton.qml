@@ -5,10 +5,14 @@ import Quickshell.Io
 Rectangle {
     id: root
 
+    // Wenn false: kein eigener Hover-Hintergrund (Sliding-Pill im
+    // Parent uebernimmt die Markierung).
+    property bool hoverBoxEnabled: true
+
     width: 32
     height: 40
     radius: 6
-    color: mouseArea.containsMouse ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
+    color: (root.hoverBoxEnabled && mouseArea.containsMouse) ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
 
     Text {
         anchors.centerIn: parent

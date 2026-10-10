@@ -5,6 +5,8 @@ import Quickshell
 Rectangle {
     id: root
 
+    // Wenn false: keine eigene Hover-Box (Sliding-Pill im Parent uebernimmt).
+    property bool hoverBoxEnabled: true
     readonly property real globalCenterX: windowX(root) + width / 2
 
     function windowX(item) {
@@ -31,7 +33,8 @@ Rectangle {
         anchors.fill: parent
         radius: 10
         color: WalColors.withAlpha(WalColors.color2, 1)
-        opacity: mouseArea.containsMouse ? 0.15 : 0
+        visible: root.hoverBoxEnabled
+        opacity: (root.hoverBoxEnabled && mouseArea.containsMouse) ? 0.15 : 0
 
         Behavior on opacity {
             NumberAnimation {
@@ -46,10 +49,15 @@ Rectangle {
         id: statsText
 
         anchors.centerIn: parent
-        text: "󰆼"
+        // HIER DAS ICON AUSWECHSELN:
+        // 󰓅 = Speedometer
+        // 󰘚 = Chip (CPU)
+        // 󰍛 = Memory (RAM)
+        // 󰔻 = Gauge
+        text: "󰓅"
         color: WalColors.color2
         font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 15
+        font.pixelSize: 18
         scale: mouseArea.containsMouse ? 1.3 : 1
 
         Behavior on scale {

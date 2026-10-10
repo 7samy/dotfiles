@@ -4,6 +4,8 @@ import QtQuick.Shapes
 import Quickshell
 
 PanelWindow {
+    // ===== Animierte Werte (mit Behavior) =====
+
     id: dropdown
 
     // Oeffnen: Hoehen-Animation wie bisher (Behavior on height).
@@ -33,11 +35,19 @@ PanelWindow {
 
         return WalColors.color4;
     }
-    // Winkel des Fortschritts-Endes (Start oben, Uhrzeigersinn)
-    readonly property real tipAngleRad: (-90 + 360 * ringProgress) * Math.PI / 180
-    readonly property real tipRadius: ringSize / 2 - ringThickness / 2
-    readonly property real tipX: ringSize / 2 + tipRadius * Math.cos(tipAngleRad)
-    readonly property real tipY: ringSize / 2 + tipRadius * Math.sin(tipAngleRad)
+    // Die angezeigte Prozentzahl folgt activePercent smooth.
+    // Dadurch "rollt" die Zahl beim Wechsel und beim Live-Update.
+    property real displayPercent: activePercent
+    // Der angezeigte Ring-Fortschritt folgt ringProgress smooth.
+    property real displayProgress: ringProgress
+    // Die Ring-Farbe morphen smooth (z.B. rot <-> blau bei Temp-Wechsel).
+    property color displayRingColor: ringColor
+    // Tip-Position basierend auf dem animierten Fortschritt,
+    // damit der Punkt mit dem Bogen mitwandert.
+    readonly property real displayTipAngleRad: (-90 + 360 * displayProgress) * Math.PI / 180
+    readonly property real displayTipRadius: ringSize / 2 - ringThickness / 2
+    readonly property real displayTipX: ringSize / 2 + displayTipRadius * Math.cos(displayTipAngleRad)
+    readonly property real displayTipY: ringSize / 2 + displayTipRadius * Math.sin(displayTipAngleRad)
 
     function numFrom(s) {
         if (s === undefined || s === null)
@@ -198,7 +208,6 @@ PanelWindow {
                 closeAnim.stop();
                 dropdown.heightAnimOn = true;
                 dropdown.expanded = true;
-                // Hover waehrend des Schliessens: wieder aufklappen + Ring einblenden
                 if (dropdown.closeFactor !== 1 || ringArea.opacity !== 1)
                     reopenAnim.restart();
 
@@ -209,6 +218,15 @@ PanelWindow {
         }
 
         target: StatsState
+    }
+
+    // Puls bei jedem Metric-Wechsel: kurzes Aufatmen des Rings
+    Connections {
+        function onActiveMetricChanged() {
+            ringPulse.restart();
+        }
+
+        target: dropdown
     }
 
     ParallelAnimation {
@@ -236,7 +254,6 @@ PanelWindow {
         id: closeAnim
 
         ParallelAnimation {
-            // Huelle (mit Rundungen an der Bar) schrumpft nach oben
             NumberAnimation {
                 target: dropdown
                 property: "closeFactor"
@@ -245,7 +262,6 @@ PanelWindow {
                 easing.type: Easing.InOutCubic
             }
 
-            // nur der Ring blendet aus, der Rest des Menues bleibt
             NumberAnimation {
                 target: ringArea
                 property: "opacity"
@@ -258,11 +274,32 @@ PanelWindow {
 
         ScriptAction {
             script: {
-                dropdown.heightAnimOn = false; // erst Animation aus ...
-                dropdown.expanded = false; // ... dann Hoehe auf 0
+                dropdown.heightAnimOn = false;
+                dropdown.expanded = false;
                 dropdown.closeFactor = 1;
                 ringArea.opacity = 1;
             }
+        }
+
+    }
+
+    SequentialAnimation {
+        id: ringPulse
+
+        NumberAnimation {
+            target: ringArea
+            property: "scale"
+            to: 1.04
+            duration: 160
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: ringArea
+            property: "scale"
+            to: 1
+            duration: 320
+            easing.type: Easing.OutCubic
         }
 
     }
@@ -279,13 +316,9 @@ PanelWindow {
         id: container
 
         width: parent.width
-        // expanded (nicht dropdownOpen!), sonst schrumpft die Hoehe beim
-        // Schliessen sofort und der Inhalt wird verzerrt.
         height: dropdown.expanded ? dropdown.fullHeight : 0
         clip: true
 
-        // Huelle + Inhalt. Beim Oeffnen voll hoch (der Container clippt wie
-        // bisher), beim Schliessen schrumpft sie samt Rundungen von unten.
         Item {
             id: body
 
@@ -297,7 +330,6 @@ PanelWindow {
                 anchors.top: parent.top
                 cornerRadius: dropdown.cornerRadius
                 menuWidth: dropdown.menuWidth
-                // mindestens 2 * Radius, sonst bricht die Pfad-Geometrie
                 menuHeight: Math.max(2 * dropdown.cornerRadius, dropdown.fullHeight * dropdown.closeFactor)
             }
 
@@ -401,14 +433,10 @@ PanelWindow {
 
                         width: 1
                         height: 1
-                        // Position relativ zur Mitte des aktiven Tabs
                         x: tabBar.slideTargetX
                         y: tabBar.height - 2
 
-                        // Hinterer Punkt (folgt langsamer)
                         Rectangle {
-                            id: trailLeft
-
                             anchors.verticalCenter: parent.verticalCenter
                             width: 4
                             height: 4
@@ -436,10 +464,7 @@ PanelWindow {
 
                         }
 
-                        // Vorderer Punkt
                         Rectangle {
-                            id: trailRight
-
                             anchors.verticalCenter: parent.verticalCenter
                             width: 4
                             height: 4
@@ -467,7 +492,6 @@ PanelWindow {
 
                         }
 
-                        // Mittlerer Haupt-Punkt (groesser, pulsiert)
                         Rectangle {
                             id: trailCenter
 
@@ -497,7 +521,6 @@ PanelWindow {
 
                         }
 
-                        // Glow hinter dem mittleren Punkt
                         Rectangle {
                             anchors.centerIn: trailCenter
                             width: 14
@@ -529,6 +552,7 @@ PanelWindow {
                     width: dropdown.ringSize
                     height: dropdown.ringSize
                     anchors.horizontalCenter: parent.horizontalCenter
+                    transformOrigin: Item.Center
 
                     // Sanfter Farb-Glow im Hintergrund (pulsierend)
                     Rectangle {
@@ -536,7 +560,7 @@ PanelWindow {
                         width: parent.width * 0.7
                         height: width
                         radius: width / 2
-                        color: dropdown.ringColor
+                        color: dropdown.displayRingColor
                         opacity: 0.06
 
                         SequentialAnimation on opacity {
@@ -570,14 +594,12 @@ PanelWindow {
                     }
 
                     // ---------- Gepunktete Hintergrund-Marker ----------
-                    // 36 Punkte, gleichmaessig verteilt. Ersetzt den flachen Track.
                     Repeater {
                         model: 36
 
                         delegate: Rectangle {
                             readonly property real angleRad: (index * 10 - 90) * Math.PI / 180
                             readonly property real r: dropdown.ringSize / 2 - dropdown.ringThickness / 2
-                            // Jeder 3. Punkt etwas groesser fuer einen Takt-Effekt
                             readonly property bool major: (index % 3 === 0)
 
                             width: major ? 3 : 2
@@ -590,7 +612,7 @@ PanelWindow {
 
                     }
 
-                    // ---------- Fortschrittsbogen ----------
+                    // ---------- Fortschrittsbogen (animiert) ----------
                     Shape {
                         anchors.fill: parent
                         antialiasing: true
@@ -599,7 +621,7 @@ PanelWindow {
                         layer.samples: 4
 
                         ShapePath {
-                            strokeColor: dropdown.ringColor
+                            strokeColor: dropdown.displayRingColor
                             strokeWidth: dropdown.ringThickness
                             fillColor: "transparent"
                             capStyle: ShapePath.RoundCap
@@ -610,7 +632,7 @@ PanelWindow {
                                 radiusX: dropdown.ringSize / 2 - dropdown.ringThickness / 2
                                 radiusY: dropdown.ringSize / 2 - dropdown.ringThickness / 2
                                 startAngle: -90
-                                sweepAngle: Math.max(0.001, 360 * dropdown.ringProgress)
+                                sweepAngle: Math.max(0.001, 360 * dropdown.displayProgress)
                             }
 
                         }
@@ -621,11 +643,11 @@ PanelWindow {
                     Item {
                         id: tipContainer
 
-                        x: dropdown.tipX
-                        y: dropdown.tipY
+                        x: dropdown.displayTipX
+                        y: dropdown.displayTipY
                         width: 0
                         height: 0
-                        visible: dropdown.ringProgress > 0.005
+                        visible: dropdown.displayProgress > 0.005
 
                         // Aussen-Glow (pulsierend)
                         Rectangle {
@@ -633,7 +655,7 @@ PanelWindow {
                             width: 20
                             height: 20
                             radius: 10
-                            color: dropdown.ringColor
+                            color: dropdown.displayRingColor
                             opacity: 0.3
                             layer.enabled: true
                             layer.samples: 4
@@ -680,26 +702,9 @@ PanelWindow {
                             width: dropdown.ringThickness + 2
                             height: width
                             radius: width / 2
-                            color: dropdown.ringColor
+                            color: dropdown.displayRingColor
                             border.width: 2
                             border.color: WalColors.withAlpha(WalColors.color0, 0.8)
-
-                            Behavior on x {
-                                NumberAnimation {
-                                    duration: 250
-                                    easing.type: Easing.OutCubic
-                                }
-
-                            }
-
-                            Behavior on y {
-                                NumberAnimation {
-                                    duration: 250
-                                    easing.type: Easing.OutCubic
-                                }
-
-                            }
-
                         }
 
                     }
@@ -716,12 +721,20 @@ PanelWindow {
                             color: WalColors.withAlpha(WalColors.color7, 0.5)
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 300
+                                }
+
+                            }
+
                         }
 
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: dropdown.activePercent + "%"
-                            color: dropdown.ringColor
+                            text: Math.round(dropdown.displayPercent) + "%"
+                            color: dropdown.displayRingColor
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 32
                             font.bold: true
@@ -757,14 +770,36 @@ PanelWindow {
             }
         }
 
-        // Nur beim Oeffnen aktiv (heightAnimOn). Beim Schliessen springt die
-        // Hoehe erst nach dem Schrumpfen ohne Animation auf 0.
         Behavior on height {
             enabled: dropdown.heightAnimOn
 
             Anim {
             }
 
+        }
+
+    }
+
+    Behavior on displayPercent {
+        NumberAnimation {
+            duration: 480
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    Behavior on displayProgress {
+        NumberAnimation {
+            duration: 480
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    Behavior on displayRingColor {
+        ColorAnimation {
+            duration: 480
+            easing.type: Easing.OutCubic
         }
 
     }

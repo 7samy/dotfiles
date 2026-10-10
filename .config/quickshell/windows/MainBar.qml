@@ -110,7 +110,6 @@ PanelWindow {
 
         }
 
-        // NEUER Block: Erzwingt Neuzeichnen bei Farbänderung
         Connections {
             function onColorsUpdated() {
                 barShape.fillColor = "transparent";
@@ -187,20 +186,134 @@ PanelWindow {
                 height: parent.height
                 spacing: 40
 
-                Row {
-                    spacing: 8
+                // ---- Icon-Gruppe mit flüssigem Sliding-Pill ----
+                Item {
+                    id: iconGroup
+
+                    property int hoveredIndex: -1
+                    property real targetCenterX: innerRow.x + innerRow.width / 2
+                    readonly property real pillWidth: 34
+
+                    anchors.verticalCenter: parent.verticalCenter
                     height: parent.height
+                    width: innerRow.implicitWidth + 28
 
-                    PowerMenuButton {
+                    // Statischer Gruppen-Hintergrund
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        height: 32
+                        radius: height / 2
+                        color: WalColors.withAlpha(WalColors.color4, 0.12)
                     }
 
-                    AudioToggle {
+                    Row {
+                        id: innerRow
+
+                        anchors.centerIn: parent
+                        spacing: 10
+                        height: parent.height
+
+                        PowerMenuButton {
+                            id: pmBtn
+
+                            hoverBoxEnabled: false
+                        }
+
+                        AudioToggle {
+                            id: atBtn
+
+                            hoverBoxEnabled: false
+                        }
+
+                        Stats {
+                            id: stBtn
+
+                            hoverBoxEnabled: false
+                        }
+
+                        VpnToggle {
+                            id: vpnBtn
+
+                            hoverBoxEnabled: false
+                        }
+
                     }
 
-                    Stats {
+                    // ---- Perfekt gedämpftes Sliding Pill ----
+                    Rectangle {
+                        id: sliderPill
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 32
+                        width: iconGroup.pillWidth
+                        radius: height / 2
+                        color: WalColors.withAlpha(WalColors.color4, 0.28)
+                        // Position aus targetCenterX
+                        x: iconGroup.targetCenterX - width / 2
+                        // Sichtbarkeit
+                        visible: opacity > 0.01
+                        opacity: iconGroup.hoveredIndex >= 0 ? 1 : 0
+
+                        // Diese X-Animation macht den "Magie"-Effekt aus:
+                        // Eine starke Federung (spring), die aber fast perfekt abgedämpft wird (damping).
+                        // Das sorgt dafür, dass sie schnell startet und samtweich einrastet, ohne zu wackeln.
+                        Behavior on x {
+                            enabled: sliderPill.opacity === 1
+
+                            SpringAnimation {
+                                spring: 7.5 // Reaktionsgeschwindigkeit (snappy)
+                                damping: 0.95 // Sehr starke Dämpfung (verhindert den Bounce, sorgt für smoothen Slide)
+                                mass: 1
+                            }
+
+                        }
+
+                        // Opacity: Fade In ist sehr schnell, Fade Out minimal verzögert.
+                        // So bleibt die Box präsenter, wenn man leicht vom Icon abrutscht.
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: iconGroup.hoveredIndex >= 0 ? 100 : 250
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
                     }
 
-                    VpnToggle {
+                    // ---- Hover-Handler ----
+                    HoverHandler {
+                        id: groupHover
+
+                        onPointChanged: {
+                            const px = point.position.x;
+                            let found = -1;
+                            let centerX = innerRow.x + innerRow.width / 2;
+                            const kids = [pmBtn, atBtn, stBtn, vpnBtn];
+                            for (let i = 0; i < kids.length; i++) {
+                                const c = kids[i];
+                                if (!c)
+                                    continue;
+
+                                const cx = innerRow.x + c.x;
+                                if (px >= cx && px <= cx + c.width) {
+                                    found = i;
+                                    centerX = cx + c.width / 2;
+                                    break;
+                                }
+                            }
+                            if (iconGroup.hoveredIndex !== found)
+                                iconGroup.hoveredIndex = found;
+
+                            iconGroup.targetCenterX = centerX;
+                        }
+                        onHoveredChanged: {
+                            if (!hovered) {
+                                iconGroup.hoveredIndex = -1;
+                                iconGroup.targetCenterX = innerRow.x + innerRow.width / 2;
+                            }
+                        }
                     }
 
                 }

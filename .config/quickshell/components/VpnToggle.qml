@@ -5,12 +5,11 @@ import Quickshell.Io
 Rectangle {
     id: root
 
-    // Nur noch fuer die Statuspruefung (greift auf alle "proton-xx" Verbindungen)
+    // Wenn false: keine eigene Hover-Box (Sliding-Pill im Parent uebernimmt).
+    property bool hoverBoxEnabled: true
     readonly property string vpnPattern: "proton"
     readonly property real globalCenterX: windowX(root) + width / 2
 
-    // Läuft die Parent-Kette hoch bis zum Fenster-Root (parent === null)
-    // und summiert dabei die x-Offsets.
     function windowX(item) {
         var x = 0;
         var it = item;
@@ -35,7 +34,6 @@ Rectangle {
         value: root.globalCenterX
     }
 
-    // Nach einem Laenderwechsel im Picker Status und Standort neu laden
     Connections {
         function onSwitched() {
             statusProcess.running = true;
@@ -84,8 +82,6 @@ Rectangle {
 
     }
 
-    // Linksklick: an/aus. Aus = aktive Verbindung trennen,
-    // an = zuletzt gewaehlte Verbindung starten.
     Process {
         id: toggleProcess
 
@@ -118,7 +114,8 @@ Rectangle {
         radius: 10
         border.width: 1
         color: WalColors.withAlpha(WalColors.color2, 1)
-        opacity: mouseArea.containsMouse ? 0.15 : 0
+        visible: root.hoverBoxEnabled
+        opacity: (root.hoverBoxEnabled && mouseArea.containsMouse) ? 0.15 : 0
 
         Behavior on opacity {
             NumberAnimation {
@@ -158,7 +155,6 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
-                hideTimer.stop();
                 VpnState.dropdownOpen = false;
                 VpnPickerState.toggle();
             } else {
@@ -166,19 +162,16 @@ Rectangle {
             }
         }
         onEntered: {
-            hideTimer.stop();
+            VpnState.buttonHovered = true;
             if (!VpnPickerState.open)
                 VpnState.dropdownOpen = true;
 
+            VpnState.updateHoverTimer();
         }
-        onExited: hideTimer.start()
-    }
-
-    Timer {
-        id: hideTimer
-
-        interval: 200
-        onTriggered: VpnState.dropdownOpen = false
+        onExited: {
+            VpnState.buttonHovered = false;
+            VpnState.updateHoverTimer();
+        }
     }
 
 }
