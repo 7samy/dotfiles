@@ -11,9 +11,10 @@ PanelWindow {
 
     property bool open: false
     property int currentIndex: 0
-    // Aktiv: kräftiges Wal-Blau, Inaktiv: gleiche Farbe halbtransparent
-    readonly property color iconActiveColor: WalColors.color4
-    readonly property color iconInactiveColor: WalColors.withAlpha(WalColors.color4, 0.55)
+    readonly property int cardW: 160
+    readonly property int cardH: 200
+    readonly property int cardSpacing: 28
+    readonly property int rowWidth: cardW * 4 + cardSpacing * 3
     readonly property var actions: [{
         "label": "Shutdown",
         "icon": "../resources/icons/power.png",
@@ -43,6 +44,9 @@ PanelWindow {
         }
         return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
     }
+    property string hoursText: ""
+    property string minutesText: ""
+    property string dateText: ""
 
     function runAction(i) {
         const a = actions[i];
@@ -79,6 +83,19 @@ PanelWindow {
         right: true
     }
 
+    Timer {
+        interval: 1000
+        running: powerMenu.open
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            const now = new Date();
+            powerMenu.hoursText = Qt.formatTime(now, "HH");
+            powerMenu.minutesText = Qt.formatTime(now, "mm");
+            powerMenu.dateText = Qt.formatDate(now, "dddd, MMMM d");
+        }
+    }
+
     IpcHandler {
         function toggle() {
             powerMenu.open = !powerMenu.open;
@@ -103,13 +120,17 @@ PanelWindow {
         Keys.onEnterPressed: powerMenu.runAction(powerMenu.currentIndex)
         Keys.onLeftPressed: powerMenu.currentIndex = (powerMenu.currentIndex + powerMenu.actions.length - 1) % powerMenu.actions.length
         Keys.onRightPressed: powerMenu.currentIndex = (powerMenu.currentIndex + 1) % powerMenu.actions.length
+        Keys.onDigit1Pressed: powerMenu.runAction(0)
+        Keys.onDigit2Pressed: powerMenu.runAction(1)
+        Keys.onDigit3Pressed: powerMenu.runAction(2)
+        Keys.onDigit4Pressed: powerMenu.runAction(3)
     }
 
     Rectangle {
         id: dimmer
 
         anchors.fill: parent
-        color: WalColors.withAlpha(WalColors.color0, 0.55)
+        color: WalColors.withAlpha(WalColors.color0, 0.72)
         opacity: powerMenu.open ? 1 : 0
 
         MouseArea {
@@ -117,18 +138,18 @@ PanelWindow {
             onClicked: powerMenu.close()
         }
 
+        // --- Alles in einem Bounce-Wrapper ---
         Item {
-            id: scaleWrapper
+            id: contentWrapper
 
             anchors.fill: parent
-            scale: 1
             transformOrigin: Item.Center
 
             SequentialAnimation {
                 id: freshOpenBounce
 
                 NumberAnimation {
-                    target: scaleWrapper
+                    target: contentWrapper
                     property: "scale"
                     from: 0.85
                     to: 1
@@ -138,51 +159,154 @@ PanelWindow {
 
             }
 
-            Row {
-                anchors.centerIn: parent
-                spacing: 45
+            // --- Uhr mit blinkendem Doppelpunkt ---
+            Column {
+                id: clockColumn
 
-                Repeater {
-                    model: powerMenu.actions
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -220
+                spacing: 4
 
-                    delegate: Item {
-                        id: btnRoot
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 1
 
-                        readonly property int idx: index
-                        readonly property bool isCurrent: powerMenu.currentIndex === idx
+                    Text {
+                        text: powerMenu.hoursText
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 42
+                        font.weight: Font.Light
+                        color: WalColors.color7
+                    }
 
-                        width: 160
-                        height: 180
-                        scale: isCurrent ? 1.03 : 1
-                        opacity: isCurrent ? 1 : 0.6
+                    Text {
+                        id: colonText
 
-                        Rectangle {
-                            id: btnBg
+                        text: ":"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 42
+                        font.weight: Font.Light
+                        color: WalColors.color7
 
-                            anchors.fill: parent
-                            radius: 22
-                            color: WalColors.withAlpha(WalColors.color0, 0.8)
-                            border.width: isCurrent ? 2 : 1
-                            border.color: isCurrent ? WalColors.withAlpha(WalColors.color5, 0.6) : WalColors.withAlpha(WalColors.color4, 0.3)
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: powerMenu.open
+
+                            NumberAnimation {
+                                to: 1
+                                duration: 0
+                            }
+
+                            PauseAnimation {
+                                duration: 500
+                            }
+
+                            NumberAnimation {
+                                to: 0.2
+                                duration: 120
+                                easing.type: Easing.InOutQuad
+                            }
+
+                            PauseAnimation {
+                                duration: 380
+                            }
+
+                            NumberAnimation {
+                                to: 1
+                                duration: 120
+                                easing.type: Easing.InOutQuad
+                            }
+
+                        }
+
+                    }
+
+                    Text {
+                        text: powerMenu.minutesText
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 42
+                        font.weight: Font.Light
+                        color: WalColors.color7
+                    }
+
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: powerMenu.dateText
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    font.letterSpacing: 2
+                    color: WalColors.withAlpha(WalColors.color7, 0.55)
+                }
+
+            }
+
+            // --- Menü ---
+            Item {
+                id: menuColumn
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 30
+                width: powerMenu.rowWidth
+                height: powerMenu.cardH + 32
+
+                Row {
+                    id: rowContainer
+
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: powerMenu.cardSpacing
+
+                    Repeater {
+                        model: powerMenu.actions
+
+                        delegate: Item {
+                            id: btnRoot
+
+                            readonly property int idx: index
+                            readonly property bool isCurrent: powerMenu.currentIndex === idx
+
+                            width: powerMenu.cardW
+                            height: powerMenu.cardH
+                            z: isCurrent ? 10 : 1
+                            scale: isCurrent ? 1.05 : 1
+                            opacity: isCurrent ? 1 : 0.55
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 20
+                                color: WalColors.withAlpha(WalColors.color0, 0.85)
+                                border.width: 1
+                                border.color: btnRoot.isCurrent ? WalColors.withAlpha(WalColors.color4, 0.9) : WalColors.withAlpha(WalColors.color7, 0.1)
+
+                                Behavior on border.color {
+                                    ColorAnimation {
+                                        duration: 200
+                                    }
+
+                                }
+
+                            }
 
                             Column {
                                 anchors.centerIn: parent
-                                spacing: 16
+                                spacing: 18
 
                                 Item {
-                                    id: iconWrapper
-
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    width: 64
-                                    height: 64
+                                    width: 52
+                                    height: 52
 
                                     Image {
                                         id: iconImg
 
                                         anchors.fill: parent
                                         source: modelData.icon
-                                        sourceSize.width: 64
-                                        sourceSize.height: 64
+                                        sourceSize.width: 52
+                                        sourceSize.height: 52
                                         fillMode: Image.PreserveAspectFit
                                         asynchronous: true
                                         smooth: true
@@ -193,7 +317,7 @@ PanelWindow {
                                     ColorOverlay {
                                         anchors.fill: iconImg
                                         source: iconImg
-                                        color: isCurrent ? powerMenu.iconActiveColor : powerMenu.iconInactiveColor
+                                        color: btnRoot.isCurrent ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.6)
 
                                         Behavior on color {
                                             ColorAnimation {
@@ -211,35 +335,105 @@ PanelWindow {
                                     text: modelData.label
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 14
-                                    color: WalColors.color7
+                                    font.letterSpacing: 1
+                                    color: btnRoot.isCurrent ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.6)
+
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 200
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onEntered: powerMenu.currentIndex = btnRoot.idx
+                                onClicked: powerMenu.runAction(btnRoot.idx)
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutCubic
                                 }
 
                             }
 
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: powerMenu.currentIndex = btnRoot.idx
-                            onClicked: powerMenu.runAction(btnRoot.idx)
+                    }
+
+                }
+
+                // --- gleitender Unterstrich mit Squish-Bounce ---
+                Rectangle {
+                    id: selectionBar
+
+                    readonly property real baseWidth: powerMenu.cardW - 40
+                    property real squish: 1
+
+                    width: baseWidth
+                    height: 2
+                    radius: 1
+                    color: WalColors.color4
+                    anchors.top: rowContainer.bottom
+                    anchors.topMargin: 16
+                    x: 20 + powerMenu.currentIndex * (powerMenu.cardW + powerMenu.cardSpacing)
+
+                    SequentialAnimation {
+                        id: squishAnim
+
+                        NumberAnimation {
+                            target: selectionBar
+                            property: "squish"
+                            to: 0.5
+                            duration: 140
+                            easing.type: Easing.OutQuad
                         }
 
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
-
+                        NumberAnimation {
+                            target: selectionBar
+                            property: "squish"
+                            to: 1
+                            duration: 300
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 2.2
                         }
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
+                    }
 
+                    Connections {
+                        function onCurrentIndexChanged() {
+                            squishAnim.restart();
+                        }
+
+                        target: powerMenu
+                    }
+
+                    transform: Scale {
+                        origin.x: selectionBar.width / 2
+                        origin.y: selectionBar.height / 2
+                        xScale: selectionBar.squish
+                    }
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 260
+                            easing.type: Easing.OutCubic
                         }
 
                     }
@@ -252,7 +446,7 @@ PanelWindow {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 180
+                duration: 200
                 easing.type: Easing.OutCubic
             }
 

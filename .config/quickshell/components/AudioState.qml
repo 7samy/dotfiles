@@ -1,11 +1,13 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 pragma Singleton
 
 QtObject {
     // WICHTIG: _lastRawPos NICHT überschreiben – wir brauchen den alten
     // Wert vom Ende des vorherigen Liedes, um den Reset zu erkennen!
+    // _lastRawPos bewusst NICHT aktualisieren!
 
     id: root
 
@@ -92,6 +94,41 @@ QtObject {
     // ==== Timer ====
     property Timer hideTimer
     property Timer playerUpdateTimer
+    // ==== mpd: Lautstaerke direkt von mpd lesen ====
+    // mpd-mpris meldet nach einem Neustart oft 0, bis sich die Lautstaerke
+    // aendert. Deshalb fragen wir bei mpd die echte Lautstaerke per `mpc` ab.
+    readonly property bool isMpd: {
+        if (!hasPlayer)
+            return false;
+
+        const id = (activePlayer.identity || "").toLowerCase();
+        const de = (activePlayer.desktopEntry || "").toLowerCase();
+        return id.includes("music player daemon") || id === "mpd" || de === "mpd";
+    }
+    property real mpdVolume: -1 // -1 = unbekannt
+    property var _pendingMpdVol: null
+    property Timer mpdPollTimer
+    property Process mpdGetProc
+    property Process mpdSetProc
+
+    function refreshMpd() {
+        if (isMpd && !mpdGetProc.running)
+            mpdGetProc.running = true;
+
+    }
+
+    function _runMpdVol(v) {
+        mpdSetProc.command = ["mpc", "volume", String(Math.round(v * 100))];
+        mpdSetProc.running = true;
+    }
+
+    function _setMpdVolume(v) {
+        root.mpdVolume = v;
+        if (mpdSetProc.running)
+            root._pendingMpdVol = v;
+        else
+            root._runMpdVol(v);
+    }
 
     function isBrowser(player) {
         if (!player)
@@ -154,10 +191,16 @@ QtObject {
     function setVolume(val) {
         if (hasPlayer) {
             const safeVal = Math.max(0, Math.min(val, 1));
-            activePlayer.volume = safeVal;
+            if (isMpd)
+                _setMpdVolume(safeVal);
+            else
+                activePlayer.volume = safeVal;
             root.volume = safeVal;
         }
     }
+
+    onDropdownOpenChanged: refreshMpd()
+    onIsMpdChanged: refreshMpd()
 
     hideTimer: Timer {
         interval: 400
@@ -169,8 +212,6 @@ QtObject {
         running: true
         repeat: true
         onTriggered: {
-            // _lastRawPos bewusst NICHT aktualisieren!
-
             if (!root.hasPlayer) {
                 root.position = 0;
                 root.length = 0;
@@ -213,7 +254,8 @@ QtObject {
                 root.length = newLength;
                 root._lastRawPos = newPos;
             }
-            root.volume = newVol;
+            // Bei mpd zaehlt der direkt abgefragte Wert (falls schon bekannt)
+            root.volume = (root.isMpd && root.mpdVolume >= 0) ? root.mpdVolume : newVol;
             // ---- Player-Aktualisierung (unverändert) ----
             const players = Mpris.players.values;
             for (const p of players) {
@@ -231,6 +273,40 @@ QtObject {
 
                     return ;
                 }
+            }
+        }
+    }
+
+    mpdPollTimer: Timer {
+        // Nur solange das Dropdown offen ist und mpd aktiv ist
+        interval: 1000
+        running: root.isMpd && root.dropdownOpen
+        repeat: true
+        onTriggered: root.refreshMpd()
+    }
+
+    mpdGetProc: Process {
+        command: ["mpc", "volume"]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                // Waehrend des Ziehens keinen veralteten Wert uebernehmen
+                if (root.mpdSetProc.running || root._pendingMpdVol !== null)
+                    return ;
+
+                const m = text.match(/volume:\s*(\d+)%/);
+                root.mpdVolume = m ? Math.max(0, Math.min(1, parseInt(m[1]) / 100)) : -1;
+            }
+        }
+
+    }
+
+    mpdSetProc: Process {
+        onRunningChanged: {
+            if (!running && root._pendingMpdVol !== null) {
+                const v = root._pendingMpdVol;
+                root._pendingMpdVol = null;
+                root._runMpdVol(v);
             }
         }
     }

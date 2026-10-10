@@ -20,6 +20,11 @@ Item {
     property var _tmpIcons: ({})
     property var _rescanned: ({})
     property double lastScan: Date.now()
+    // appid-Cache fuer Gamescope-Fenster (Schluessel: pid|address)
+    property var pidAppIds: ({})
+    property var _pidPending: ({})
+    property var _pidQueue: []
+    property int pidVersion: 0
     readonly property string scanScript: Qt.resolvedUrl("../scripts/steam_scan.sh").toString().replace("file://", "")
     // Ordner mit den eigenen Icons (relativ zu diesem File, kein /home/azu hartkodiert)
     readonly property string iconDir: Qt.resolvedUrl("../resources/icons/").toString()
@@ -31,7 +36,7 @@ Item {
     // Hilfsfunktionen
     // ------------------------------------------------------------------
     function normalizeTitle(title) {
-        return String(title || "").toLowerCase().replace(/[™®©]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+        return String(title || "").toLowerCase().replace(/[™®©]/g, "").replace(/[^a-z0-9]+/g, "");
     }
 
     // Icon-Theme-Lookup. Liefert eine verwendbare Image-Quelle oder "" wenn
@@ -89,51 +94,90 @@ Item {
         steamScan.running = true;
     }
 
+    // Unscharfer Titelvergleich auf kompakten Strings ("stellarblade").
+    // Steam-Name im Fenstertitel ODER Fenstertitel im Steam-Namen.
     function findAppIdByTitleSubstring(title) {
-        if (!title)
+        const t = normalizeTitle(title);
+        if (t === "" || t === "gamescope")
             return "";
 
-        const lowerTitle = title.toLowerCase();
-        const normTitle = normalizeTitle(title);
         let bestId = "";
-        let bestLen = 0;
-        for (const raw in steamTitleMap) {
-            const l = raw.toLowerCase();
-            if (l.length >= 4 && l.length > bestLen && lowerTitle.includes(l)) {
-                bestId = steamTitleMap[raw];
-                bestLen = l.length;
-            }
-        }
-        if (!bestId && normTitle !== "") {
-            for (const n in steamNormalizedMap) {
-                if (n.length >= 4 && n.length > bestLen && normTitle.includes(n)) {
-                    bestId = steamNormalizedMap[n];
-                    bestLen = n.length;
-                }
+        let bestScore = 0;
+        for (const n in steamNormalizedMap) {
+            let score = 0;
+            if (n === t)
+                score = 1000;
+            else if (n.length >= 4 && t.includes(n))
+                score = n.length;
+            else if (t.length >= 5 && n.includes(t))
+                score = t.length - 1;
+            if (score > bestScore) {
+                bestScore = score;
+                bestId = steamNormalizedMap[n];
             }
         }
         return bestId;
     }
 
-    // Steam-appid fuer ein Fenster ermitteln (Proton-Klasse oder Gamescope-Titel)
-    function steamAppIdFor(cls, title) {
+    // Liest SteamGameId/SteamAppId aus der Umgebung des Fenster-Prozesses
+    // (Gamescope erbt sie von Steam). Asynchron: erster Aufruf liefert "",
+    // danach erhoeht pidVersion und die Bindings werten neu aus.
+    function appIdForWindow(win) {
+        if (!win || !win.pid)
+            return "";
+
+        const key = String(win.pid) + "|" + (win.address || "");
+        if (pidAppIds[key] !== undefined)
+            return pidAppIds[key];
+
+        if (!_pidPending[key]) {
+            _pidPending[key] = true;
+            _pidQueue.push({
+                "key": key,
+                "pid": String(win.pid)
+            });
+            Qt.callLater(processPidQueue);
+        }
+        return "";
+    }
+
+    function processPidQueue() {
+        if (pidProc.running || _pidQueue.length === 0)
+            return ;
+
+        const next = _pidQueue.shift();
+        pidProc.key = next.key;
+        pidProc.pid = next.pid;
+        pidProc.running = true;
+    }
+
+    // Steam-appid fuer ein Fenster:
+    // 1) Proton-Klasse steam_app_<id>
+    // 2) Gamescope: SteamGameId aus dem Prozess (zuverlaessig)
+    // 3) Fenstertitel (unscharf) als Fallback
+    function steamAppIdFor(win) {
+        const cls = win.class || "";
         if (cls.indexOf("steam_app_") === 0) {
             const id = cls.substring(10);
             if (/^[0-9]+$/.test(id) && id !== "0")
                 return id;
 
         }
-        if (!(cls === "gamescope" || cls.indexOf("steam_app_") === 0) || !title)
+        if (!(cls === "gamescope" || cls.indexOf("steam_app_") === 0))
             return "";
 
-        if (steamTitleMap[title])
-            return steamTitleMap[title];
+        const pidId = appIdForWindow(win);
+        if (pidId)
+            return pidId;
 
-        const norm = normalizeTitle(title);
-        if (norm !== "" && steamNormalizedMap[norm])
+        const norm = normalizeTitle(win.title);
+        if (norm === "" || norm === "gamescope")
+            return "";
+
+        if (steamNormalizedMap[norm])
             return steamNormalizedMap[norm];
 
-        return findAppIdByTitleSubstring(title);
+        return findAppIdByTitleSubstring(win.title);
     }
 
     // Reihenfolge: Theme-Icon "steam_icon_<id>" -> gecachtes Bild -> Steam-Logo
@@ -160,7 +204,7 @@ Item {
 
     // Liefert eine KETTE von Icon-Quellen. Das erste, das sich laden laesst,
     // wird angezeigt (siehe candIdx im Delegate).
-    function iconCandidatesFor(win, _version) {
+    function iconCandidatesFor(win, _mapsVersion, _pidVersion) {
         const list = [];
         if (!win)
             return list;
@@ -193,7 +237,7 @@ Item {
             add(themeIcon("com.discordapp.Discord"));
         }
         // ---- 3) Steam-Spiele ----
-        const appId = steamAppIdFor(cls, title);
+        const appId = steamAppIdFor(win);
         if (appId) {
             for (const c of steamCandidates(appId)) add(c)
         } else if (cls === "gamescope") {
@@ -243,6 +287,29 @@ Item {
 
     implicitWidth: bg.implicitWidth
     implicitHeight: 40
+
+    Process {
+        id: pidProc
+
+        property string key: ""
+        property string pid: ""
+
+        command: ["bash", "-c", "tr '\\0' '\\n' < /proc/" + pid + "/environ 2>/dev/null | grep -m1 -E '^(SteamGameId|SteamAppId)=[0-9]+' || true"]
+        onRunningChanged: {
+            if (!running)
+                Qt.callLater(workspaceWidget.processPidQueue);
+
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = text.match(/=([0-9]+)/);
+                workspaceWidget.pidAppIds[pidProc.key] = (m && m[1] !== "0") ? m[1] : "";
+                workspaceWidget.pidVersion++;
+            }
+        }
+
+    }
 
     Process {
         id: steamScan
@@ -319,7 +386,7 @@ Item {
                         // Kette moeglicher Icon-Quellen; candIdx zeigt auf die aktuell probierte.
                         // Wichtig: source bleibt IMMER gebunden (frueher wurde das Binding bei
                         // einem Ladefehler ueberschrieben, danach aktualisierte sich das Icon nie wieder).
-                        readonly property var iconCandidates: workspaceWidget.iconCandidatesFor(biggestWindow, workspaceWidget.mapsVersion)
+                        readonly property var iconCandidates: workspaceWidget.iconCandidatesFor(biggestWindow, workspaceWidget.mapsVersion, workspaceWidget.pidVersion)
                         readonly property string iconKey: iconCandidates.join("|")
                         property int candIdx: 0
                         readonly property string iconSource: candIdx < iconCandidates.length ? iconCandidates[candIdx] : ""

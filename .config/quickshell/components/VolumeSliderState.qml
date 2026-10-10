@@ -32,6 +32,32 @@ QtObject {
         "modrinth": "modrinth.png",
         "kitty": "kitty.png"
     })
+    // ==== Steam-Erkennung (gleiche Logik wie in Workspaces.qml) ====
+    property var steamNames: ({
+    })
+    // appid -> Titel
+    property var steamCompactMap: ({
+    })
+    // Titel ohne Leer-/Sonderzeichen -> appid
+    property var steamIconMap: ({
+    })
+    // appid -> file://-URL
+    property var pidAppIds: ({
+    })
+    // pid -> appid ("" = keine gefunden)
+    property var _pidQueue: []
+    property var _pidPending: ({
+    })
+    property var _rescanned: ({
+    })
+    property var _tmpNames: ({
+    })
+    property var _tmpCompact: ({
+    })
+    property var _tmpIcons: ({
+    })
+    property double lastScan: Date.now()
+    readonly property string scanScript: Qt.resolvedUrl("../scripts/steam_scan.sh").toString().replace("file://", "")
     property Timer autoCloseTimer
     property Timer pollTimer
     property Timer streamsRefreshTimer
@@ -41,9 +67,138 @@ QtObject {
     property Process getStreamsProc
     property Process setStreamVolProc
     property Process muteStreamProc
+    property Process steamScan
+    property Process pidProc
+
+    // ==== Steam-Hilfsfunktionen ====
+    function compactTitle(t) {
+        return String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    }
+
+    // Theme-Icon nur, wenn es wirklich existiert (sonst "")
+    function themeIconUrl(name) {
+        if (!name)
+            return "";
+
+        try {
+            if (Quickshell.iconPath(name, true) !== "")
+                return "image://icon/" + name;
+
+        } catch (e) {
+        }
+        return "";
+    }
+
+    function requestRescan() {
+        if (steamScan.running || Date.now() - lastScan < 15000)
+            return ;
+
+        lastScan = Date.now();
+        _tmpNames = ({
+        });
+        _tmpCompact = ({
+        });
+        _tmpIcons = ({
+        });
+        steamScan.running = true;
+    }
+
+    // Steam setzt SteamGameId/SteamAppId in der Umgebung des gestarteten Befehls.
+    // Wir lesen sie asynchron aus /proc/<pid>/environ. Erster Aufruf liefert "",
+    // der naechste Stream-Poll sieht das gecachte Ergebnis.
+    function steamIdFromPid(pid) {
+        const p = parseInt(pid);
+        if (!p || p <= 0)
+            return "";
+
+        const key = String(p);
+        if (pidAppIds[key] !== undefined)
+            return pidAppIds[key];
+
+        if (!_pidPending[key]) {
+            _pidPending[key] = true;
+            _pidQueue.push(key);
+            processPidQueue();
+        }
+        return "";
+    }
+
+    function processPidQueue() {
+        if (pidProc.running || _pidQueue.length === 0)
+            return ;
+
+        const pid = _pidQueue.shift();
+        pidProc.command = ["bash", "-c", "echo \"$1|$(tr '\\0' '\\n' < /proc/$1/environ 2>/dev/null | grep -m1 -E '^(SteamGameId|SteamAppId)=[0-9]+')\"", "_", pid];
+        pidProc.running = true;
+    }
+
+    // Unscharfer Vergleich: Steam-Name steckt im (Exe-)Namen
+    function steamIdByFuzzy(ct) {
+        if (ct === "")
+            return "";
+
+        let best = "";
+        let bestLen = 0;
+        for (const k in steamCompactMap) {
+            if (k.length >= 4 && k.length > bestLen && ct.indexOf(k) !== -1) {
+                best = steamCompactMap[k];
+                bestLen = k.length;
+            }
+        }
+        return best;
+    }
+
+    // Steam-appid fuer einen sink-input: 1) steam_icon_<id>, 2) Prozess-Umgebung
+    // (auch bei gamescope/Proton), 3) Name == Steam-Titel, 4) Wine-Exe-Name
+    function steamIdFor(props) {
+        const iconName = String(props["application.icon_name"] || "");
+        const m = iconName.match(/^steam_icon_(\d+)$/);
+        if (m)
+            return m[1];
+
+        const byPid = steamIdFromPid(props["application.process.id"]);
+        if (byPid)
+            return byPid;
+
+        const names = [props["application.name"], props["media.name"]];
+        for (const n of names) {
+            const ct = compactTitle(n);
+            if (ct !== "" && steamCompactMap[ct])
+                return steamCompactMap[ct];
+
+        }
+        const bin = String(props["application.process.binary"] || "") + " " + String(props["application.name"] || "");
+        if (/\.exe|win64|win32/i.test(bin))
+            return steamIdByFuzzy(compactTitle(bin.replace(/-win(64|32)-shipping|\.exe/gi, "")));
+
+        return "";
+    }
+
+    // Reihenfolge: Theme-Icon steam_icon_<id> -> gecachtes Bild -> Steam-Logo
+    function steamIconFor(id) {
+        const t = themeIconUrl("steam_icon_" + id);
+        if (t)
+            return t;
+
+        if (steamIconMap[id])
+            return steamIconMap[id];
+
+        if (!_rescanned[id]) {
+            _rescanned[id] = true;
+            requestRescan();
+        }
+        return themeIconUrl("steam");
+    }
 
     // ==== Icon-Aufloesung ====
-    function resolveIcon(props) {
+    function resolveIcon(props, steamId) {
+        // Steam-Spiel (auch hinter gamescope)
+        if (steamId) {
+            const si = steamIconFor(steamId);
+            if (si)
+                return si;
+
+        }
         const cands = [];
         const push = (s) => {
             if (s === undefined || s === null)
@@ -64,6 +219,12 @@ QtObject {
         push(props["application.id"]);
         push(props["application.name"]);
         push(props["node.name"]);
+        // Discord (auch Vesktop & Co.) -> normales Discord-Icon
+        for (const c of cands) {
+            if (/vesktop|discord|webcord|armcord|legcord|equibop/i.test(c))
+                return Qt.resolvedUrl("../resources/icons/discord.svg");
+
+        }
         try {
             for (const c of cands) {
                 const variants = [c, c.toLowerCase(), c.toLowerCase().replace(/\s+/g, "-")];
@@ -276,6 +437,76 @@ QtObject {
     muteProc: Process {
     }
 
+    // Steam-Titel und -Icons (scripts/steam_scan.sh), einmal beim Start
+    steamScan: Process {
+        command: ["bash", root.scanScript]
+        running: true
+        onExited: (exitCode, exitStatus) => {
+            root.steamNames = root._tmpNames;
+            root.steamCompactMap = root._tmpCompact;
+            root.steamIconMap = root._tmpIcons;
+            if (!root.getStreamsProc.running && root.open && root.expanded)
+                root.getStreamsProc.running = true;
+
+        }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                const parts = data.split("|");
+                if (parts.length < 3)
+                    return ;
+
+                const kind = parts[0];
+                const appId = parts[1].trim();
+                const rest = parts.slice(2).join("|").trim();
+                if (!appId || !rest)
+                    return ;
+
+                if (kind === "T") {
+                    root._tmpNames[appId] = rest;
+                    const c = root.compactTitle(rest);
+                    if (c !== "")
+                        root._tmpCompact[c] = appId;
+
+                } else if (kind === "I") {
+                    root._tmpIcons[appId] = "file://" + rest;
+                }
+            }
+        }
+
+    }
+
+    // Liest SteamGameId/SteamAppId aus /proc/<pid>/environ (ein Prozess nach dem anderen)
+    pidProc: Process {
+        onRunningChanged: {
+            if (!running)
+                root.processPidQueue();
+
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const line = text.trim();
+                const idx = line.indexOf("|");
+                if (idx === -1)
+                    return ;
+
+                const pid = line.substring(0, idx);
+                const m = line.substring(idx + 1).match(/=(\d+)/);
+                const copy = Object.assign({
+                }, root.pidAppIds);
+                copy[pid] = (m && m[1] !== "0") ? m[1] : "";
+                root.pidAppIds = copy;
+                delete root._pidPending[pid];
+                // Sofort neu einlesen, damit das Steam-Icon ohne Verzoegerung erscheint
+                if (copy[pid] !== "" && !root.getStreamsProc.running)
+                    root.getStreamsProc.running = true;
+
+            }
+        }
+
+    }
+
     getStreamsProc: Process {
         command: ["pactl", "-f", "json", "list", "sink-inputs"]
 
@@ -288,9 +519,12 @@ QtObject {
                     for (const item of data) {
                         const props = item.properties || {
                         };
-                        const appName = props["application.name"] || props["media.name"] || "Unknown";
-                        const mediaName = props["media.name"] || "";
-                        const key = root.groupKeyFor(props);
+                        // Steam-Spiel? Dann nach appid gruppieren und Steam-Titel anzeigen.
+                        const sid = root.steamIdFor(props);
+                        const key = sid !== "" ? "steam:" + sid : root.groupKeyFor(props);
+                        const steamName = sid !== "" ? (root.steamNames[sid] || "") : "";
+                        const appName = steamName || props["application.name"] || props["media.name"] || "Unknown";
+                        const mediaName = sid !== "" ? "" : (props["media.name"] || "");
                         let vol = 0.5;
                         if (item.volume) {
                             const ch = Object.keys(item.volume)[0];
@@ -300,15 +534,15 @@ QtObject {
                         }
                         if (!groups[key])
                             groups[key] = {
-                                "key": key,
-                                "name": appName,
-                                "subtitle": mediaName !== appName ? mediaName : "",
-                                "icon": root.resolveIcon(props),
-                                "ids": [],
-                                "vols": [],
-                                "mutedCount": 0,
-                                "total": 0
-                            };
+                            "key": key,
+                            "name": appName,
+                            "subtitle": mediaName !== appName ? mediaName : "",
+                            "icon": root.resolveIcon(props, sid),
+                            "ids": [],
+                            "vols": [],
+                            "mutedCount": 0,
+                            "total": 0
+                        };
 
                         const g = groups[key];
                         g.ids.push(item.index);

@@ -1063,7 +1063,7 @@ PanelWindow {
     Behavior on expandT {
         NumberAnimation {
             duration: VolumeSliderState.expanded ? 460 : 320
-            easing.type: Easing.expanded ? Easing.OutBack : Easing.InOutCubic
+            easing.type: VolumeSliderState.expanded ? Easing.OutBack : Easing.InOutCubic
             easing.overshoot: 0.9
         }
 

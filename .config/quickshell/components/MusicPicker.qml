@@ -224,10 +224,25 @@ Item {
                         height: root.boxSize
                         radius: root.boxRadius
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: isCurrent ? WalColors.withAlpha(WalColors.color2, 0.25) : WalColors.withAlpha(WalColors.color2, 0.08)
+                        color: WalColors.withAlpha(WalColors.color0, 0.3)
                         border.width: isCurrent ? 2 : 0
                         border.color: WalColors.withAlpha(WalColors.color4, 0.6)
                         scale: isCurrent ? 1.08 : 1
+
+                        // Akzent-Tönung als Overlay
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: WalColors.withAlpha(WalColors.color2, isCurrent ? 0.28 : 0.14)
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 100
+                                }
+
+                            }
+
+                        }
 
                         Image {
                             id: coverImage
