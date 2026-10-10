@@ -27,22 +27,7 @@ PanelWindow {
         bottom: 0
     }
 
-    // Visuelles Feedback: dünne Linie die beim Hover aufleuchtet
-    Rectangle {
-        anchors.fill: parent
-        color: WalColors.color4
-        opacity: triggerMouse.containsMouse ? 0.35 : 0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 180
-                easing.type: Easing.OutCubic
-            }
-
-        }
-
-    }
-
+    // Komplett unsichtbar: nur eine klickbare Fläche ohne jede Darstellung
     MouseArea {
         id: triggerMouse
 
@@ -50,11 +35,8 @@ PanelWindow {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
-        onClicked: (mouse) => {
-            if (mouse.button === Qt.LeftButton)
-                VolumeSliderState.openPopup();
-
-        }
+        // Toggle: offen -> schließen, geschlossen -> öffnen
+        onClicked: VolumeSliderState.toggle()
     }
 
 }
