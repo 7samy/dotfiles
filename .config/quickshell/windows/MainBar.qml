@@ -144,31 +144,9 @@ PanelWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                Rectangle {
-                    width: 32
-                    height: 32
-                    radius: 6
-                    color: launcherMouse.containsMouse ? WalColors.withAlpha(WalColors.color2, 0.2) : "transparent"
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰍉"
-                        color: WalColors.color2
-                        font.pixelSize: 18
-                    }
-
-                    MouseArea {
-                        id: launcherMouse
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: {
-                            console.log("Launcher button clicked");
-                            AppLauncherState.toggle();
-                            console.log("Launcher visible:", AppLauncherState.launcherVisible);
-                        }
-                    }
-
+                // Clipboard-Picker oeffnet sich ueber dieses Icon.
+                // Ersetzt den alten App-Launcher-Button.
+                ClipboardToggle {
                 }
 
                 ActiveWindow {
@@ -194,11 +172,8 @@ PanelWindow {
                     property int hoveredIndex: -1
                     readonly property real pillWidth: 34
                     // ---- lockedIndex: welches Dropdown ist gerade offen? ----
-                    // Reihenfolge = Prioritaet, falls mehrere gleichzeitig
-                    // offen sind (kommt durch Hover-Wechsel kurz vor).
                     // Zuordnung: 0=PowerMenu, 1=Audio, 2=Stats, 3=VPN
                     readonly property int lockedIndex: {
-                        // VPN hat Prioritaet (seltener, deutlicher sichtbar)
                         if (typeof VpnState !== "undefined" && VpnState.dropdownOpen)
                             return 3;
 
@@ -208,15 +183,10 @@ PanelWindow {
                         if (typeof AudioState !== "undefined" && AudioState.dropdownOpen)
                             return 1;
 
-                        // PowerMenu: hier ergänzen, falls ein State-Singleton
-                        // existiert. Beispiel:
-                        // if (PowerMenuState.open) return 0;
                         return -1;
                     }
-                    // Effektiv: Hover schlaegt Lock, Lock schlaegt Idle.
                     readonly property int effectiveIndex: hoveredIndex >= 0 ? hoveredIndex : lockedIndex
                     readonly property bool focused: effectiveIndex >= 0
-                    // Ziel-X (linker Rand) der Pille
                     readonly property real pillX: {
                         if (!focused)
                             return 0;
@@ -234,7 +204,6 @@ PanelWindow {
                     height: parent.height
                     width: innerRow.implicitWidth + 28
 
-                    // ---------- Morphing Hintergrund-Pille ----------
                     Rectangle {
                         id: morphPill
 
@@ -306,7 +275,6 @@ PanelWindow {
 
                     }
 
-                    // ---- Hover-Handler ----
                     HoverHandler {
                         id: groupHover
 

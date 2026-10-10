@@ -17,6 +17,12 @@ ShellRoot {
         AppLauncherState.loadApps();
         MusicPickerState.loadSongs();
         WallpaperPickerState.loadWallpapers();
+        ClipboardState.refresh();
+    }
+
+    GlobalShortcut {
+        name: "toggle_clipboard"
+        onPressed: ClipboardState.toggle()
     }
 
     GlobalShortcut {

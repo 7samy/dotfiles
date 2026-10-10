@@ -5,12 +5,15 @@ singleton BarState 1.0 BarState.qml
 singleton AppLauncherState 1.0 AppLauncherState.qml
 singleton MusicPickerState 1.0 MusicPickerState.qml
 singleton WallpaperPickerState 1.0 WallpaperPickerState.qml
+singleton ClipboardState 1.0 ClipboardState.qml
 singleton VpnState 1.0 VpnState.qml
 singleton AudioState 1.0 AudioState.qml
 singleton StatsState 1.0 StatsState.qml
 singleton StatsProvider 1.0 StatsProvider.qml
 singleton Appearance 1.0 Appearance.qml
 singleton VpnPickerState 1.0 VpnPickerState.qml
+singleton CalendarState 1.0 CalenderState.qml
+
 PickerSwitcher 1.0 PickerSwitcher.qml
 PowerMenuButton 1.0 PowerMenuButton.qml
 AudioToggle 1.0 AudioToggle.qml
@@ -21,6 +24,8 @@ ActiveWindow 1.0 ActiveWindow.qml
 AppLauncher 1.0 AppLauncher.qml
 MusicPicker 1.0 MusicPicker.qml
 WallpaperPicker 1.0 WallpaperPicker.qml
+ClipboardPicker 1.0 ClipboardPicker.qml
+ClipboardToggle 1.0 ClipboardToggle.qml
 VpnToggle 1.0 VpnToggle.qml
 VpnDropDown 1.0 VpnDropDown.qml
 SystemStats 1.0 SystemStats.qml
@@ -31,4 +36,3 @@ VialPopup 1.0 VialPopup.qml
 StateLayer 1.0 StateLayer.qml
 RoundedDropShape 1.0 RoundedDropShape.qml
 Anim 1.0 Anim.qml
-singleton CalendarState 1.0 CalenderState.qml

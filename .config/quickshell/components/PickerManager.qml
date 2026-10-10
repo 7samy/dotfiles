@@ -4,25 +4,14 @@ pragma Singleton
 QtObject {
     id: root
 
-    readonly property var pickers: ["app", "music", "wallpaper"]
+    readonly property var pickers: ["clipboard", "app", "music", "wallpaper"]
     property string activePicker: ""
     property string searchText: ""
     // true, wenn gerade frisch geöffnet wird (keiner war aktiv)
-    // Wird von den Pickern benutzt, um beim ersten Öffnen keinen
-    // Slide, sondern einen Bounce zu zeigen.
     property bool openingFresh: false
     readonly property bool anyOpen: activePicker !== ""
-    // Wird nur für die Richtungs-Info beim Wechseln gebraucht
     property string switchDirection: "none"
-    // Nach ~60ms darf wieder geslidet werden (Wechsel-Animationen)
     property Timer _releaseFreshTimer
-
-    _releaseFreshTimer: Timer {
-        id: releaseFreshTimer
-
-        interval: 60
-        onTriggered: root.openingFresh = false
-    }
 
     function isOpen(name) {
         return activePicker === name;
@@ -85,6 +74,13 @@ QtObject {
         }
         const idx = pickers.indexOf(activePicker);
         _doOpen(pickers[(idx - 1 + pickers.length) % pickers.length], "backward");
+    }
+
+    _releaseFreshTimer: Timer {
+        id: releaseFreshTimer
+
+        interval: 60
+        onTriggered: root.openingFresh = false
     }
 
 }

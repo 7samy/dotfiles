@@ -21,7 +21,9 @@ PanelWindow {
     }
 
     function focusActivePicker() {
-        if (PickerManager.isOpen("app") && appLoader.item)
+        if (PickerManager.isOpen("clipboard") && clipboardLoader.item)
+            clipboardLoader.item.focusSearch();
+        else if (PickerManager.isOpen("app") && appLoader.item)
             appLoader.item.focusSearch();
         else if (PickerManager.isOpen("music") && musicLoader.item)
             musicLoader.item.focusSearch();
@@ -97,18 +99,90 @@ PanelWindow {
 
                 anchors.fill: parent
 
-                // ---- App Launcher (lazy, Qt Loader) ----
+                // ---- Clipboard Picker (lazy, keepAlive-Pattern) ----
                 Loader {
-                    id: appLoader
+                    id: clipboardLoader
+
+                    property bool keepAlive: false
 
                     anchors.fill: parent
                     asynchronous: true
-                    // Aktiv solange der Picker aktiv ist ODER
-                    // das geladene Item noch sichtbar (Fade-out laeuft).
-                    active: PickerManager.activePicker === "app" || (appLoader.item && appLoader.item.opacity > 0.01)
-                    // Wenn active false wird, wird das Item zerstoert
-                    // und der Speicher freigegeben.
+                    active: keepAlive
+                    sourceComponent: clipboardComponent
+
+                    Connections {
+                        function onActivePickerChanged() {
+                            if (PickerManager.activePicker === "clipboard")
+                                clipboardLoader.keepAlive = true;
+                            else if (clipboardLoader.item)
+                                clipboardUnloadTimer.restart();
+                        }
+
+                        target: PickerManager
+                    }
+
+                    Timer {
+                        id: clipboardUnloadTimer
+
+                        interval: 320
+                        onTriggered: clipboardLoader.keepAlive = false
+                    }
+
+                    Component {
+                        id: clipboardComponent
+
+                        ClipboardPicker {
+                            id: clipboardPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: PickerManager.activePicker === "clipboard" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                // ---- App Launcher (lazy, keepAlive-Pattern) ----
+                Loader {
+                    id: appLoader
+
+                    property bool keepAlive: false
+
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: keepAlive
                     sourceComponent: appComponent
+
+                    Connections {
+                        function onActivePickerChanged() {
+                            if (PickerManager.activePicker === "app")
+                                appLoader.keepAlive = true;
+                            else if (appLoader.item)
+                                appUnloadTimer.restart();
+                        }
+
+                        target: PickerManager
+                    }
+
+                    Timer {
+                        id: appUnloadTimer
+
+                        interval: 320
+                        onTriggered: appLoader.keepAlive = false
+                    }
 
                     Component {
                         id: appComponent
@@ -137,14 +211,34 @@ PanelWindow {
 
                 }
 
-                // ---- Music Picker (lazy, Qt Loader) ----
+                // ---- Music Picker (lazy, keepAlive-Pattern) ----
                 Loader {
                     id: musicLoader
 
+                    property bool keepAlive: false
+
                     anchors.fill: parent
                     asynchronous: true
-                    active: PickerManager.activePicker === "music" || (musicLoader.item && musicLoader.item.opacity > 0.01)
+                    active: keepAlive
                     sourceComponent: musicComponent
+
+                    Connections {
+                        function onActivePickerChanged() {
+                            if (PickerManager.activePicker === "music")
+                                musicLoader.keepAlive = true;
+                            else if (musicLoader.item)
+                                musicUnloadTimer.restart();
+                        }
+
+                        target: PickerManager
+                    }
+
+                    Timer {
+                        id: musicUnloadTimer
+
+                        interval: 320
+                        onTriggered: musicLoader.keepAlive = false
+                    }
 
                     Component {
                         id: musicComponent
@@ -173,14 +267,34 @@ PanelWindow {
 
                 }
 
-                // ---- Wallpaper Picker (lazy, Qt Loader) ----
+                // ---- Wallpaper Picker (lazy, keepAlive-Pattern) ----
                 Loader {
                     id: wallpaperLoader
 
+                    property bool keepAlive: false
+
                     anchors.fill: parent
                     asynchronous: true
-                    active: PickerManager.activePicker === "wallpaper" || (wallpaperLoader.item && wallpaperLoader.item.opacity > 0.01)
+                    active: keepAlive
                     sourceComponent: wallpaperComponent
+
+                    Connections {
+                        function onActivePickerChanged() {
+                            if (PickerManager.activePicker === "wallpaper")
+                                wallpaperLoader.keepAlive = true;
+                            else if (wallpaperLoader.item)
+                                wallpaperUnloadTimer.restart();
+                        }
+
+                        target: PickerManager
+                    }
+
+                    Timer {
+                        id: wallpaperUnloadTimer
+
+                        interval: 320
+                        onTriggered: wallpaperLoader.keepAlive = false
+                    }
 
                     Component {
                         id: wallpaperComponent
