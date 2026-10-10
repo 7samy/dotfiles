@@ -186,26 +186,91 @@ PanelWindow {
                 height: parent.height
                 spacing: 40
 
-                // ---- Icon-Gruppe mit flüssigem Sliding-Pill ----
+                // ---- Icon-Gruppe mit morphing Pill ----
                 Item {
                     id: iconGroup
 
+                    // -1 = nichts gehovert
                     property int hoveredIndex: -1
-                    property real targetCenterX: innerRow.x + innerRow.width / 2
                     readonly property real pillWidth: 34
+                    // ---- lockedIndex: welches Dropdown ist gerade offen? ----
+                    // Reihenfolge = Prioritaet, falls mehrere gleichzeitig
+                    // offen sind (kommt durch Hover-Wechsel kurz vor).
+                    // Zuordnung: 0=PowerMenu, 1=Audio, 2=Stats, 3=VPN
+                    readonly property int lockedIndex: {
+                        // VPN hat Prioritaet (seltener, deutlicher sichtbar)
+                        if (typeof VpnState !== "undefined" && VpnState.dropdownOpen)
+                            return 3;
+
+                        if (typeof StatsState !== "undefined" && StatsState.dropdownOpen)
+                            return 2;
+
+                        if (typeof AudioState !== "undefined" && AudioState.dropdownOpen)
+                            return 1;
+
+                        // PowerMenu: hier ergänzen, falls ein State-Singleton
+                        // existiert. Beispiel:
+                        // if (PowerMenuState.open) return 0;
+                        return -1;
+                    }
+                    // Effektiv: Hover schlaegt Lock, Lock schlaegt Idle.
+                    readonly property int effectiveIndex: hoveredIndex >= 0 ? hoveredIndex : lockedIndex
+                    readonly property bool focused: effectiveIndex >= 0
+                    // Ziel-X (linker Rand) der Pille
+                    readonly property real pillX: {
+                        if (!focused)
+                            return 0;
+
+                        const kids = [pmBtn, atBtn, stBtn, vpnBtn];
+                        const c = kids[effectiveIndex];
+                        if (!c)
+                            return 0;
+
+                        return innerRow.x + c.x + c.width / 2 - pillWidth / 2;
+                    }
+                    readonly property real pillW: focused ? pillWidth : width
 
                     anchors.verticalCenter: parent.verticalCenter
                     height: parent.height
                     width: innerRow.implicitWidth + 28
 
-                    // Statischer Gruppen-Hintergrund
+                    // ---------- Morphing Hintergrund-Pille ----------
                     Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        id: morphPill
+
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width
                         height: 32
                         radius: height / 2
-                        color: WalColors.withAlpha(WalColors.color4, 0.12)
+                        color: WalColors.withAlpha(WalColors.color4, iconGroup.focused ? 0.3 : 0.12)
+                        x: iconGroup.pillX
+                        width: iconGroup.pillW
+
+                        Behavior on x {
+                            NumberAnimation {
+                                duration: 320
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.08
+                            }
+
+                        }
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 320
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.08
+                            }
+
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 260
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
+
                     }
 
                     Row {
@@ -215,8 +280,8 @@ PanelWindow {
                         spacing: 10
                         height: parent.height
 
-                        PowerMenuButton {
-                            id: pmBtn
+                        VpnToggle {
+                            id: vpnBtn
 
                             hoverBoxEnabled: false
                         }
@@ -233,51 +298,10 @@ PanelWindow {
                             hoverBoxEnabled: false
                         }
 
-                        VpnToggle {
-                            id: vpnBtn
+                        PowerMenuButton {
+                            id: pmBtn
 
                             hoverBoxEnabled: false
-                        }
-
-                    }
-
-                    // ---- Perfekt gedämpftes Sliding Pill ----
-                    Rectangle {
-                        id: sliderPill
-
-                        anchors.verticalCenter: parent.verticalCenter
-                        height: 32
-                        width: iconGroup.pillWidth
-                        radius: height / 2
-                        color: WalColors.withAlpha(WalColors.color4, 0.28)
-                        // Position aus targetCenterX
-                        x: iconGroup.targetCenterX - width / 2
-                        // Sichtbarkeit
-                        visible: opacity > 0.01
-                        opacity: iconGroup.hoveredIndex >= 0 ? 1 : 0
-
-                        // Diese X-Animation macht den "Magie"-Effekt aus:
-                        // Eine starke Federung (spring), die aber fast perfekt abgedämpft wird (damping).
-                        // Das sorgt dafür, dass sie schnell startet und samtweich einrastet, ohne zu wackeln.
-                        Behavior on x {
-                            enabled: sliderPill.opacity === 1
-
-                            SpringAnimation {
-                                spring: 7.5 // Reaktionsgeschwindigkeit (snappy)
-                                damping: 0.95 // Sehr starke Dämpfung (verhindert den Bounce, sorgt für smoothen Slide)
-                                mass: 1
-                            }
-
-                        }
-
-                        // Opacity: Fade In ist sehr schnell, Fade Out minimal verzögert.
-                        // So bleibt die Box präsenter, wenn man leicht vom Icon abrutscht.
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: iconGroup.hoveredIndex >= 0 ? 100 : 250
-                                easing.type: Easing.OutCubic
-                            }
-
                         }
 
                     }
@@ -289,7 +313,6 @@ PanelWindow {
                         onPointChanged: {
                             const px = point.position.x;
                             let found = -1;
-                            let centerX = innerRow.x + innerRow.width / 2;
                             const kids = [pmBtn, atBtn, stBtn, vpnBtn];
                             for (let i = 0; i < kids.length; i++) {
                                 const c = kids[i];
@@ -299,20 +322,17 @@ PanelWindow {
                                 const cx = innerRow.x + c.x;
                                 if (px >= cx && px <= cx + c.width) {
                                     found = i;
-                                    centerX = cx + c.width / 2;
                                     break;
                                 }
                             }
                             if (iconGroup.hoveredIndex !== found)
                                 iconGroup.hoveredIndex = found;
 
-                            iconGroup.targetCenterX = centerX;
                         }
                         onHoveredChanged: {
-                            if (!hovered) {
+                            if (!hovered)
                                 iconGroup.hoveredIndex = -1;
-                                iconGroup.targetCenterX = innerRow.x + innerRow.width / 2;
-                            }
+
                         }
                     }
 

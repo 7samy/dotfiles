@@ -9,6 +9,16 @@ Rectangle {
     property bool hoverBoxEnabled: true
     readonly property string vpnPattern: "proton"
     readonly property real globalCenterX: windowX(root) + width / 2
+    // Icon-Optionen (alle aus Nerd Fonts Material Design):
+    //   Connected:     󰦝 (shield-check)  |  󰒃 (security)  |  󰿄 (vpn-cloud)
+    //   Disconnected:  󰦞 (shield-alert)  |  󰒄 (unsecured) |  󱚦 (vpn-off)
+    readonly property string iconOn: "󰦝"
+    readonly property string iconOff: "󰦞"
+    // Farben bewusst weich: Pywal-Slots mit reduzierter Deckkraft.
+    //   color2 ist bei den meisten Schemas der gruene Slot
+    //   color1 ist der rote Slot
+    readonly property color colorOn: WalColors.withAlpha(WalColors.color2, 0.75)
+    readonly property color colorOff: WalColors.withAlpha(WalColors.color1, 0.65)
 
     function windowX(item) {
         var x = 0;
@@ -130,15 +140,24 @@ Rectangle {
         id: vpnText
 
         anchors.centerIn: parent
-        text: VpnState.connected ? "󰦝" : "󱦚"
-        color: VpnState.connected ? "#b8e0b8" : "#f0b8b8"
+        text: VpnState.connected ? root.iconOn : root.iconOff
+        color: VpnState.connected ? root.colorOn : root.colorOff
         font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 15
+        font.pixelSize: 17
         scale: mouseArea.containsMouse ? 1.3 : 1
 
         Behavior on scale {
             NumberAnimation {
                 duration: 150
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        // Sanfter Farb-Morph beim State-Wechsel (statt Hard-Switch)
+        Behavior on color {
+            ColorAnimation {
+                duration: 260
                 easing.type: Easing.OutCubic
             }
 
