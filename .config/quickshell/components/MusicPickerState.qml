@@ -19,6 +19,15 @@ QtObject {
     })
     property var coverQueue: []
     property bool coverBusy: false
+    // ==== Warteschlange ("Up next") ====
+    // Songpfade, die direkt hinter dem laufenden Song gespielt werden.
+    // Spiegelt den Block hinter dem laufenden Song in der mpd-Playlist.
+    property var queue: []
+    // Datei des gerade laufenden Songs ("" = es laeuft nichts)
+    property string nowPlaying: ""
+    property var queueJobs: []
+    property bool queueBusy: false
+    readonly property string queueScript: Qt.resolvedUrl("../scripts/music_queue.sh").toString().replace("file://", "")
     // ==== Link-Download (Spotify / SoundCloud -> mp3) ====
     // Phasen: "idle" | "busy" | "done" | "error"
     property string dlPhase: "idle"
@@ -36,6 +45,8 @@ QtObject {
     property Process songsProcess
     property Process coverProcess
     property Process dlProcess
+    property Process queueProcess
+    property Process nowProcess
 
     // Dienst anhand des Links erkennen: "spotify" | "soundcloud" | ""
     function serviceOf(url) {
@@ -152,6 +163,74 @@ QtObject {
         return base.replace(/\.[^.]+$/, "");
     }
 
+    // ==== Warteschlange ====
+    // Alle mpd-Aenderungen laufen nacheinander (ein Job nach dem anderen),
+    // damit sich schnelle Klicks nicht gegenseitig die Positionen verschieben.
+    function runQueueJob(args) {
+        root.queueJobs.push(args);
+        root.nextQueueJob();
+    }
+
+    function nextQueueJob() {
+        if (root.queueBusy || root.queueJobs.length === 0)
+            return ;
+
+        root.queueBusy = true;
+        const args = root.queueJobs.shift();
+        root.queueProcess.command = ["bash", root.queueScript].concat(args);
+        root.queueProcess.running = true;
+    }
+
+    // Song hinten an die Queue anhaengen
+    function addToQueue(songPath) {
+        if (!songPath || root.queue.indexOf(songPath) !== -1)
+            return ;
+
+        const k = root.queue.length;
+        root.queue = root.queue.concat([songPath]);
+        root.requestCover(songPath);
+        root.runQueueJob(["add", songPath, String(k)]);
+    }
+
+    function removeFromQueue(index) {
+        if (index < 0 || index >= root.queue.length)
+            return ;
+
+        root.queue = root.queue.filter((p, i) => {
+            return i !== index;
+        });
+        root.runQueueJob(["del", String(index)]);
+    }
+
+    // Song an den Anfang der Queue ziehen ("Play next")
+    function queueNext(index) {
+        if (index <= 0 || index >= root.queue.length)
+            return ;
+
+        const q = root.queue.slice();
+        const song = q.splice(index, 1)[0];
+        q.unshift(song);
+        root.queue = q;
+        root.runQueueJob(["next", String(index)]);
+    }
+
+    function clearQueue() {
+        if (root.queue.length === 0)
+            return ;
+
+        const n = root.queue.length;
+        root.queue = [];
+        root.runQueueJob(["clear", String(n)]);
+    }
+
+    // Queue-Song sofort abspielen (die Queue rueckt ueber nowPlaying nach)
+    function playQueued(index) {
+        if (index < 0 || index >= root.queue.length)
+            return ;
+
+        root.runQueueJob(["play", String(index)]);
+    }
+
     function toggle() {
         PickerManager.toggle("music");
     }
@@ -167,6 +246,18 @@ QtObject {
     }
 
     Component.onCompleted: loadSongs()
+    // Spielt mpd einen Queue-Song ab, ist er nicht mehr "als naechstes dran":
+    // alles bis einschliesslich dieses Songs faellt aus der Queue.
+    onNowPlayingChanged: {
+        if (nowPlaying === "")
+            return ;
+
+        requestCover(nowPlaying);
+        const i = queue.indexOf(nowPlaying);
+        if (i !== -1)
+            queue = queue.slice(i + 1);
+
+    }
 
     songsProcess: Process {
         command: ["mpc", "listall"]
@@ -194,6 +285,30 @@ QtObject {
                     root.coverCache = updated;
                 }
                 root.processCoverQueue();
+            }
+        }
+
+    }
+
+    queueProcess: Process {
+        onExited: (exitCode, exitStatus) => {
+            root.queueBusy = false;
+            root.nextQueueJob();
+        }
+    }
+
+    // Beobachtet mpd per `mpc idle player` (ereignisgesteuert, kein Polling).
+    // Gibt bei jedem Player-Ereignis "NOW|<datei>" aus; laeuft mpd nicht,
+    // wird alle 3 s neu versucht.
+    nowProcess: Process {
+        command: ["bash", "-c", 'while true; do echo "NOW|$(mpc -f "%file%" current 2>/dev/null)"; mpc idle player >/dev/null 2>&1 || sleep 3; done']
+        running: true
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                if (data.indexOf("NOW|") === 0)
+                    root.nowPlaying = data.substring(4).trim();
+
             }
         }
 

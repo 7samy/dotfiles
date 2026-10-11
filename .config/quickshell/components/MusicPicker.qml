@@ -18,6 +18,10 @@ Item {
     property real lastMouseY: -1
     // Download view: replaces search bar + song grid
     property bool addOpen: false
+    // Queue panel ("Up next") open
+    property bool queueOpen: false
+    readonly property var queue: MusicPickerState.queue
+    readonly property string nowPlaying: MusicPickerState.nowPlaying
     readonly property string musicDir: MusicPickerState.musicDir
     // The most recently downloaded song (empty when multiple songs)
     readonly property string resultPath: (MusicPickerState.dlName !== "" && MusicPickerState.dlName.indexOf(" Songs") === -1) ? MusicPickerState.dlName + ".mp3" : ""
@@ -33,27 +37,72 @@ Item {
         searchInput.forceActiveFocus();
     }
 
-    function playSong(songPath) {
+    // Plays a song right away. The user's queue survives: the played song drops
+    // out of it, the rest is inserted again behind the new song.
+    function playSong(songPath, keepOpen) {
         if (!songPath)
             return ;
 
+        const rest = MusicPickerState.queue.filter((p) => {
+            return p !== songPath;
+        });
+        MusicPickerState.queue = rest;
         try {
             console.log("Selecting song:", songPath);
-            addAllAndPlay.command = ["bash", "-c", 'mpc clear && mpc listall | mpc add && ' + 'position=$(mpc playlist -f "%file%" | grep -nF "$1" | cut -d: -f1 | head -n 1) && ' + 'mpc play "$position" && mpc seek 0', "_", songPath];
+            addAllAndPlay.command = ["bash", "-c", 'song="$1"; shift; ' + 'mpc clear && mpc listall | mpc add && ' + 'position=$(mpc playlist -f "%file%" | grep -nxF "$song" | cut -d: -f1 | head -n 1) && ' + 'mpc play "$position" && mpc seek 0 && ' + 'for ((i=$#; i>=1; i--)); do mpc insert "${!i}" >/dev/null; done', "_", songPath].concat(rest);
             addAllAndPlay.running = true;
         } catch (e) {
             console.error("Error playing", songPath, ":", e);
         }
-        MusicPickerState.close();
+        if (!keepOpen)
+            MusicPickerState.close();
+
     }
 
     function displayName(songPath) {
         return MusicPickerState.displayName(songPath);
     }
 
+    // ==== Queue ====
+    // Add to / remove from the queue. srcItem = item the cover flies away from.
+    function toggleQueue(songPath, srcItem) {
+        if (!songPath)
+            return ;
+
+        const idx = MusicPickerState.queue.indexOf(songPath);
+        if (idx !== -1) {
+            MusicPickerState.removeFromQueue(idx);
+            return ;
+        }
+        // Nothing is playing -> there is nothing to queue behind, just start it
+        if (MusicPickerState.nowPlaying === "") {
+            root.playSong(songPath, true);
+            return ;
+        }
+        if (srcItem)
+            root.flyToQueue(songPath, srcItem);
+
+        MusicPickerState.addToQueue(songPath);
+    }
+
+    // A little vinyl flies in an arc from the song into the queue dock
+    function flyToQueue(songPath, srcItem) {
+        const from = srcItem.mapToItem(root, srcItem.width / 2, srcItem.height / 2);
+        const to = queueDock.mapToItem(root, queueDock.width - 38, queueDock.height / 2);
+        const cov = root.coverCache[songPath] ? "file://" + root.coverCache[songPath] : "";
+        flyerComp.createObject(root, {
+            "fromX": from.x,
+            "fromY": from.y,
+            "toX": to.x,
+            "toY": to.y,
+            "cover": cov
+        });
+    }
+
     // ==== Download view ====
     function openAdd(prefill) {
         root.addOpen = true;
+        root.queueOpen = false;
         if (prefill)
             linkInput.text = prefill;
         else if (linkInput.text === "" && MusicPickerState.dlPhase === "idle")
@@ -96,16 +145,24 @@ Item {
     }
     onFilteredSongsChanged: grid.currentIndex = 0
     Keys.onEscapePressed: {
-        if (root.addOpen)
+        if (root.queueOpen)
+            root.queueOpen = false;
+        else if (root.addOpen)
             root.closeAdd();
         else
             MusicPickerState.close();
     }
-    Keys.onReturnPressed: {
+    Keys.onReturnPressed: (event) => {
         // In download mode, Enter must not start a (hidden) song
-        if (!root.addOpen && root.filteredSongs.length > 0)
-            root.playSong(root.filteredSongs[grid.currentIndex]);
+        if (root.addOpen || root.filteredSongs.length === 0)
+            return ;
 
+        const song = root.filteredSongs[grid.currentIndex];
+        // Ctrl+Enter = add to queue, Enter = play now
+        if (event.modifiers & Qt.ControlModifier)
+            root.toggleQueue(song, grid.currentItem);
+        else
+            root.playSong(song);
     }
 
     Process {
@@ -575,6 +632,8 @@ Item {
                 Column {
                     anchors.centerIn: parent
                     spacing: 10
+                    // Above the click area so the queue chip on the cover gets its clicks
+                    z: 1
 
                     Rectangle {
                         id: iconBg
@@ -584,8 +643,8 @@ Item {
                         radius: root.boxRadius
                         anchors.horizontalCenter: parent.horizontalCenter
                         color: WalColors.withAlpha(WalColors.color0, 0.3)
-                        border.width: isCurrent ? 2 : 0
-                        border.color: WalColors.withAlpha(WalColors.color4, 0.6)
+                        border.width: (isCurrent || qChip.queued) ? 2 : 0
+                        border.color: qChip.queued ? WalColors.withAlpha(WalColors.color2, 0.85) : WalColors.withAlpha(WalColors.color4, 0.6)
                         scale: isCurrent ? 1.08 : 1
 
                         // Accent tint as overlay
@@ -646,6 +705,73 @@ Item {
                             color: WalColors.color2
                         }
 
+                        // ---- Queue chip: "+" (selected) / position number (queued) / "×" (hover) ----
+                        Rectangle {
+                            id: qChip
+
+                            readonly property int qIndex: MusicPickerState.queue.indexOf(songPath)
+                            readonly property bool queued: qIndex !== -1
+                            readonly property bool hot: chipMouse.containsMouse
+
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.topMargin: -7
+                            anchors.rightMargin: -7
+                            width: 30
+                            height: 30
+                            radius: 15
+                            color: queued ? (hot ? WalColors.color1 : WalColors.color2) : (hot ? WalColors.color4 : WalColors.withAlpha(WalColors.color0, 0.9))
+                            border.width: 2
+                            border.color: queued ? WalColors.color0 : WalColors.withAlpha(WalColors.color4, 0.75)
+                            opacity: (isCurrent || queued) ? 1 : 0
+                            scale: opacity > 0 ? (hot ? 1.15 : 1) : 0.6
+                            visible: opacity > 0.01
+                            z: 5
+
+                            Text {
+                                anchors.centerIn: parent
+                                anchors.verticalCenterOffset: qChip.queued && !qChip.hot ? 0 : -1
+                                text: qChip.queued ? (qChip.hot ? "×" : (qChip.qIndex + 1)) : "+"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: qChip.queued && !qChip.hot ? 13 : 18
+                                font.bold: true
+                                color: (qChip.queued || qChip.hot) ? WalColors.color0 : WalColors.color4
+                            }
+
+                            MouseArea {
+                                id: chipMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleQueue(songPath, iconBg)
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 140
+                                }
+
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 2
+                                }
+
+                            }
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 120
+                                }
+
+                            }
+
+                        }
+
                         Behavior on scale {
                             NumberAnimation {
                                 duration: 100
@@ -678,11 +804,13 @@ Item {
 
                 }
 
+                // Left click = play now, right click = add to / remove from queue
                 MouseArea {
                     id: mArea
 
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
                     onPositionChanged: (mouse) => {
                         const p = mArea.mapToItem(null, mouse.x, mouse.y);
@@ -693,9 +821,12 @@ Item {
                         root.lastMouseY = p.y;
                         grid.currentIndex = index;
                     }
-                    onClicked: {
+                    onClicked: (mouse) => {
                         grid.currentIndex = index;
-                        root.playSong(modelData);
+                        if (mouse.button === Qt.RightButton)
+                            root.toggleQueue(modelData, iconBg);
+                        else
+                            root.playSong(modelData);
                     }
                 }
 
@@ -1334,6 +1465,781 @@ Item {
                 duration: 420
                 easing.type: Easing.OutBack
                 easing.overshoot: 1
+            }
+
+        }
+
+    }
+
+    // ==== Queue dock (bottom right): fanned vinyl stack of the next songs ====
+    // The top record spins. Click = open/close the "Up next" panel.
+    Item {
+        id: queueDock
+
+        readonly property int count: root.queue.length
+        property int lastCount: 0
+        property real bump: 1
+
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 56
+        anchors.bottomMargin: 48
+        width: 100
+        height: 92
+        z: 150
+        opacity: root.addOpen ? 0.35 : 1
+        scale: bump * (dockMouse.pressed ? 0.94 : (dockMouse.containsMouse ? 1.06 : 1))
+        onCountChanged: {
+            // The badge bumps when the flying record lands
+            if (count > lastCount)
+                bumpAnim.restart();
+
+            lastCount = count;
+        }
+
+        SequentialAnimation {
+            id: bumpAnim
+
+            PauseAnimation {
+                duration: 480
+            }
+
+            NumberAnimation {
+                target: queueDock
+                property: "bump"
+                to: 1.18
+                duration: 110
+                easing.type: Easing.OutCubic
+            }
+
+            NumberAnimation {
+                target: queueDock
+                property: "bump"
+                to: 1
+                duration: 260
+                easing.type: Easing.OutBack
+                easing.overshoot: 2.5
+            }
+
+        }
+
+        // Empty state: quiet circle with a note
+        Rectangle {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 76
+            height: 76
+            radius: 38
+            color: WalColors.withAlpha(WalColors.color0, 0.8)
+            border.width: 2
+            border.color: root.queueOpen ? WalColors.withAlpha(WalColors.color4, 0.7) : (dockMouse.containsMouse ? WalColors.withAlpha(WalColors.color4, 0.5) : WalColors.withAlpha(WalColors.color2, 0.25))
+            opacity: queueDock.count === 0 ? 1 : 0
+            visible: opacity > 0.01
+
+            Text {
+                anchors.centerIn: parent
+                text: "♫"
+                font.pixelSize: 30
+                color: root.queueOpen ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.5)
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                }
+
+            }
+
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: 150
+                }
+
+            }
+
+        }
+
+        // The next three songs as records, the next one in front
+        Repeater {
+            model: Math.min(3, queueDock.count)
+
+            delegate: Item {
+                id: disc
+
+                required property int index
+                readonly property string path: root.queue[index] ?? ""
+                readonly property string cov: root.coverCache[path] ? "file://" + root.coverCache[path] : ""
+                readonly property bool front: index === 0
+
+                width: 78 - index * 10
+                height: width
+                x: queueDock.width - width - index * 18
+                y: (queueDock.height - height) / 2
+                z: 10 - index
+                opacity: 1 - index * 0.2
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: WalColors.color0
+                    border.width: 2
+                    border.color: root.queueOpen ? WalColors.withAlpha(WalColors.color4, front ? 0.8 : 0.4) : WalColors.withAlpha(WalColors.color2, front ? 0.55 : 0.25)
+                }
+
+                Item {
+                    id: platter
+
+                    anchors.fill: parent
+
+                    CoverThumb {
+                        anchors.centerIn: parent
+                        width: parent.width - 12
+                        height: width
+                        source: disc.cov
+                    }
+
+                    // Groove ring
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width - 28
+                        height: width
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 1
+                        border.color: WalColors.withAlpha(WalColors.color0, 0.4)
+                    }
+
+                    // Center hole
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: WalColors.color0
+                        border.width: 2
+                        border.color: WalColors.withAlpha(WalColors.color7, 0.3)
+                    }
+
+                    // Spinning record (only the front one, only while the picker is open)
+                    RotationAnimator on rotation {
+                        running: disc.front && MusicPickerState.pickerVisible
+                        from: 0
+                        to: 360
+                        duration: 7000
+                        loops: Animation.Infinite
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Number of queued songs
+        Rectangle {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.topMargin: -2
+            anchors.rightMargin: -4
+            width: Math.max(26, badgeText.implicitWidth + 14)
+            height: 26
+            radius: 13
+            color: WalColors.color4
+            border.width: 3
+            border.color: WalColors.color0
+            z: 50
+            scale: queueDock.count > 0 ? 1 : 0
+            visible: scale > 0.01
+
+            Text {
+                id: badgeText
+
+                anchors.centerIn: parent
+                text: queueDock.count
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 12
+                font.bold: true
+                color: WalColors.color0
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 260
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 2
+                }
+
+            }
+
+        }
+
+        MouseArea {
+            id: dockMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.queueOpen = !root.queueOpen
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 200
+            }
+
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 150
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+    }
+
+    // ==== "Up next" panel: grows out of the dock ====
+    Rectangle {
+        id: queuePanel
+
+        readonly property int rowH: 60
+        readonly property int maxRows: 6
+
+        anchors.right: queueDock.right
+        anchors.bottom: queueDock.top
+        anchors.bottomMargin: 14
+        width: 380
+        height: panelCol.implicitHeight + 36
+        radius: 26
+        color: WalColors.withAlpha(WalColors.color0, 0.92)
+        border.width: 2
+        border.color: WalColors.withAlpha(WalColors.color4, 0.3)
+        z: 160
+        opacity: root.queueOpen ? 1 : 0
+        scale: root.queueOpen ? 1 : 0.88
+        transformOrigin: Item.BottomRight
+        visible: opacity > 0.01
+        enabled: root.queueOpen
+
+        // Swallows clicks so the picker does not close behind the panel
+        MouseArea {
+            anchors.fill: parent
+        }
+
+        Column {
+            id: panelCol
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 18
+            spacing: 12
+
+            // ---- Header ----
+            Item {
+                width: parent.width
+                height: 28
+
+                Text {
+                    id: panelTitle
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Up next"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 16
+                    font.bold: true
+                    color: WalColors.color7
+                }
+
+                Text {
+                    anchors.left: panelTitle.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.queue.length === 0 ? "" : root.queue.length + (root.queue.length === 1 ? " song" : " songs")
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    color: WalColors.withAlpha(WalColors.color7, 0.45)
+                }
+
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: clearText.implicitWidth + 24
+                    height: 26
+                    radius: 13
+                    visible: root.queue.length > 0
+                    color: clearMouse.containsMouse ? WalColors.withAlpha(WalColors.color1, 0.3) : WalColors.withAlpha(WalColors.color7, 0.08)
+
+                    Text {
+                        id: clearText
+
+                        anchors.centerIn: parent
+                        text: "Clear"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        color: clearMouse.containsMouse ? WalColors.color1 : WalColors.withAlpha(WalColors.color7, 0.7)
+                    }
+
+                    MouseArea {
+                        id: clearMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: MusicPickerState.clearQueue()
+                    }
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 120
+                        }
+
+                    }
+
+                }
+
+            }
+
+            // ---- Now playing ----
+            Item {
+                width: parent.width
+                height: 48
+                visible: root.nowPlaying !== ""
+
+                CoverThumb {
+                    id: nowCover
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 44
+                    height: 44
+                    source: root.coverCache[root.nowPlaying] ? "file://" + root.coverCache[root.nowPlaying] : ""
+
+                    RotationAnimator on rotation {
+                        running: root.queueOpen && MusicPickerState.pickerVisible
+                        from: 0
+                        to: 360
+                        duration: 7000
+                        loops: Animation.Infinite
+                    }
+
+                }
+
+                Column {
+                    anchors.left: nowCover.right
+                    anchors.leftMargin: 12
+                    anchors.right: nowBars.left
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+
+                    Text {
+                        text: "NOW PLAYING"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 10
+                        font.bold: true
+                        font.letterSpacing: 1.5
+                        color: WalColors.color4
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: root.displayName(root.nowPlaying)
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 13
+                        color: WalColors.color7
+                        elide: Text.ElideRight
+                    }
+
+                }
+
+                // Little equalizer
+                Row {
+                    id: nowBars
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 18
+                    spacing: 3
+
+                    Repeater {
+                        model: 3
+
+                        delegate: Rectangle {
+                            required property int index
+                            property real lvl: 0.3
+
+                            width: 4
+                            height: 4 + lvl * 14
+                            radius: 2
+                            anchors.bottom: parent.bottom
+                            color: WalColors.color4
+
+                            SequentialAnimation on lvl {
+                                running: root.queueOpen && MusicPickerState.pickerVisible
+                                loops: Animation.Infinite
+
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 300 + index * 90
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                NumberAnimation {
+                                    to: 0.15
+                                    duration: 300 + index * 90
+                                    easing.type: Easing.InOutSine
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: WalColors.withAlpha(WalColors.color7, 0.1)
+                visible: root.nowPlaying !== ""
+            }
+
+            // ---- Queue list ----
+            Item {
+                id: listWrap
+
+                width: parent.width
+                height: root.queue.length === 0 ? 76 : Math.min(queuePanel.maxRows, root.queue.length) * queuePanel.rowH
+
+                Text {
+                    anchors.centerIn: parent
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "Queue is empty\nright-click a song or hit + on its cover"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    lineHeight: 1.3
+                    color: WalColors.withAlpha(WalColors.color7, 0.4)
+                    visible: root.queue.length === 0
+                }
+
+                ListView {
+                    id: queueList
+
+                    anchors.fill: parent
+                    model: root.queue
+                    clip: true
+                    interactive: contentHeight > height
+
+                    delegate: Item {
+                        id: row
+
+                        required property int index
+                        required property var modelData
+                        readonly property bool hot: rowMouse.containsMouse || upBtn.hovered || delBtn.hovered
+
+                        width: queueList.width
+                        height: queuePanel.rowH
+
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.topMargin: 3
+                            anchors.bottomMargin: 3
+                            radius: 16
+                            color: row.hot ? WalColors.withAlpha(WalColors.color7, 0.09) : "transparent"
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 120
+                                }
+
+                            }
+
+                        }
+
+                        // Click a row = play this song right now
+                        MouseArea {
+                            id: rowMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: MusicPickerState.playQueued(row.index)
+                        }
+
+                        Text {
+                            id: numText
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 20
+                            horizontalAlignment: Text.AlignHCenter
+                            text: row.index + 1
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: row.index === 0 ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.4)
+                        }
+
+                        CoverThumb {
+                            id: rowCover
+
+                            anchors.left: numText.right
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 42
+                            height: 42
+                            corner: 11
+                            source: root.coverCache[row.modelData] ? "file://" + root.coverCache[row.modelData] : ""
+                        }
+
+                        Text {
+                            anchors.left: rowCover.right
+                            anchors.leftMargin: 12
+                            anchors.right: btnRow.left
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.displayName(row.modelData)
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 13
+                            color: WalColors.color7
+                            elide: Text.ElideRight
+                        }
+
+                        Row {
+                            id: btnRow
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 6
+                            opacity: row.hot ? 1 : 0
+
+                            MiniButton {
+                                id: upBtn
+
+                                label: "↑"
+                                visible: row.index > 0
+                                onClicked: MusicPickerState.queueNext(row.index)
+                            }
+
+                            MiniButton {
+                                id: delBtn
+
+                                label: "×"
+                                danger: true
+                                onClicked: MusicPickerState.removeFromQueue(row.index)
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 120
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 260
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.2
+            }
+
+        }
+
+    }
+
+    // Flying record: from the song cover into the queue dock (self-destructs on landing)
+    Component {
+        id: flyerComp
+
+        Item {
+            id: flyer
+
+            property real fromX: 0
+            property real fromY: 0
+            property real toX: 0
+            property real toY: 0
+            property string cover: ""
+            // 0..1 progress along the flight path
+            property real p: 0
+
+            width: 84
+            height: 84
+            z: 200
+            // Straight line + sine hump = a nice arc
+            x: fromX + (toX - fromX) * p - width / 2
+            y: fromY + (toY - fromY) * p - Math.sin(Math.PI * p) * 140 - height / 2
+            scale: 1 - 0.55 * p
+            rotation: 300 * p
+            opacity: p < 0.88 ? 1 : Math.max(0, (1 - p) / 0.12)
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: WalColors.color0
+                border.width: 2
+                border.color: WalColors.withAlpha(WalColors.color4, 0.8)
+            }
+
+            CoverThumb {
+                anchors.centerIn: parent
+                width: parent.width - 12
+                height: width
+                source: flyer.cover
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 12
+                height: 12
+                radius: 6
+                color: WalColors.color0
+                border.width: 2
+                border.color: WalColors.withAlpha(WalColors.color7, 0.3)
+            }
+
+            NumberAnimation {
+                id: flight
+
+                target: flyer
+                property: "p"
+                from: 0
+                to: 1
+                duration: 560
+                easing.type: Easing.InOutCubic
+                running: true
+                onFinished: flyer.destroy()
+            }
+
+        }
+
+    }
+
+    // Round or rounded-square cover with a "♪" fallback
+    component CoverThumb: Item {
+        id: thumb
+
+        property string source: ""
+        property real corner: width / 2
+        property real glyphSize: width * 0.45
+
+        Image {
+            id: thumbImg
+
+            anchors.fill: parent
+            source: thumb.source
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: false
+            sourceSize: Qt.size(Math.max(thumb.width, 1) * 2, Math.max(thumb.height, 1) * 2)
+            visible: false
+        }
+
+        Rectangle {
+            id: thumbMask
+
+            anchors.fill: parent
+            radius: thumb.corner
+            visible: false
+        }
+
+        OpacityMask {
+            anchors.fill: parent
+            source: thumbImg
+            maskSource: thumbMask
+            visible: thumbImg.status === Image.Ready
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: thumb.corner
+            color: WalColors.withAlpha(WalColors.color2, 0.16)
+            visible: thumbImg.status !== Image.Ready
+
+            Text {
+                anchors.centerIn: parent
+                text: "♪"
+                font.pixelSize: thumb.glyphSize
+                color: WalColors.color2
+            }
+
+        }
+
+    }
+
+    // Small round button for rows in the queue list
+    component MiniButton: Rectangle {
+        id: mb
+
+        property string label: ""
+        property bool danger: false
+        readonly property bool hovered: mbMouse.containsMouse
+
+        signal clicked()
+
+        width: 28
+        height: 28
+        radius: 14
+        color: hovered ? (danger ? WalColors.color1 : WalColors.color4) : WalColors.withAlpha(WalColors.color7, 0.12)
+        scale: mbMouse.pressed ? 0.9 : (hovered ? 1.1 : 1)
+
+        Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: -1
+            text: mb.label
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 15
+            font.bold: true
+            color: mb.hovered ? WalColors.color0 : WalColors.withAlpha(WalColors.color7, 0.8)
+        }
+
+        MouseArea {
+            id: mbMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mb.clicked()
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 140
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.6
+            }
+
+        }
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 120
             }
 
         }
