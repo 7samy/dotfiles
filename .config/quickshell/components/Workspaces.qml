@@ -71,8 +71,30 @@ Item {
         return themeIcon(ref);
     }
 
+    // Hyprland mit Lua-Config versteht `hyprctl dispatch workspace N` nicht mehr
+    // (die alte Schreibweise wird als Lua-Code gelesen -> Syntaxfehler). Neu:
+    //   hyprctl dispatch 'hl.dsp.focus({ workspace = "N" })'
+    // Antwortet Hyprland nicht mit "ok" (z.B. noch alte Hyprlang-Config), wird
+    // automatisch die alte Schreibweise probiert.
     function focusWorkspace(id) {
-        Quickshell.execDetached(["hyprctl", "dispatch", "workspace", id.toString()]);
+        const n = String(parseInt(id));
+        if (n === "NaN")
+            return ;
+
+        Quickshell.execDetached(["bash", "-c", "out=$(hyprctl dispatch \"hl.dsp.focus({ workspace = \\\"$1\\\" })\" 2>&1); " + "[ \"$out\" = ok ] || hyprctl dispatch workspace \"$1\"", "_", n]);
+    }
+
+    // Japanische Zahlzeichen fuer die Workspace-Nummern (1-99)
+    function kanjiNumber(n) {
+        const d = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+        if (!(n >= 1 && n <= 99))
+            return String(n);
+
+        if (n < 10)
+            return d[n];
+
+        const tens = Math.floor(n / 10);
+        return (tens > 1 ? d[tens] : "") + "十" + d[n % 10];
     }
 
     // Rechtsklick auf einen Workspace oeffnet die Overview
@@ -413,7 +435,7 @@ Item {
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: isFocused ? 14 : 13
                                 color: isFocused ? "white" : WalColors.withAlpha(WalColors.color2, 0.6)
-                                text: modelData.id.toString()
+                                text: workspaceWidget.kanjiNumber(modelData.id)
                                 visible: !wsDelegate.iconReady && (!wsDelegate.biggestWindow || wsDelegate.iconExhausted)
 
                                 Behavior on font.pixelSize {

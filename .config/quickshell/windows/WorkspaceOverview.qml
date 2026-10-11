@@ -9,6 +9,10 @@ PanelWindow {
     id: overview
 
     property bool open: false
+    // Beim Klick auf einen Workspace sofort ausblenden (kein Fade), damit die
+    // Overview nicht in die Workspace-Wechsel-Animation hineinragt.
+    property bool instantHide: false
+    property int pendingFocusWs: -1
     property int hoveredWorkspaceId: -1
     property int dropTargetWorkspaceId: -1
     property var draggedWindow: null
@@ -16,6 +20,7 @@ PanelWindow {
     readonly property int columns: 5
     readonly property var slotIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     readonly property var kanji: ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+    readonly property string moveScript: Qt.resolvedUrl("../scripts/hypr_move_window.sh").toString().replace("file://", "")
     readonly property var currentScreen: {
         const focused = Hyprland.focusedMonitor;
         if (focused) {
@@ -45,29 +50,46 @@ PanelWindow {
         });
     }
 
-    function activate(id) {
-        Hyprland.dispatch("workspace " + id);
-        close();
+    // Hyprland mit Lua-Config versteht `hyprctl dispatch workspace N` nicht mehr
+    // (die alte Schreibweise wird als Lua-Code gelesen -> Syntaxfehler).
+    // Auch Hyprland.dispatch("workspace N") nutzt diese alte Schreibweise.
+    // Neu: hl.dsp.focus({ workspace = "N" }). Antwortet Hyprland nicht mit "ok"
+    // (z.B. alte Hyprlang-Config), wird die alte Schreibweise probiert.
+    function focusWorkspace(id) {
+        const n = String(parseInt(id));
+        if (n === "NaN")
+            return ;
+
+        Quickshell.execDetached(["bash", "-c", "out=$(hyprctl dispatch \"hl.dsp.focus({ workspace = \\\"$1\\\" })\" 2>&1); " + "[ \"$out\" = ok ] || hyprctl dispatch workspace \"$1\"", "_", n]);
     }
 
-    function findWindowByAddress(addr) {
-        return Hyprland.toplevels.values.find((t) => {
-            return t.address === addr;
-        }) || null;
+    // Erst unsichtbar machen, dann (kurz danach) den Workspace wechseln:
+    // Das Overview-Fenster ist dann schon unmapped, wenn die Wechsel-Animation startet.
+    function activate(id) {
+        instantHide = true;
+        pendingFocusWs = id;
+        close();
+        focusTimer.restart();
     }
 
     function moveWindowTo(win, wsId) {
-        if (!win)
+        if (!win || !win.address)
             return ;
 
-        Hyprland.dispatch("movetoworkspacesilent " + wsId + ",address:" + win.address);
-        console.log("Move window", win.address, "->", wsId);
+        Quickshell.execDetached(["bash", moveScript, String(win.address), String(wsId)]);
+        // Nicht jede Aenderung sendet ein Event -> kurz danach neu einlesen
+        refreshTimer.restart();
+    }
+
+    function resetDrag() {
+        draggedWindow = null;
+        dropTargetWorkspaceId = -1;
     }
 
     function close() {
         open = false;
         hoveredWorkspaceId = -1;
-        dropTargetWorkspaceId = -1;
+        resetDrag();
     }
 
     WlrLayershell.namespace: "quickshell:workspaceoverview"
@@ -75,12 +97,14 @@ PanelWindow {
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.exclusiveZone: -1
     screen: currentScreen
-    visible: open
+    // Sichtbar bleiben, solange das Ausblenden laeuft
+    visible: open || (!instantHide && dimmer.opacity > 0.01)
     color: "transparent"
     onOpenChanged: {
-        if (open)
+        if (open) {
+            instantHide = false;
             bounce.restart();
-
+        }
     }
 
     anchors {
@@ -88,6 +112,28 @@ PanelWindow {
         bottom: true
         left: true
         right: true
+    }
+
+    Timer {
+        id: focusTimer
+
+        interval: 40
+        onTriggered: {
+            if (overview.pendingFocusWs > 0)
+                overview.focusWorkspace(overview.pendingFocusWs);
+
+            overview.pendingFocusWs = -1;
+        }
+    }
+
+    Timer {
+        id: refreshTimer
+
+        interval: 150
+        onTriggered: {
+            Hyprland.refreshToplevels();
+            Hyprland.refreshWorkspaces();
+        }
     }
 
     IpcHandler {
@@ -146,6 +192,8 @@ PanelWindow {
             }
 
             Grid {
+                id: cardGrid
+
                 anchors.centerIn: parent
                 columns: overview.columns
                 spacing: 24
@@ -158,7 +206,14 @@ PanelWindow {
 
                         readonly property int wsId: modelData
                         readonly property var ws: overview.workspaceById(wsId)
-                        readonly property var wins: overview.windowsOn(wsId)
+                        // WICHTIG: `wins` wird nur neu gesetzt, wenn sich die Fensterliste
+                        // wirklich aendert. Frueher wurde bei JEDEM Hyprland-Update ein neues
+                        // Array erzeugt -> alle Thumbnails samt MouseArea wurden zerstoert und
+                        // neu gebaut, mitten in einem Drag.
+                        readonly property string winKey: overview.windowsOn(wsId).map((t) => {
+                            return t.address;
+                        }).join(",")
+                        property var wins: []
                         readonly property bool hasWorkspace: ws !== null
                         readonly property bool isActive: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === wsId
                         readonly property bool isHovered: overview.hoveredWorkspaceId === wsId
@@ -169,6 +224,8 @@ PanelWindow {
                         width: 380
                         height: 220
                         scale: brightened ? 1.03 : 1
+                        onWinKeyChanged: wins = overview.windowsOn(wsId)
+                        Component.onCompleted: wins = overview.windowsOn(wsId)
 
                         Rectangle {
                             id: cardBg
@@ -228,6 +285,12 @@ PanelWindow {
                                             border.color: thumbHovered ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.12)
                                             scale: thumbHovered ? 1.03 : 1
                                             clip: true
+                                            // Wird das Fenster waehrend des Drags geschlossen, Drag abbrechen
+                                            Component.onDestruction: {
+                                                if (overview.draggedWindow === thumbBox.win)
+                                                    overview.resetDrag();
+
+                                            }
 
                                             ScreencopyView {
                                                 id: thumb
@@ -292,6 +355,18 @@ PanelWindow {
                                                 property bool dragActive: false
                                                 property point pressPos: Qt.point(0, 0)
 
+                                                // Position -> Workspace-Karte unter dem Mauszeiger.
+                                                // Ersetzt DropArea/Drag: zuverlaessiger, kein Qt-Drag noetig.
+                                                function updateDrag(mouse) {
+                                                    overview.dragGlobalPos = previewMouse.mapToItem(dimmer, mouse.x, mouse.y);
+                                                    const g = previewMouse.mapToItem(cardGrid, mouse.x, mouse.y);
+                                                    const c = cardGrid.childAt(g.x, g.y);
+                                                    const id = (c && c.wsId !== undefined) ? c.wsId : -1;
+                                                    const own = thumbBox.win.workspace ? thumbBox.win.workspace.id : -1;
+                                                    // Die eigene Workspace ist kein sinnvolles Ziel
+                                                    overview.dropTargetWorkspaceId = (id === own) ? -1 : id;
+                                                }
+
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: dragActive ? Qt.ClosedHandCursor : Qt.PointingHandCursor
@@ -300,22 +375,35 @@ PanelWindow {
                                                     dragActive = false;
                                                 }
                                                 onPositionChanged: (mouse) => {
+                                                    // Nur mit gedrueckter Taste ziehen. Ohne diese Pruefung
+                                                    // startete schon das blosse Hovern einen "Drag".
+                                                    if (!pressed)
+                                                        return ;
+
                                                     if (!dragActive && (Math.abs(mouse.x - pressPos.x) > 8 || Math.abs(mouse.y - pressPos.y) > 8)) {
                                                         dragActive = true;
-                                                        overview.dropTargetWorkspaceId = -1;
                                                         overview.draggedWindow = thumbBox.win;
                                                     }
                                                     if (dragActive)
-                                                        overview.dragGlobalPos = previewMouse.mapToItem(dimmer, mouse.x, mouse.y);
+                                                        updateDrag(mouse);
 
                                                 }
                                                 onReleased: {
-                                                    if (!dragActive)
+                                                    if (!dragActive) {
                                                         overview.activate(card.wsId);
-                                                    else
-                                                        dragGhost.Drag.drop();
+                                                    } else {
+                                                        const target = overview.dropTargetWorkspaceId;
+                                                        const win = thumbBox.win;
+                                                        if (target > 0 && win)
+                                                            overview.moveWindowTo(win, target);
+
+                                                    }
                                                     dragActive = false;
-                                                    overview.draggedWindow = null;
+                                                    overview.resetDrag();
+                                                }
+                                                onCanceled: {
+                                                    dragActive = false;
+                                                    overview.resetDrag();
                                                 }
                                             }
 
@@ -365,27 +453,7 @@ PanelWindow {
                                 z: 3
                             }
 
-                            DropArea {
-                                anchors.fill: parent
-                                z: 4
-                                onEntered: {
-                                    overview.dropTargetWorkspaceId = card.wsId;
-                                }
-                                onExited: {
-                                    if (overview.dropTargetWorkspaceId === card.wsId)
-                                        overview.dropTargetWorkspaceId = -1;
-
-                                }
-                                onDropped: (drop) => {
-                                    const addr = drop.text;
-                                    const win = overview.findWindowByAddress(addr);
-                                    if (win && win.workspace && win.workspace.id !== card.wsId)
-                                        overview.moveWindowTo(win, card.wsId);
-
-                                    overview.dropTargetWorkspaceId = -1;
-                                }
-                            }
-
+                            // Klick auf die Karte (leere Flaeche) -> Workspace fokussieren
                             MouseArea {
                                 anchors.fill: parent
                                 z: 5
@@ -438,6 +506,7 @@ PanelWindow {
 
         }
 
+        // Gezogenes Fenster folgt dem Mauszeiger
         Rectangle {
             id: dragGhost
 
@@ -453,17 +522,11 @@ PanelWindow {
             z: 100
             x: overview.dragGlobalPos.x - width / 2
             y: overview.dragGlobalPos.y - height / 2
-            Drag.active: overview.draggedWindow !== null
-            Drag.hotSpot.x: width / 2
-            Drag.hotSpot.y: height / 2
-            Drag.mimeData: ({
-                "text/plain": overview.draggedWindow ? String(overview.draggedWindow.address) : ""
-            })
 
             ScreencopyView {
                 anchors.fill: parent
                 anchors.margins: 4
-                // Nur aktiv, wenn ein Drag läuft.
+                // Nur aktiv, wenn ein Drag laeuft.
                 live: false
                 captureSource: (overview.draggedWindow && overview.open) ? overview.draggedWindow.wayland : null
             }
@@ -483,6 +546,8 @@ PanelWindow {
         }
 
         Behavior on opacity {
+            enabled: !overview.instantHide
+
             NumberAnimation {
                 duration: 180
                 easing.type: Easing.OutCubic
