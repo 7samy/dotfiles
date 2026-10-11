@@ -19,40 +19,60 @@ QtObject {
     })
     property var coverQueue: []
     property bool coverBusy: false
+    // ==== Link-Download (Spotify / SoundCloud -> mp3) ====
+    // Phasen: "idle" | "busy" | "done" | "error"
+    property string dlPhase: "idle"
+    readonly property bool dlBusy: dlPhase === "busy"
+    property string dlStatus: ""
+    property real dlProgress: -1 // 0..1, -1 = unbekannt
+    property string dlName: ""
+    property string dlError: ""
+    property int dlDoneCounter: 0
+    property bool _dlOk: false
+    readonly property string dlScript: Qt.resolvedUrl("../scripts/music_download.sh").toString().replace("file://", "")
     // ==== Process-Instanzen im Singleton ====
     property Process songsProcess
+    property Process coverProcess
+    property Process dlProcess
 
-    songsProcess: Process {
-        command: ["mpc", "listall"]
+    // Dienst anhand des Links erkennen: "spotify" | "soundcloud" | ""
+    function serviceOf(url) {
+        const u = String(url || "").trim().toLowerCase();
+        if (/^https:\/\/(open\.spotify\.com|spotify\.link)\//.test(u) || u.indexOf("spotify:track:") === 0)
+            return "spotify";
 
-        stdout: StdioCollector {
-            onStreamFinished: root.parseSongs(text)
-        }
+        if (/^https:\/\/((www|m|on)\.)?soundcloud\.com\//.test(u) || /^https:\/\/snd\.sc\//.test(u))
+            return "soundcloud";
 
+        return "";
     }
 
-    property Process coverProcess
+    function downloadUrl(url) {
+        if (root.dlBusy)
+            return ;
 
-    coverProcess: Process {
-        property string songPath: ""
-        property string outFile: ""
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const result = text.trim();
-                const finishedPath = root.coverProcess.songPath;
-                root.coverBusy = false;
-                if (result) {
-                    // Neue Map erzeugen, damit QML-Bindings das Update merken
-                    const updated = Object.assign({
-                    }, root.coverCache);
-                    updated[finishedPath] = result;
-                    root.coverCache = updated;
-                }
-                root.processCoverQueue();
-            }
+        const u = String(url || "").trim();
+        if (serviceOf(u) === "") {
+            root.dlError = "Kein Spotify- oder SoundCloud-Link";
+            root.dlPhase = "error";
+            return ;
         }
+        root.dlError = "";
+        root.dlName = "";
+        root._dlOk = false;
+        root.dlProgress = -1;
+        root.dlStatus = "Starte …";
+        root.dlPhase = "busy";
+        root.dlProcess.command = ["bash", root.dlScript, u, root.musicDir];
+        root.dlProcess.running = true;
+    }
 
+    // Fertig-/Fehlermeldung quittieren (z.B. wenn der Nutzer weitertippt)
+    function dlAck() {
+        if (root.dlPhase !== "busy") {
+            root.dlPhase = "idle";
+            root.dlError = "";
+        }
     }
 
     function loadSongs() {
@@ -61,6 +81,12 @@ QtObject {
 
         root.songsLoading = true;
         root.songsProcess.running = true;
+    }
+
+    // Song-Liste neu von mpd holen (nach einem Download)
+    function reloadSongs() {
+        root.songsLoaded = false;
+        root.loadSongs();
     }
 
     function parseSongs(rawText) {
@@ -123,4 +149,76 @@ QtObject {
     }
 
     Component.onCompleted: loadSongs()
+
+    songsProcess: Process {
+        command: ["mpc", "listall"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parseSongs(text)
+        }
+
+    }
+
+    coverProcess: Process {
+        property string songPath: ""
+        property string outFile: ""
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const result = text.trim();
+                const finishedPath = root.coverProcess.songPath;
+                root.coverBusy = false;
+                if (result) {
+                    // Neue Map erzeugen, damit QML-Bindings das Update merken
+                    const updated = Object.assign({
+                    }, root.coverCache);
+                    updated[finishedPath] = result;
+                    root.coverCache = updated;
+                }
+                root.processCoverQueue();
+            }
+        }
+
+    }
+
+    dlProcess: Process {
+        onExited: (exitCode, exitStatus) => {
+            if (root._dlOk) {
+                root.dlPhase = "done";
+                root.dlDoneCounter++;
+                root.reloadSongs();
+            } else {
+                if (root.dlError === "")
+                    root.dlError = "Download fehlgeschlagen";
+
+                root.dlPhase = "error";
+            }
+        }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                const idx = data.indexOf("|");
+                if (idx === -1)
+                    return ;
+
+                const kind = data.substring(0, idx);
+                const rest = data.substring(idx + 1).trim();
+                if (kind === "STATUS") {
+                    root.dlStatus = rest;
+                } else if (kind === "PROG") {
+                    const p = parseFloat(rest);
+                    if (!isNaN(p))
+                        root.dlProgress = Math.max(0, Math.min(1, p / 100));
+
+                } else if (kind === "DONE") {
+                    root.dlName = rest;
+                    root._dlOk = true;
+                } else if (kind === "ERR") {
+                    root.dlError = rest;
+                }
+            }
+        }
+
+    }
+
 }
