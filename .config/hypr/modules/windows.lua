@@ -3,6 +3,7 @@
 -- Autostart-Befehle
 hl.on("hyprland.start", function()
   hl.exec_cmd("/home/azu/.config/hypr/scripts/start.sh")
+  hl.exec_cmd("/home/azu/.config/hypr/scripts/vpn-state.sh restore")
   hl.exec_cmd("/home/azu/.config/hypr/scripts/kitty.sh")
   hl.exec_cmd("qs")
   hl.exec_cmd("wl-paste --type text --watch cliphist store")
@@ -52,6 +53,14 @@ hl.window_rule({ match = { class = "steam_app_\\d+" }, no_blur = true })
 
 -- Workspace 7 ohne Border und Rounding
 hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
+
+-- Satty als schwebendes Fenster mit fester Größe
+hl.window_rule({
+  match = { class = "com.gabm.satty" },
+  float = true,
+  size = "800 600",   -- feste Pixelgröße (Breite Höhe)
+  center = true,
+})
 
 hl.layer_rule({
   name = "workspaceoverview-blur",
