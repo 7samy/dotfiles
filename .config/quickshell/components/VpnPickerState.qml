@@ -15,6 +15,9 @@ Singleton {
     property string activeConnection: ""
     property string lastConnection: "proton"
     property bool busy: false
+    // true, solange der Datei-Dialog / der Import laeuft
+    property bool importing: false
+    readonly property string importScript: Qt.resolvedUrl("../scripts/import_vpn_file.sh").toString().replace("file://", "")
     readonly property var countryNames: ({
         "at": "Austria",
         "au": "Australia",
@@ -99,6 +102,18 @@ Singleton {
         listProcess.running = true;
     }
 
+    // Neue WireGuard-Configs importieren:
+    // Picker ausblenden (sonst liegt er als Overlay ueber dem Datei-Dialog),
+    // Dialog + Import laufen lassen, danach Picker mit neuer Liste wieder oeffnen.
+    function importFiles() {
+        if (importing || busy)
+            return ;
+
+        importing = true;
+        close();
+        importDelay.restart();
+    }
+
     // Switch to the selected connection (old one is taken down first)
     function connectTo(name) {
         if (busy || name === "")
@@ -122,6 +137,26 @@ Singleton {
         running: true
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    // Kurz warten, bis das Picker-Overlay ausgefadet ist
+    Timer {
+        id: importDelay
+
+        interval: 300
+        onTriggered: importProcess.running = true
+    }
+
+    Process {
+        id: importProcess
+
+        command: ["bash", root.importScript]
+        onRunningChanged: {
+            if (!running && root.importing) {
+                root.importing = false;
+                root.openPicker();
+            }
+        }
     }
 
     Process {

@@ -63,6 +63,22 @@ PanelWindow {
         Quickshell.execDetached(["bash", "-c", "out=$(hyprctl dispatch \"hl.dsp.focus({ workspace = \\\"$1\\\" })\" 2>&1); " + "[ \"$out\" = ok ] || hyprctl dispatch workspace \"$1\"", "_", n]);
     }
 
+    // Schliesst ein Fenster ueber die neue Lua-Dispatch-API.
+    // Das Lua-Kommando wird in QML zusammengebaut und als fertiger String
+    // an bash uebergeben (kein Quoting-Chaos, $1 wird nicht mehr "verschluckt").
+    // Faellt auf die alte closewindow-Syntax zurueck, falls Lua nicht "ok" antwortet.
+    function closeWindow(win) {
+        if (!win || !win.address)
+            return ;
+
+        const raw = String(win.address);
+        const addr = "address:" + (raw.startsWith("0x") ? raw : "0x" + raw);
+        const luaCmd = 'hl.dsp.window.close({ window = "' + addr + '" })';
+        Quickshell.execDetached(["bash", "-c", "out=$(hyprctl dispatch \"$1\" 2>&1); " + "[ \"$out\" = ok ] || hyprctl dispatch closewindow \"$2\"", "_", luaCmd, addr]);
+        // Hyprland schickt nicht immer ein Event -> kurz danach neu einlesen
+        refreshTimer.restart();
+    }
+
     // Erst unsichtbar machen, dann (kurz danach) den Workspace wechseln:
     // Das Overview-Fenster ist dann schon unmapped, wenn die Wechsel-Animation startet.
     function activate(id) {
@@ -349,6 +365,79 @@ PanelWindow {
 
                                             }
 
+                                            // ---- Close-Button (oben rechts, sichtbar beim Hovern) ----
+                                            Rectangle {
+                                                id: closeBtn
+
+                                                readonly property bool hot: closeMouse.containsMouse
+
+                                                anchors.top: parent.top
+                                                anchors.right: parent.right
+                                                anchors.topMargin: 6
+                                                anchors.rightMargin: 6
+                                                width: 22
+                                                height: 22
+                                                radius: 11
+                                                color: hot ? WalColors.color1 : WalColors.withAlpha(WalColors.color0, 0.8)
+                                                border.width: 1
+                                                border.color: hot ? WalColors.color1 : WalColors.withAlpha(WalColors.color7, 0.25)
+                                                opacity: thumbBox.thumbHovered || closeMouse.containsMouse ? 1 : 0
+                                                scale: hot ? 1.12 : 1
+                                                visible: opacity > 0.01
+                                                z: 20
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "󰅖"
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 12
+                                                    color: closeBtn.hot ? WalColors.color0 : WalColors.withAlpha(WalColors.color7, 0.85)
+                                                }
+
+                                                MouseArea {
+                                                    id: closeMouse
+
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: (mouse) => {
+                                                        mouse.accepted = true;
+                                                        overview.closeWindow(thumbBox.win);
+                                                    }
+                                                }
+
+                                                Behavior on opacity {
+                                                    NumberAnimation {
+                                                        duration: 140
+                                                    }
+
+                                                }
+
+                                                Behavior on scale {
+                                                    NumberAnimation {
+                                                        duration: 140
+                                                        easing.type: Easing.OutBack
+                                                        easing.overshoot: 2
+                                                    }
+
+                                                }
+
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: 120
+                                                    }
+
+                                                }
+
+                                                Behavior on border.color {
+                                                    ColorAnimation {
+                                                        duration: 120
+                                                    }
+
+                                                }
+
+                                            }
+
                                             MouseArea {
                                                 id: previewMouse
 
@@ -369,6 +458,7 @@ PanelWindow {
 
                                                 anchors.fill: parent
                                                 hoverEnabled: true
+                                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                                 cursorShape: dragActive ? Qt.ClosedHandCursor : Qt.PointingHandCursor
                                                 onPressed: (mouse) => {
                                                     pressPos = Qt.point(mouse.x, mouse.y);
@@ -388,9 +478,13 @@ PanelWindow {
                                                         updateDrag(mouse);
 
                                                 }
-                                                onReleased: {
+                                                onReleased: (mouse) => {
                                                     if (!dragActive) {
-                                                        overview.activate(card.wsId);
+                                                        // Mittelklick = Fenster schliessen
+                                                        if (mouse.button === Qt.MiddleButton)
+                                                            overview.closeWindow(thumbBox.win);
+                                                        else
+                                                            overview.activate(card.wsId);
                                                     } else {
                                                         const target = overview.dropTargetWorkspaceId;
                                                         const win = thumbBox.win;

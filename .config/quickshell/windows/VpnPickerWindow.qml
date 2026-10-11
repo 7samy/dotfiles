@@ -182,6 +182,86 @@ PanelWindow {
 
         }
 
+        // ==== "+" button: WireGuard-Configs hinzufuegen ====
+        Rectangle {
+            id: addBtn
+
+            readonly property bool hot: addMouse.containsMouse
+
+            width: searchBar.height
+            height: searchBar.height
+            radius: height / 2
+            anchors.verticalCenter: searchBar.verticalCenter
+            anchors.left: searchBar.right
+            anchors.leftMargin: 12
+            color: hot ? WalColors.withAlpha(WalColors.color4, 0.3) : WalColors.withAlpha(WalColors.color7, 0.12)
+            border.width: 2
+            border.color: hot ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25)
+            scale: addMouse.pressed ? 0.94 : (hot ? 1.06 : 1)
+            opacity: VpnPickerState.importing ? 0.5 : 1
+
+            Text {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: -1
+                text: "+"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 28
+                color: addBtn.hot ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.7)
+            }
+
+            MouseArea {
+                id: addMouse
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: VpnPickerState.importFiles()
+            }
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                }
+
+            }
+
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: 120
+                }
+
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 140
+                    easing.type: Easing.OutBack
+                }
+
+            }
+
+        }
+
+        Text {
+            anchors.top: addBtn.bottom
+            anchors.topMargin: 6
+            anchors.horizontalCenter: addBtn.horizontalCenter
+            text: "Add WireGuard config"
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 11
+            color: WalColors.withAlpha(WalColors.color7, 0.55)
+            opacity: addBtn.hot ? 1 : 0
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 120
+                }
+
+            }
+
+        }
+
         // ==== Connection grid (2 columns) ====
         Item {
             id: gridArea
@@ -207,7 +287,7 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     horizontalAlignment: Text.AlignHCenter
-                    text: VpnPickerState.connections.length === 0 ? "No WireGuard connections found\nrun import-vpn.sh" : "No country found"
+                    text: VpnPickerState.connections.length === 0 ? "No WireGuard connections found\nclick + to add a config" : "No country found"
                     color: WalColors.withAlpha(WalColors.color7, 0.45)
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 14

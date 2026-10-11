@@ -1,13 +1,14 @@
 import "../components"
 import Qt5Compat.GraphicalEffects
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 
 Item {
     id: root
 
-    // Song-Liste und Cover-Cache kommen aus dem Singleton.
+    // Song list and cover cache come from the singleton.
     property var allSongs: MusicPickerState.allSongs
     property var filteredSongs: allSongs.filter((song) => {
         return song.toLowerCase().includes(PickerManager.searchText.toLowerCase());
@@ -15,9 +16,11 @@ Item {
     property var coverCache: MusicPickerState.coverCache
     property real lastMouseX: -1
     property real lastMouseY: -1
-    // Link-Download-Drawer unter der Suchleiste
+    // Download view: replaces search bar + song grid
     property bool addOpen: false
     readonly property string musicDir: MusicPickerState.musicDir
+    // The most recently downloaded song (empty when multiple songs)
+    readonly property string resultPath: (MusicPickerState.dlName !== "" && MusicPickerState.dlName.indexOf(" Songs") === -1) ? MusicPickerState.dlName + ".mp3" : ""
     readonly property real cellW: 210
     readonly property real cellH: 190
     readonly property int gridColumns: 5
@@ -35,11 +38,11 @@ Item {
             return ;
 
         try {
-            console.log("Wähle Song:", songPath);
+            console.log("Selecting song:", songPath);
             addAllAndPlay.command = ["bash", "-c", 'mpc clear && mpc listall | mpc add && ' + 'position=$(mpc playlist -f "%file%" | grep -nF "$1" | cut -d: -f1 | head -n 1) && ' + 'mpc play "$position" && mpc seek 0', "_", songPath];
             addAllAndPlay.running = true;
         } catch (e) {
-            console.error("Fehler beim Abspielen von", songPath, ":", e);
+            console.error("Error playing", songPath, ":", e);
         }
         MusicPickerState.close();
     }
@@ -48,13 +51,13 @@ Item {
         return MusicPickerState.displayName(songPath);
     }
 
-    // ==== Link-Download ====
+    // ==== Download view ====
     function openAdd(prefill) {
         root.addOpen = true;
         if (prefill)
             linkInput.text = prefill;
-        else if (linkInput.text === "")
-            clipPaste.running = true; // Link aus der Zwischenablage vorschlagen
+        else if (linkInput.text === "" && MusicPickerState.dlPhase === "idle")
+            clipPaste.running = true; // Suggest link from clipboard
         Qt.callLater(linkInput.forceActiveFocus);
     }
 
@@ -77,15 +80,30 @@ Item {
         MusicPickerState.downloadUrl(linkInput.text);
     }
 
+    // Acknowledge done/error and enter another link
+    function another(clearText) {
+        MusicPickerState.dlAck();
+        if (clearText)
+            linkInput.text = "";
+
+        linkInput.forceActiveFocus();
+    }
+
     Component.onCompleted: {
-        // Sicherstellen, dass die Song-Liste geladen wird,
-        // falls der Picker als erstes geoeffnet wird.
+        // Ensure the song list is loaded,
+        // in case the picker is opened first.
         MusicPickerState.loadSongs();
     }
     onFilteredSongsChanged: grid.currentIndex = 0
-    Keys.onEscapePressed: MusicPickerState.close()
+    Keys.onEscapePressed: {
+        if (root.addOpen)
+            root.closeAdd();
+        else
+            MusicPickerState.close();
+    }
     Keys.onReturnPressed: {
-        if (root.filteredSongs.length > 0)
+        // In download mode, Enter must not start a (hidden) song
+        if (!root.addOpen && root.filteredSongs.length > 0)
             root.playSong(root.filteredSongs[grid.currentIndex]);
 
     }
@@ -94,7 +112,7 @@ Item {
         id: addAllAndPlay
     }
 
-    // Zwischenablage lesen (wl-clipboard); nur gueltige Links werden uebernommen
+    // Read clipboard (wl-clipboard); only valid links are accepted
     Process {
         id: clipPaste
 
@@ -114,33 +132,20 @@ Item {
     Connections {
         function onDlDoneCounterChanged() {
             linkInput.text = "";
-            // Erfolg kurz zeigen, dann den Drawer einfahren
-            if (MusicPickerState.pickerVisible) {
-                root.addOpen = true;
-                doneTimer.restart();
-            }
+            // Prepare cover of the new song for the result display
+            if (root.resultPath !== "")
+                MusicPickerState.requestCover(root.resultPath);
+
         }
 
         target: MusicPickerState
     }
 
-    Timer {
-        id: doneTimer
-
-        interval: 3200
-        onTriggered: {
-            if (MusicPickerState.dlPhase === "done") {
-                MusicPickerState.dlAck();
-                if (root.addOpen)
-                    root.closeAdd();
-
-            }
-        }
-    }
-
-    // ==== Suchleiste - 1:1 wie im App Launcher ====
+    // ==== Search bar (becomes the link field in download mode) ====
     Rectangle {
         id: searchBar
+
+        readonly property color modeAccent: MusicPickerState.dlPhase === "error" ? WalColors.color1 : (MusicPickerState.dlPhase === "done" ? WalColors.color2 : WalColors.color4)
 
         width: Math.min(root.width * 0.4, 400)
         height: 56
@@ -148,107 +153,247 @@ Item {
         anchors.top: parent.top
         anchors.topMargin: Math.max(root.height * 0.08, 48)
         anchors.horizontalCenter: parent.horizontalCenter
-        color: WalColors.withAlpha(WalColors.color7, 0.12)
+        color: root.addOpen ? WalColors.withAlpha(modeAccent, 0.1) : WalColors.withAlpha(WalColors.color7, 0.12)
         border.width: 2
-        border.color: searchInput.activeFocus ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25)
+        border.color: root.addOpen ? WalColors.withAlpha(modeAccent, linkInput.activeFocus || MusicPickerState.dlBusy ? 0.7 : 0.4) : (searchInput.activeFocus ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25))
 
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 22
-            anchors.verticalCenter: parent.verticalCenter
-            text: "󰍉"
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 18
-            color: WalColors.withAlpha(WalColors.color7, 0.5)
-        }
-
-        TextInput {
-            id: searchInput
+        // ---- Search mode ----
+        Item {
+            id: searchLayer
 
             anchors.fill: parent
-            anchors.leftMargin: 54
-            anchors.rightMargin: 140
-            verticalAlignment: Text.AlignVCenter
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 16
-            color: WalColors.color7
-            text: PickerManager.searchText
-            onTextChanged: {
-                // Wird ein Spotify-/SoundCloud-Link eingefuegt: in den Drawer verschieben
-                if (MusicPickerState.serviceOf(text) !== "") {
-                    const link = text.trim();
-                    text = "";
-                    root.openAdd(link);
-                    return ;
-                }
-                PickerManager.searchText = text;
+            opacity: root.addOpen ? 0 : 1
+            enabled: !root.addOpen
+            visible: opacity > 0.01
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                text: "󰍉"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 18
+                color: WalColors.withAlpha(WalColors.color7, 0.5)
             }
-            Component.onCompleted: forceActiveFocus()
-            Keys.onPressed: (event) => {
-                if (event.key === Qt.Key_Tab) {
-                    if (event.modifiers & Qt.ShiftModifier)
-                        PickerManager.cycleBackward();
-                    else
-                        PickerManager.cycle();
-                    event.accepted = true;
-                    return ;
+
+            TextInput {
+                id: searchInput
+
+                anchors.fill: parent
+                anchors.leftMargin: 54
+                anchors.rightMargin: 140
+                verticalAlignment: Text.AlignVCenter
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 16
+                color: WalColors.color7
+                text: PickerManager.searchText
+                onTextChanged: {
+                    // If a Spotify/SoundCloud link is pasted: move to the download view
+                    if (MusicPickerState.serviceOf(text) !== "") {
+                        const link = text.trim();
+                        text = "";
+                        root.openAdd(link);
+                        return ;
+                    }
+                    PickerManager.searchText = text;
                 }
-                switch (event.key) {
-                case Qt.Key_Down:
-                    grid.moveCurrentIndexDown();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Up:
-                    grid.moveCurrentIndexUp();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Left:
-                    grid.moveCurrentIndexLeft();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Right:
-                    grid.moveCurrentIndexRight();
-                    event.accepted = true;
-                    break;
+                Component.onCompleted: forceActiveFocus()
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Tab) {
+                        if (event.modifiers & Qt.ShiftModifier)
+                            PickerManager.cycleBackward();
+                        else
+                            PickerManager.cycle();
+                        event.accepted = true;
+                        return ;
+                    }
+                    switch (event.key) {
+                    case Qt.Key_Down:
+                        grid.moveCurrentIndexDown();
+                        event.accepted = true;
+                        break;
+                    case Qt.Key_Up:
+                        grid.moveCurrentIndexUp();
+                        event.accepted = true;
+                        break;
+                    case Qt.Key_Left:
+                        grid.moveCurrentIndexLeft();
+                        event.accepted = true;
+                        break;
+                    case Qt.Key_Right:
+                        grid.moveCurrentIndexRight();
+                        event.accepted = true;
+                        break;
+                    }
                 }
             }
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 54
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Search"
+                color: WalColors.withAlpha(WalColors.color7, 0.35)
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 14
+                visible: searchInput.text === ""
+            }
+
+            PickerSwitcher {
+                id: pickerSwitcher
+
+                anchors.right: parent.right
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                searchInput: searchInput
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
         }
 
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 54
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Search"
-            color: WalColors.withAlpha(WalColors.color7, 0.35)
-            font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 14
-            visible: searchInput.text === ""
+        // ---- Link mode ----
+        Item {
+            id: linkLayer
+
+            anchors.fill: parent
+            opacity: root.addOpen ? 1 : 0
+            enabled: root.addOpen
+            visible: opacity > 0.01
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                text: "󰌷"
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 18
+                color: searchBar.modeAccent
+            }
+
+            TextInput {
+                id: linkInput
+
+                anchors.fill: parent
+                anchors.leftMargin: 54
+                anchors.rightMargin: 120
+                verticalAlignment: Text.AlignVCenter
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 14
+                color: WalColors.color7
+                clip: true
+                selectByMouse: true
+                readOnly: MusicPickerState.dlBusy
+                onTextEdited: {
+                    if (MusicPickerState.dlPhase !== "busy")
+                        MusicPickerState.dlAck();
+
+                }
+                Keys.onReturnPressed: (event) => {
+                    root.submitLink();
+                    event.accepted = true;
+                }
+                Keys.onEnterPressed: (event) => {
+                    root.submitLink();
+                    event.accepted = true;
+                }
+                Keys.onEscapePressed: (event) => {
+                    root.closeAdd();
+                    event.accepted = true;
+                }
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 54
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Paste a Spotify or SoundCloud link"
+                color: WalColors.withAlpha(WalColors.color7, 0.35)
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 13
+                visible: linkInput.text === ""
+            }
+
+            // Detected service
+            Rectangle {
+                anchors.right: parent.right
+                anchors.rightMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                width: svcText.implicitWidth + 18
+                height: 24
+                radius: 12
+                color: WalColors.withAlpha(searchBar.modeAccent, 0.16)
+                opacity: dlCard.svc !== "" ? 1 : 0
+                scale: dlCard.svc !== "" ? 1 : 0.8
+
+                Text {
+                    id: svcText
+
+                    anchors.centerIn: parent
+                    text: dlCard.svc === "spotify" ? "Spotify" : "SoundCloud"
+                    color: searchBar.modeAccent
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 160
+                    }
+
+                }
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.6
+                    }
+
+                }
+
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
         }
 
-        PickerSwitcher {
-            id: pickerSwitcher
+        Behavior on color {
+            ColorAnimation {
+                duration: 180
+            }
 
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            searchInput: searchInput
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 120
+                duration: 150
             }
 
         }
 
     }
 
-    // ==== + Button: Song per Link hinzufuegen ====
+    // ==== + Button: opens/closes the download view ====
     Rectangle {
         id: addButton
 
         readonly property bool hot: addMouse.containsMouse || root.addOpen
         readonly property bool busy: MusicPickerState.dlBusy
+        readonly property bool doneBadge: MusicPickerState.dlPhase === "done" && !root.addOpen
 
         anchors.left: searchBar.right
         anchors.leftMargin: 14
@@ -261,7 +406,7 @@ Item {
         border.color: busy ? WalColors.withAlpha(WalColors.color4, 0.8) : (hot ? WalColors.withAlpha(WalColors.color4, 0.6) : WalColors.withAlpha(WalColors.color2, 0.25))
         scale: addMouse.pressed ? 0.92 : (addMouse.containsMouse ? 1.06 : 1)
 
-        // Plus (dreht sich beim Oeffnen zum X); waehrend des Downloads ein huepfender Pfeil
+        // Plus (rotates to an X when open); a bouncing arrow during download
         Text {
             id: plusIcon
 
@@ -292,7 +437,7 @@ Item {
 
             Behavior on rotation {
                 NumberAnimation {
-                    duration: 260
+                    duration: 300
                     easing.type: Easing.OutBack
                     easing.overshoot: 1.4
                 }
@@ -302,6 +447,32 @@ Item {
             Behavior on color {
                 ColorAnimation {
                     duration: 150
+                }
+
+            }
+
+        }
+
+        // Green dot: download is done, view was closed
+        Rectangle {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.topMargin: 4
+            anchors.rightMargin: 4
+            width: 14
+            height: 14
+            radius: 7
+            color: WalColors.color2
+            border.width: 2
+            border.color: WalColors.color0
+            scale: addButton.doneBadge ? 1 : 0
+            visible: scale > 0.01
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 2
                 }
 
             }
@@ -342,7 +513,7 @@ Item {
 
     }
 
-    // ==== Song-Grid ====
+    // ==== Song grid ====
     Item {
         id: gridArea
 
@@ -352,11 +523,16 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
         anchors.horizontalCenter: parent.horizontalCenter
+        // Completely hidden in download mode
+        opacity: root.addOpen ? 0 : 1
+        scale: root.addOpen ? 0.96 : 1
+        enabled: !root.addOpen
+        visible: opacity > 0.01
 
-        // Ladeanzeige, falls die Song-Liste noch vom mpc-Scan kommt
+        // Loading indicator, in case the song list is still coming from the mpc scan
         Text {
             anchors.centerIn: parent
-            text: "Lade Songs…"
+            text: "Loading songs…"
             color: WalColors.withAlpha(WalColors.color7, 0.45)
             font.family: "JetBrainsMono Nerd Font"
             font.pixelSize: 14
@@ -375,7 +551,7 @@ Item {
 
             Text {
                 anchors.centerIn: parent
-                text: "Keine Songs gefunden"
+                text: "No songs found"
                 color: WalColors.withAlpha(WalColors.color7, 0.4)
                 font.family: "JetBrainsMono Nerd Font"
                 visible: grid.count === 0 && MusicPickerState.songsLoaded
@@ -384,8 +560,8 @@ Item {
             delegate: Item {
                 readonly property bool isCurrent: GridView.isCurrentItem
                 readonly property string songPath: modelData
-                // Cover-Cache kommt aus dem State – Pfad bleibt beim
-                // Schliessen erhalten, kein Re-Extrahieren noetig.
+                // Cover cache comes from the state – path remains after
+                // closing, no need to re-extract.
                 readonly property string coverPath: root.coverCache[songPath] ? ("file://" + root.coverCache[songPath]) : ""
 
                 width: grid.cellWidth
@@ -412,7 +588,7 @@ Item {
                         border.color: WalColors.withAlpha(WalColors.color4, 0.6)
                         scale: isCurrent ? 1.08 : 1
 
-                        // Akzent-Tönung als Overlay
+                        // Accent tint as overlay
                         Rectangle {
                             anchors.fill: parent
                             radius: parent.radius
@@ -527,220 +703,194 @@ Item {
 
         }
 
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 260
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
-    // ==== Download-Drawer: faehrt unter der Suchleiste aus ====
-    // Liegt ueber dem Grid (z), verschiebt das Grid aber nicht -> kein Relayout.
+    // ==== Download card ====
     Item {
-        id: addPanel
+        id: dlCard
 
         readonly property string phase: MusicPickerState.dlPhase
+        readonly property bool idle: phase === "idle"
         readonly property bool busy: phase === "busy"
         readonly property bool done: phase === "done"
         readonly property bool failed: phase === "error"
         readonly property string svc: MusicPickerState.serviceOf(linkInput.text)
         readonly property real prog: MusicPickerState.dlProgress
+        readonly property int stage: MusicPickerState.dlStage
         readonly property color accent: failed ? WalColors.color1 : (done ? WalColors.color2 : WalColors.color4)
+        readonly property var stageLabels: ["Search", "Download", "Convert", "Library"]
+        readonly property bool hasCover: root.resultPath !== "" && !!root.coverCache[root.resultPath]
+        // 0..1: ring fill level (done = full)
+        readonly property real ringTarget: done ? 1 : (prog >= 0 ? prog : 0)
         property real t: root.addOpen ? 1 : 0
+        property real doneT: done ? 1 : 0
+        property real flashT: 1
 
-        width: searchBar.width
-        height: 40
-        anchors.horizontalCenter: searchBar.horizontalCenter
-        y: searchBar.y + searchBar.height + 6 - (1 - t) * 16
-        z: 20
+        anchors.top: searchBar.bottom
+        anchors.topMargin: 56
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 440
+        height: 356
         opacity: Math.min(1, t)
-        scale: 0.96 + 0.04 * Math.min(1, t)
+        scale: 0.92 + 0.08 * Math.min(1.04, t)
         visible: t > 0.01
+        enabled: root.addOpen
+        onDoneChanged: {
+            if (done)
+                flashAnim.restart();
+
+        }
+
+        NumberAnimation {
+            id: flashAnim
+
+            target: dlCard
+            property: "flashT"
+            from: 0
+            to: 1
+            duration: 750
+            easing.type: Easing.OutCubic
+        }
 
         Rectangle {
-            id: pill
+            id: cardBg
 
             anchors.fill: parent
-            radius: height / 2
-            color: WalColors.withAlpha(WalColors.color0, 0.95)
+            radius: 30
+            color: WalColors.withAlpha(WalColors.color0, 0.9)
             border.width: 2
-            border.color: WalColors.withAlpha(addPanel.accent, addPanel.busy ? 0.75 : 0.4)
+            border.color: WalColors.withAlpha(dlCard.accent, dlCard.busy ? 0.55 : 0.3)
             clip: true
 
-            // Fortschritt als sanfte Fuellung (wie in den Mixer-Zeilen)
-            Rectangle {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: pill.width * Math.max(0, addPanel.prog)
-                color: WalColors.withAlpha(addPanel.accent, 0.2)
-                visible: addPanel.busy && addPanel.prog >= 0
-
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.OutCubic
-                    }
-
-                }
-
-            }
-
-            // Unbekannter Fortschritt: ein Lichtstreifen laeuft durch (nur waehrend busy)
-            Rectangle {
-                id: shimmer
-
-                width: 110
-                height: parent.height
-                color: WalColors.withAlpha(addPanel.accent, 0.16)
-                visible: addPanel.busy && addPanel.prog < 0
-
-                NumberAnimation on x {
-                    running: shimmer.visible
-                    from: -110
-                    to: pill.width
-                    duration: 1200
-                    loops: Animation.Infinite
-                }
-
-            }
-
-            Text {
-                id: stateIcon
-
-                anchors.left: parent.left
-                anchors.leftMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                text: addPanel.failed ? "󰀦" : (addPanel.done ? "󰄬" : (addPanel.busy ? "󰇚" : "󰌷"))
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 16
-                color: addPanel.accent
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                    }
-
-                }
-
-            }
-
-            TextInput {
-                id: linkInput
-
-                anchors.fill: parent
-                anchors.leftMargin: 44
-                anchors.rightMargin: 100
-                verticalAlignment: Text.AlignVCenter
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 13
-                color: WalColors.color7
-                clip: true
-                selectByMouse: true
-                readOnly: addPanel.phase !== "idle"
-                // Text bleibt im Hintergrund erhalten, waehrend die Statuszeile darueber liegt
-                opacity: addPanel.phase === "idle" ? 1 : 0
-                onTextEdited: MusicPickerState.dlAck()
-                onAccepted: root.submitLink()
-                Keys.onEscapePressed: (event) => {
-                    root.closeAdd();
-                    event.accepted = true;
-                }
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                    }
-
-                }
-
-            }
-
-            Text {
-                anchors.left: parent.left
-                anchors.leftMargin: 44
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Spotify- oder SoundCloud-Link einfügen"
-                color: WalColors.withAlpha(WalColors.color7, 0.35)
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 12
-                visible: addPanel.phase === "idle" && linkInput.text === ""
-            }
-
-            // Status / Ergebnis / Fehler
-            Text {
-                anchors.left: parent.left
-                anchors.leftMargin: 44
-                anchors.right: parent.right
-                anchors.rightMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                text: addPanel.busy ? (MusicPickerState.dlStatus + (addPanel.prog >= 0 ? "  " + Math.round(addPanel.prog * 100) + "%" : "")) : (addPanel.done ? "Hinzugefügt: " + MusicPickerState.dlName : MusicPickerState.dlError)
-                color: addPanel.failed ? WalColors.color1 : WalColors.color7
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 12
-                elide: Text.ElideRight
-                visible: addPanel.phase !== "idle"
-            }
-
-            // Dienst-Badge + Start-Pfeil (nur wenn ein gueltiger Link drin steht)
+            // Equalizer bars at the bottom: dance during download
             Row {
+                id: eq
+
+                anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.rightMargin: 6
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-                opacity: addPanel.phase === "idle" && addPanel.svc !== "" ? 1 : 0
-                visible: opacity > 0.01
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                height: 70
+                spacing: 4
 
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: svcText.implicitWidth + 16
-                    height: 20
-                    radius: 10
-                    color: WalColors.withAlpha(WalColors.color4, 0.16)
+                Repeater {
+                    model: 36
 
-                    Text {
-                        id: svcText
+                    delegate: Rectangle {
+                        required property int index
+                        // Pseudo-random but fixed properties per bar
+                        readonly property real peak: 0.35 + 0.65 * ((index * 37 % 11) / 10)
+                        readonly property int dur: 380 + (index * 53 % 7) * 70
+                        property real level: 0
 
-                        anchors.centerIn: parent
-                        text: addPanel.svc === "spotify" ? "Spotify" : "SoundCloud"
-                        color: WalColors.color4
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
-                        font.bold: true
-                    }
+                        width: (eq.width - 35 * eq.spacing) / 36
+                        anchors.bottom: parent.bottom
+                        height: 4 + level * (eq.height - 8)
+                        radius: width / 2
+                        color: WalColors.withAlpha(dlCard.accent, 0.1 + 0.2 * level)
 
-                }
+                        SequentialAnimation on level {
+                            running: dlCard.busy && dlCard.visible
+                            loops: Animation.Infinite
+                            onRunningChanged: {
+                                if (!running)
+                                    level = 0;
 
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 28
-                    height: 28
-                    radius: 14
-                    color: goMouse.containsMouse ? WalColors.color4 : WalColors.withAlpha(WalColors.color4, 0.25)
-                    scale: goMouse.pressed ? 0.9 : 1
+                            }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰁔"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: goMouse.containsMouse ? WalColors.color0 : WalColors.color4
-                    }
+                            NumberAnimation {
+                                to: peak
+                                duration: dur
+                                easing.type: Easing.InOutSine
+                            }
 
-                    MouseArea {
-                        id: goMouse
+                            NumberAnimation {
+                                to: 0.08
+                                duration: dur
+                                easing.type: Easing.InOutSine
+                            }
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.submitLink()
-                    }
+                        }
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 120
+                        Behavior on level {
+                            enabled: !dlCard.busy
+
+                            NumberAnimation {
+                                duration: 400
+                                easing.type: Easing.OutCubic
+                            }
+
                         }
 
                     }
 
-                    Behavior on scale {
+                }
+
+            }
+
+            // ---- Ring ----
+            Item {
+                id: ring
+
+                readonly property real size: 124
+                readonly property real thick: 6
+                readonly property real r: size / 2 - thick / 2
+                property real v: dlCard.ringTarget
+
+                anchors.top: parent.top
+                anchors.topMargin: 26
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: size
+                height: size
+
+                // Pulsing wave during download
+                Rectangle {
+                    id: pulse
+
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 2
+                    border.color: dlCard.accent
+                    visible: dlCard.busy
+                    opacity: 0
+
+                    ParallelAnimation {
+                        running: dlCard.busy && dlCard.visible
+                        loops: Animation.Infinite
+
                         NumberAnimation {
-                            duration: 120
+                            target: pulse
+                            property: "scale"
+                            from: 1
+                            to: 1.38
+                            duration: 1500
+                            easing.type: Easing.OutCubic
+                        }
+
+                        NumberAnimation {
+                            target: pulse
+                            property: "opacity"
+                            from: 0.5
+                            to: 0
+                            duration: 1500
                             easing.type: Easing.OutCubic
                         }
 
@@ -748,18 +898,431 @@ Item {
 
                 }
 
-                Behavior on opacity {
+                // One-shot flash on completion
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 3
+                    border.color: WalColors.color2
+                    opacity: (1 - dlCard.flashT) * 0.7
+                    scale: 1 + 0.6 * dlCard.flashT
+                    visible: dlCard.flashT < 1
+                }
+
+                // Track
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: WalColors.withAlpha(dlCard.accent, 0.06)
+                    border.width: ring.thick
+                    border.color: WalColors.withAlpha(WalColors.color7, 0.08)
+                }
+
+                // Determinate progress
+                Shape {
+                    anchors.fill: parent
+                    antialiasing: true
+                    layer.enabled: true
+                    layer.samples: 4
+                    visible: dlCard.done || (dlCard.busy && dlCard.prog >= 0)
+
+                    ShapePath {
+                        strokeColor: dlCard.accent
+                        strokeWidth: ring.thick
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: ring.size / 2
+                            centerY: ring.size / 2
+                            radiusX: ring.r
+                            radiusY: ring.r
+                            startAngle: -90
+                            sweepAngle: Math.max(0.5, Math.min(359.9, 360 * ring.v))
+                        }
+
+                    }
+
+                }
+
+                // Indeterminate progress: rotating arc
+                Item {
+                    id: spinner
+
+                    anchors.fill: parent
+                    visible: dlCard.busy && dlCard.prog < 0
+
+                    Shape {
+                        anchors.fill: parent
+                        antialiasing: true
+                        layer.enabled: true
+                        layer.samples: 4
+
+                        ShapePath {
+                            strokeColor: dlCard.accent
+                            strokeWidth: ring.thick
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: ring.size / 2
+                                centerY: ring.size / 2
+                                radiusX: ring.r
+                                radiusY: ring.r
+                                startAngle: -90
+                                sweepAngle: 110
+                            }
+
+                        }
+
+                    }
+
+                    RotationAnimator on rotation {
+                        running: spinner.visible && dlCard.visible
+                        from: 0
+                        to: 360
+                        duration: 1100
+                        loops: Animation.Infinite
+                    }
+
+                }
+
+                // Core: cover (done), percent (download) or icon
+                Item {
+                    id: core
+
+                    anchors.centerIn: parent
+                    width: ring.size - 26
+                    height: width
+
+                    Image {
+                        id: resultCover
+
+                        anchors.fill: parent
+                        source: dlCard.hasCover ? "file://" + root.coverCache[root.resultPath] : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                        sourceSize: Qt.size(160, 160)
+                        visible: false
+                    }
+
+                    Rectangle {
+                        id: coverMask
+
+                        anchors.fill: parent
+                        radius: width / 2
+                        visible: false
+                    }
+
+                    OpacityMask {
+                        anchors.fill: parent
+                        source: resultCover
+                        maskSource: coverMask
+                        opacity: dlCard.done && resultCover.status === Image.Ready ? dlCard.doneT : 0
+                        scale: 0.7 + 0.3 * dlCard.doneT
+                        visible: opacity > 0.01
+                    }
+
+                    // Icon / percent
+                    Text {
+                        id: coreText
+
+                        readonly property bool showCheck: dlCard.done && resultCover.status !== Image.Ready
+
+                        anchors.centerIn: parent
+                        visible: !(dlCard.done && resultCover.status === Image.Ready)
+                        text: dlCard.failed ? "󰀦" : (showCheck ? "󰄬" : (dlCard.busy && dlCard.prog >= 0 ? Math.round(dlCard.prog * 100) + "%" : "󰇚"))
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: (dlCard.busy && dlCard.prog >= 0) ? 26 : 40
+                        font.bold: true
+                        color: dlCard.accent
+                        scale: showCheck ? 0.4 + 0.6 * dlCard.doneT : 1
+                        opacity: dlCard.idle && dlCard.svc === "" ? 0.45 : 1
+
+                        // Gentle floating when idle or searching
+                        SequentialAnimation on anchors.verticalCenterOffset {
+                            running: (dlCard.idle || (dlCard.busy && dlCard.prog < 0)) && dlCard.visible
+                            loops: Animation.Infinite
+
+                            NumberAnimation {
+                                to: 4
+                                duration: 900
+                                easing.type: Easing.InOutSine
+                            }
+
+                            NumberAnimation {
+                                to: -4
+                                duration: 900
+                                easing.type: Easing.InOutSine
+                            }
+
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 200
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                // Checkmark badge when a cover is in the core
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: 32
+                    height: 32
+                    radius: 16
+                    color: WalColors.color2
+                    border.width: 3
+                    border.color: WalColors.color0
+                    scale: (dlCard.done && resultCover.status === Image.Ready) ? dlCard.doneT : 0
+                    visible: scale > 0.01
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰄬"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: WalColors.color0
+                    }
+
+                }
+
+                Behavior on v {
                     NumberAnimation {
-                        duration: 150
+                        duration: 320
+                        easing.type: Easing.OutCubic
                     }
 
                 }
 
             }
 
+            // ---- Title + subtitle ----
+            Column {
+                id: texts
+
+                anchors.top: ring.bottom
+                anchors.topMargin: 14
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 28
+                anchors.rightMargin: 28
+                spacing: 4
+
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 16
+                    font.bold: true
+                    color: dlCard.failed ? WalColors.color1 : WalColors.color7
+                    text: dlCard.busy ? MusicPickerState.dlStatus : (dlCard.done ? (MusicPickerState.dlName || "Done") : (dlCard.failed ? "That didn't work" : (dlCard.svc === "" ? "Add a song" : (dlCard.svc === "spotify" ? "Spotify song detected" : "SoundCloud song detected"))))
+                }
+
+                Text {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    maximumLineCount: 2
+                    wrapMode: Text.WordWrap
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 12
+                    color: WalColors.withAlpha(WalColors.color7, 0.5)
+                    text: dlCard.busy ? (dlCard.prog >= 0 ? Math.round(dlCard.prog * 100) + " % · saving as mp3" : "One moment …") : (dlCard.done ? "Added to library" : (dlCard.failed ? MusicPickerState.dlError : (dlCard.svc === "" ? "Paste a Spotify or SoundCloud link above" : "Ready to download as mp3")))
+                }
+
+            }
+
+            // ---- Stage indicator ----
+            Item {
+                id: stepper
+
+                readonly property real colW: width / 4
+
+                anchors.top: texts.bottom
+                anchors.topMargin: 18
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 360
+                height: 42
+                opacity: (dlCard.busy || dlCard.done) ? 1 : 0
+                visible: opacity > 0.01
+
+                // Connector line
+                Rectangle {
+                    x: stepper.colW / 2
+                    y: 6
+                    width: stepper.width - stepper.colW
+                    height: 2
+                    radius: 1
+                    color: WalColors.withAlpha(WalColors.color7, 0.1)
+                }
+
+                Rectangle {
+                    x: stepper.colW / 2
+                    y: 6
+                    width: (stepper.width - stepper.colW) * Math.min(1, dlCard.stage / 3)
+                    height: 2
+                    radius: 1
+                    color: dlCard.accent
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 450
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
+                }
+
+                Repeater {
+                    model: 4
+
+                    delegate: Item {
+                        id: step
+
+                        required property int index
+                        readonly property bool complete: dlCard.stage > index || dlCard.done
+                        readonly property bool current: dlCard.busy && dlCard.stage === index
+
+                        x: index * stepper.colW
+                        width: stepper.colW
+                        height: stepper.height
+
+                        Rectangle {
+                            id: dot
+
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 0
+                            width: 14
+                            height: 14
+                            radius: 7
+                            color: step.complete ? dlCard.accent : WalColors.color0
+                            border.width: 2
+                            border.color: (step.complete || step.current) ? dlCard.accent : WalColors.withAlpha(WalColors.color7, 0.2)
+                            scale: step.current ? 1.2 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: step.complete
+                                text: "󰄬"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 9
+                                font.bold: true
+                                color: WalColors.color0
+                            }
+
+                            // Active stage pulses
+                            SequentialAnimation on opacity {
+                                running: step.current && dlCard.visible
+                                loops: Animation.Infinite
+
+                                NumberAnimation {
+                                    to: 0.45
+                                    duration: 520
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 520
+                                    easing.type: Easing.InOutSine
+                                }
+
+                            }
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 250
+                                }
+
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 260
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 2
+                                }
+
+                            }
+
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: dot.bottom
+                            anchors.topMargin: 6
+                            text: dlCard.stageLabels[step.index]
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            font.bold: step.current
+                            color: (step.complete || step.current) ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.35)
+                        }
+
+                    }
+
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 250
+                    }
+
+                }
+
+            }
+
+            // ---- Buttons ----
+            Row {
+                id: buttons
+
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 22
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+
+                DlButton {
+                    label: dlCard.done ? "Play" : (dlCard.failed ? "Retry" : "Download")
+                    primary: true
+                    accent: dlCard.accent
+                    active: dlCard.done ? root.resultPath !== "" : (dlCard.failed || dlCard.svc !== "")
+                    visible: !dlCard.busy
+                    onClicked: {
+                        if (dlCard.done)
+                            root.playSong(root.resultPath);
+                        else
+                            root.submitLink();
+                    }
+                }
+
+                DlButton {
+                    label: dlCard.busy ? "In background" : (dlCard.done ? "Another" : "Back")
+                    visible: !dlCard.idle
+                    onClicked: {
+                        if (dlCard.busy)
+                            root.closeAdd();
+                        else if (dlCard.done)
+                            root.another(true);
+                        else
+                            root.another(false);
+                    }
+                }
+
+            }
+
             Behavior on border.color {
                 ColorAnimation {
-                    duration: 200
+                    duration: 250
                 }
 
             }
@@ -768,9 +1331,75 @@ Item {
 
         Behavior on t {
             NumberAnimation {
-                duration: 280
+                duration: 420
                 easing.type: Easing.OutBack
-                easing.overshoot: 1.1
+                easing.overshoot: 1
+            }
+
+        }
+
+    }
+
+    // Small button for the download card
+    component DlButton: Rectangle {
+        id: btn
+
+        property string label: ""
+        property bool primary: false
+        property bool active: true
+        property color accent: WalColors.color4
+
+        signal clicked()
+
+        implicitWidth: btnText.implicitWidth + 44
+        implicitHeight: 38
+        radius: height / 2
+        opacity: active ? 1 : 0.4
+        color: primary ? (btnMouse.containsMouse ? accent : WalColors.withAlpha(accent, 0.85)) : (btnMouse.containsMouse ? WalColors.withAlpha(WalColors.color7, 0.16) : WalColors.withAlpha(WalColors.color7, 0.08))
+        border.width: primary ? 0 : 1
+        border.color: WalColors.withAlpha(WalColors.color7, 0.15)
+        scale: btnMouse.pressed ? 0.94 : (btnMouse.containsMouse && active ? 1.05 : 1)
+
+        Text {
+            id: btnText
+
+            anchors.centerIn: parent
+            text: btn.label
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 13
+            font.bold: true
+            color: btn.primary ? WalColors.color0 : WalColors.color7
+        }
+
+        MouseArea {
+            id: btnMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: btn.active
+            cursorShape: Qt.PointingHandCursor
+            onClicked: btn.clicked()
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.6
+            }
+
+        }
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 120
+            }
+
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 150
             }
 
         }

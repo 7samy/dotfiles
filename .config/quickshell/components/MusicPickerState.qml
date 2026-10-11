@@ -28,6 +28,8 @@ QtObject {
     property string dlName: ""
     property string dlError: ""
     property int dlDoneCounter: 0
+    // Stufe: 0 Suchen, 1 Download, 2 Konvertieren, 3 Bibliothek, 4 fertig
+    property int dlStage: 0
     property bool _dlOk: false
     readonly property string dlScript: Qt.resolvedUrl("../scripts/music_download.sh").toString().replace("file://", "")
     // ==== Process-Instanzen im Singleton ====
@@ -47,6 +49,21 @@ QtObject {
         return "";
     }
 
+    // Statusmeldung des Skripts -> Stufe
+    function stageOf(t) {
+        const s = String(t || "").toLowerCase();
+        if (s.indexOf("bibliothek") !== -1)
+            return 3;
+
+        if (s.indexOf("konvert") !== -1 || s.indexOf("tags") !== -1)
+            return 2;
+
+        if (s.indexOf("lade") !== -1 && s.indexOf("songdaten") === -1)
+            return 1;
+
+        return 0;
+    }
+
     function downloadUrl(url) {
         if (root.dlBusy)
             return ;
@@ -61,6 +78,7 @@ QtObject {
         root.dlName = "";
         root._dlOk = false;
         root.dlProgress = -1;
+        root.dlStage = 0;
         root.dlStatus = "Starte …";
         root.dlPhase = "busy";
         root.dlProcess.command = ["bash", root.dlScript, u, root.musicDir];
@@ -184,6 +202,7 @@ QtObject {
     dlProcess: Process {
         onExited: (exitCode, exitStatus) => {
             if (root._dlOk) {
+                root.dlStage = 4;
                 root.dlPhase = "done";
                 root.dlDoneCounter++;
                 root.reloadSongs();
@@ -205,11 +224,13 @@ QtObject {
                 const rest = data.substring(idx + 1).trim();
                 if (kind === "STATUS") {
                     root.dlStatus = rest;
+                    root.dlStage = Math.max(root.dlStage, root.stageOf(rest));
                 } else if (kind === "PROG") {
                     const p = parseFloat(rest);
-                    if (!isNaN(p))
+                    if (!isNaN(p)) {
                         root.dlProgress = Math.max(0, Math.min(1, p / 100));
-
+                        root.dlStage = Math.max(root.dlStage, 1);
+                    }
                 } else if (kind === "DONE") {
                     root.dlName = rest;
                     root._dlOk = true;
