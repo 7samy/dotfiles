@@ -18,8 +18,10 @@ Item {
     property real lastMouseY: -1
     // Download view: replaces search bar + song grid
     property bool addOpen: false
-    // Queue panel ("Up next") open
+    // Queue panel ("Up next") open = record stack fans out
     property bool queueOpen: false
+    // Queue index under the mouse (record in the fan <-> row in the list)
+    property int hoverQueueIndex: -1
     readonly property var queue: MusicPickerState.queue
     readonly property string nowPlaying: MusicPickerState.nowPlaying
     readonly property string musicDir: MusicPickerState.musicDir
@@ -64,7 +66,7 @@ Item {
     }
 
     // ==== Queue ====
-    // Add to / remove from the queue. srcItem = item the cover flies away from.
+    // Add to / remove from the queue. srcItem = item the record flies away from.
     function toggleQueue(songPath, srcItem) {
         if (!songPath)
             return ;
@@ -85,10 +87,10 @@ Item {
         MusicPickerState.addToQueue(songPath);
     }
 
-    // A little vinyl flies in an arc from the song into the queue dock
+    // A record flies in an arc from the song into the queue dock
     function flyToQueue(songPath, srcItem) {
         const from = srcItem.mapToItem(root, srcItem.width / 2, srcItem.height / 2);
-        const to = queueDock.mapToItem(root, queueDock.width - 38, queueDock.height / 2);
+        const to = queueDock.mapToItem(root, queueDock.width - 44, queueDock.height / 2);
         const cov = root.coverCache[songPath] ? "file://" + root.coverCache[songPath] : "";
         flyerComp.createObject(root, {
             "fromX": from.x,
@@ -193,6 +195,14 @@ Item {
             if (root.resultPath !== "")
                 MusicPickerState.requestCover(root.resultPath);
 
+        }
+
+        // Closing the picker also folds the record fan back into a stack
+        function onPickerVisibleChanged() {
+            if (!MusicPickerState.pickerVisible) {
+                root.queueOpen = false;
+                root.hoverQueueIndex = -1;
+            }
         }
 
         target: MusicPickerState
@@ -615,11 +625,15 @@ Item {
             }
 
             delegate: Item {
+                id: cell
+
                 readonly property bool isCurrent: GridView.isCurrentItem
                 readonly property string songPath: modelData
                 // Cover cache comes from the state – path remains after
                 // closing, no need to re-extract.
                 readonly property string coverPath: root.coverCache[songPath] ? ("file://" + root.coverCache[songPath]) : ""
+                readonly property int qIndex: MusicPickerState.queue.indexOf(songPath)
+                readonly property bool queued: qIndex !== -1
 
                 width: grid.cellWidth
                 height: grid.cellHeight
@@ -629,29 +643,208 @@ Item {
 
                 }
 
+                // The record that slides out of the sleeve (selected song only).
+                // Click it -> it flies into the queue.
+                Component {
+                    id: recordComp
+
+                    Item {
+                        id: rec
+
+                        property bool out: false
+                        readonly property real slide: out ? (recMouse.containsMouse ? 52 : 40) : 0
+
+                        Component.onCompleted: Qt.callLater(() => {
+                            rec.out = true;
+                        })
+
+                        VinylDisc {
+                            id: recDisc
+
+                            size: 86
+                            cover: cell.coverPath
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: (rec.width - width) / 2 + rec.slide
+                            spin: rec.out && MusicPickerState.pickerVisible
+                            spinDuration: 5000
+                            shadow: true
+                            scale: recMouse.containsMouse ? 1.05 : 1
+
+                            Behavior on x {
+                                NumberAnimation {
+                                    duration: 340
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 1.4
+                                }
+
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 160
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                        }
+
+                        // Hit area = only the part of the record that sticks out of the sleeve
+                        MouseArea {
+                            id: recMouse
+
+                            x: rec.width + 4
+                            y: (rec.height - 60) / 2
+                            width: 40
+                            height: 60
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleQueue(cell.songPath, recDisc)
+                        }
+
+                    }
+
+                }
+
+                // Queued: small spinning record with the queue position in the corner.
+                // Click it -> take the song out of the queue again.
+                Component {
+                    id: badgeComp
+
+                    VinylDisc {
+                        id: badge
+
+                        readonly property bool hot: badgeMouse.containsMouse
+                        property bool born: false
+
+                        size: 38
+                        labelText: hot ? "×" : (cell.qIndex + 1)
+                        labelColor: hot ? WalColors.color1 : WalColors.color2
+                        spin: !hot && MusicPickerState.pickerVisible
+                        spinDuration: 3500
+                        shadow: true
+                        scale: (born ? 1 : 0) * (hot ? 1.15 : 1)
+                        Component.onCompleted: Qt.callLater(() => {
+                            badge.born = true;
+                        })
+
+                        MouseArea {
+                            id: badgeMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleQueue(cell.songPath, null)
+                        }
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 260
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 2.2
+                            }
+
+                        }
+
+                    }
+
+                }
+
                 Column {
                     anchors.centerIn: parent
                     spacing: 10
-                    // Above the click area so the queue chip on the cover gets its clicks
+                    // Above the click area so the record gets its clicks
                     z: 1
 
-                    Rectangle {
-                        id: iconBg
+                    // Sleeve = cover; the record sits behind it
+                    Item {
+                        id: sleeve
 
                         width: root.boxSize
                         height: root.boxSize
-                        radius: root.boxRadius
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: WalColors.withAlpha(WalColors.color0, 0.3)
-                        border.width: (isCurrent || qChip.queued) ? 2 : 0
-                        border.color: qChip.queued ? WalColors.withAlpha(WalColors.color2, 0.85) : WalColors.withAlpha(WalColors.color4, 0.6)
-                        scale: isCurrent ? 1.08 : 1
 
-                        // Accent tint as overlay
-                        Rectangle {
+                        Loader {
                             anchors.fill: parent
-                            radius: parent.radius
-                            color: WalColors.withAlpha(WalColors.color2, isCurrent ? 0.28 : 0.14)
+                            active: cell.isCurrent && !cell.queued
+                            sourceComponent: recordComp
+                        }
+
+                        Rectangle {
+                            id: iconBg
+
+                            anchors.fill: parent
+                            radius: root.boxRadius
+                            color: WalColors.withAlpha(WalColors.color0, 0.3)
+                            border.width: (isCurrent || queued) ? 2 : 0
+                            border.color: queued ? WalColors.withAlpha(WalColors.color2, 0.85) : WalColors.withAlpha(WalColors.color4, 0.6)
+                            scale: isCurrent ? 1.08 : 1
+
+                            // Accent tint as overlay
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: parent.radius
+                                color: WalColors.withAlpha(WalColors.color2, isCurrent ? 0.28 : 0.14)
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 100
+                                    }
+
+                                }
+
+                            }
+
+                            Image {
+                                id: coverImage
+
+                                anchors.centerIn: parent
+                                width: root.coverSize
+                                height: root.coverSize
+                                source: coverPath
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: false
+                                sourceSize: Qt.size(root.coverSize * 2, root.coverSize * 2)
+                                visible: false
+                            }
+
+                            Rectangle {
+                                id: coverMaskShape
+
+                                anchors.centerIn: parent
+                                width: root.coverSize
+                                height: root.coverSize
+                                radius: root.coverRadius
+                                visible: false
+                            }
+
+                            OpacityMask {
+                                anchors.centerIn: parent
+                                width: root.coverSize
+                                height: root.coverSize
+                                source: coverImage
+                                maskSource: coverMaskShape
+                                visible: coverImage.status === Image.Ready
+                            }
+
+                            Text {
+                                id: fallback
+
+                                visible: coverImage.status !== Image.Ready
+                                anchors.centerIn: parent
+                                text: "♪"
+                                font.pixelSize: 44
+                                color: WalColors.color2
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 100
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
 
                             Behavior on color {
                                 ColorAnimation {
@@ -662,129 +855,14 @@ Item {
 
                         }
 
-                        Image {
-                            id: coverImage
-
-                            anchors.centerIn: parent
-                            width: root.coverSize
-                            height: root.coverSize
-                            source: coverPath
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: false
-                            sourceSize: Qt.size(root.coverSize * 2, root.coverSize * 2)
-                            visible: false
-                        }
-
-                        Rectangle {
-                            id: coverMaskShape
-
-                            anchors.centerIn: parent
-                            width: root.coverSize
-                            height: root.coverSize
-                            radius: root.coverRadius
-                            visible: false
-                        }
-
-                        OpacityMask {
-                            anchors.centerIn: parent
-                            width: root.coverSize
-                            height: root.coverSize
-                            source: coverImage
-                            maskSource: coverMaskShape
-                            visible: coverImage.status === Image.Ready
-                        }
-
-                        Text {
-                            id: fallback
-
-                            visible: coverImage.status !== Image.Ready
-                            anchors.centerIn: parent
-                            text: "♪"
-                            font.pixelSize: 44
-                            color: WalColors.color2
-                        }
-
-                        // ---- Queue chip: "+" (selected) / position number (queued) / "×" (hover) ----
-                        Rectangle {
-                            id: qChip
-
-                            readonly property int qIndex: MusicPickerState.queue.indexOf(songPath)
-                            readonly property bool queued: qIndex !== -1
-                            readonly property bool hot: chipMouse.containsMouse
-
+                        Loader {
                             anchors.top: parent.top
                             anchors.right: parent.right
-                            anchors.topMargin: -7
-                            anchors.rightMargin: -7
-                            width: 30
-                            height: 30
-                            radius: 15
-                            color: queued ? (hot ? WalColors.color1 : WalColors.color2) : (hot ? WalColors.color4 : WalColors.withAlpha(WalColors.color0, 0.9))
-                            border.width: 2
-                            border.color: queued ? WalColors.color0 : WalColors.withAlpha(WalColors.color4, 0.75)
-                            opacity: (isCurrent || queued) ? 1 : 0
-                            scale: opacity > 0 ? (hot ? 1.15 : 1) : 0.6
-                            visible: opacity > 0.01
+                            anchors.topMargin: -12
+                            anchors.rightMargin: -12
                             z: 5
-
-                            Text {
-                                anchors.centerIn: parent
-                                anchors.verticalCenterOffset: qChip.queued && !qChip.hot ? 0 : -1
-                                text: qChip.queued ? (qChip.hot ? "×" : (qChip.qIndex + 1)) : "+"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: qChip.queued && !qChip.hot ? 13 : 18
-                                font.bold: true
-                                color: (qChip.queued || qChip.hot) ? WalColors.color0 : WalColors.color4
-                            }
-
-                            MouseArea {
-                                id: chipMouse
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.toggleQueue(songPath, iconBg)
-                            }
-
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 140
-                                }
-
-                            }
-
-                            Behavior on scale {
-                                NumberAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 2
-                                }
-
-                            }
-
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
-                                }
-
-                            }
-
-                        }
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 100
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 100
-                            }
-
+                            active: cell.queued
+                            sourceComponent: badgeComp
                         }
 
                     }
@@ -824,7 +902,7 @@ Item {
                     onClicked: (mouse) => {
                         grid.currentIndex = index;
                         if (mouse.button === Qt.RightButton)
-                            root.toggleQueue(modelData, iconBg);
+                            root.toggleQueue(modelData, sleeve);
                         else
                             root.playSong(modelData);
                     }
@@ -1471,30 +1549,41 @@ Item {
 
     }
 
-    // ==== Queue dock (bottom right): fanned vinyl stack of the next songs ====
-    // The top record spins. Click = open/close the "Up next" panel.
+    // ==== Queue dock (bottom right) ====
+    // Closed: a tidy pile of records (the next song on top).
+    // Open (panel visible): the records fan out like a hand of cards.
     Item {
         id: queueDock
 
         readonly property int count: root.queue.length
+        readonly property int shown: Math.min(4, count)
+        readonly property real discSize: 80
+        readonly property real fanRadius: 240
+        readonly property real fanStep: 12 // degrees between two records
         property int lastCount: 0
         property real bump: 1
+        // 0 = pile, 1 = fan
+        property real fan: root.queueOpen ? 1 : 0
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 56
-        anchors.bottomMargin: 48
+        anchors.bottomMargin: 56
         width: 100
         height: 92
         z: 150
         opacity: root.addOpen ? 0.35 : 1
-        scale: bump * (dockMouse.pressed ? 0.94 : (dockMouse.containsMouse ? 1.06 : 1))
+        scale: bump * ((dockHover.hovered && !root.queueOpen) ? 1.06 : 1)
         onCountChanged: {
             // The badge bumps when the flying record lands
             if (count > lastCount)
                 bumpAnim.restart();
 
             lastCount = count;
+        }
+
+        HoverHandler {
+            id: dockHover
         }
 
         SequentialAnimation {
@@ -1523,13 +1612,24 @@ Item {
 
         }
 
+        // Click on the dock (gaps between records, empty state) = open/close
+        MouseArea {
+            id: dockMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.queueOpen = !root.queueOpen
+        }
+
         // Empty state: quiet circle with a note
         Rectangle {
             anchors.right: parent.right
+            anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
-            width: 76
-            height: 76
-            radius: 38
+            width: 80
+            height: 80
+            radius: 40
             color: WalColors.withAlpha(WalColors.color0, 0.8)
             border.width: 2
             border.color: root.queueOpen ? WalColors.withAlpha(WalColors.color4, 0.7) : (dockMouse.containsMouse ? WalColors.withAlpha(WalColors.color4, 0.5) : WalColors.withAlpha(WalColors.color2, 0.25))
@@ -1559,9 +1659,9 @@ Item {
 
         }
 
-        // The next three songs as records, the next one in front
+        // The next four songs as records
         Repeater {
-            model: Math.min(3, queueDock.count)
+            model: queueDock.shown
 
             delegate: Item {
                 id: disc
@@ -1569,64 +1669,110 @@ Item {
                 required property int index
                 readonly property string path: root.queue[index] ?? ""
                 readonly property string cov: root.coverCache[path] ? "file://" + root.coverCache[path] : ""
-                readonly property bool front: index === 0
+                readonly property real a: index * queueDock.fanStep * Math.PI / 180
+                // Pile pose: neat, each record a bit further up-left and smaller
+                readonly property real sx: -index * 9
+                readonly property real sy: -index * 4
+                readonly property real ss: 1 - index * 0.045
+                // Fan pose: arc around a pivot below the dock, records tilt outward
+                readonly property real fx: -queueDock.fanRadius * Math.sin(a)
+                readonly property real fy: queueDock.fanRadius * (1 - Math.cos(a)) - 12
+                // Per-record progress, so they fan out one after another
+                readonly property real p: Math.max(0, (queueDock.fan - index * 0.06) / 0.82)
+                readonly property bool hovered: discMouse.containsMouse
+                readonly property bool hot: root.queueOpen && root.hoverQueueIndex === index
+                property real lift: hot ? 12 : 0
+                property real pop: hot ? 1.08 : 1
 
-                width: 78 - index * 10
+                width: queueDock.discSize
                 height: width
-                x: queueDock.width - width - index * 18
-                y: (queueDock.height - height) / 2
-                z: 10 - index
-                opacity: 1 - index * 0.2
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: width / 2
-                    color: WalColors.color0
-                    border.width: 2
-                    border.color: root.queueOpen ? WalColors.withAlpha(WalColors.color4, front ? 0.8 : 0.4) : WalColors.withAlpha(WalColors.color2, front ? 0.55 : 0.25)
+                x: queueDock.width - 44 - width / 2 + sx + (fx - sx) * p
+                y: queueDock.height / 2 - height / 2 + sy + (fy - sy) * p - lift
+                z: hot ? 60 : 10 - index
+                scale: (ss + (1 - ss) * p) * pop
+                onHoveredChanged: {
+                    if (hovered)
+                        root.hoverQueueIndex = index;
+                    else if (root.hoverQueueIndex === index)
+                        root.hoverQueueIndex = -1;
                 }
 
-                Item {
-                    id: platter
+                VinylDisc {
+                    size: disc.width
+                    cover: disc.cov
+                    spin: MusicPickerState.pickerVisible
+                    spinDuration: 6000 + disc.index * 1700
+                    sheenPhase: disc.index * 70
+                    dim: disc.index * 0.14 * (1 - 0.7 * disc.p)
+                    shadow: true
+                    rotation: -disc.index * queueDock.fanStep * disc.p
+                }
+
+                // Queue position on the fanned records (matches the list rows)
+                Rectangle {
+                    x: disc.width * 0.5 * 0.293 - 11 + 4
+                    y: disc.width * 0.5 * 0.293 - 11 + 4
+                    width: 22
+                    height: 22
+                    radius: 11
+                    color: disc.index === 0 ? WalColors.color4 : WalColors.color0
+                    border.width: 2
+                    border.color: disc.index === 0 ? WalColors.color0 : WalColors.withAlpha(WalColors.color4, 0.7)
+                    opacity: Math.min(1, disc.p)
+                    scale: 0.6 + 0.4 * Math.min(1, disc.p)
+                    visible: opacity > 0.01
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: disc.index + 1
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: disc.index === 0 ? WalColors.color0 : WalColors.color4
+                    }
+
+                }
+
+                // Round hit area (records overlap, a square one would steal clicks)
+                MouseArea {
+                    id: discMouse
 
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    containmentMask: circleMask
+                    onClicked: {
+                        if (root.queueOpen)
+                            MusicPickerState.playQueued(disc.index);
+                        else
+                            root.queueOpen = true;
+                    }
+                }
 
-                    CoverThumb {
-                        anchors.centerIn: parent
-                        width: parent.width - 12
-                        height: width
-                        source: disc.cov
+                QtObject {
+                    id: circleMask
+
+                    function contains(point) {
+                        const r = disc.width / 2;
+                        const dx = point.x - r;
+                        const dy = point.y - r;
+                        return dx * dx + dy * dy <= r * r;
                     }
 
-                    // Groove ring
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: parent.width - 28
-                        height: width
-                        radius: width / 2
-                        color: "transparent"
-                        border.width: 1
-                        border.color: WalColors.withAlpha(WalColors.color0, 0.4)
+                }
+
+                Behavior on lift {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
                     }
 
-                    // Center hole
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 12
-                        height: 12
-                        radius: 6
-                        color: WalColors.color0
-                        border.width: 2
-                        border.color: WalColors.withAlpha(WalColors.color7, 0.3)
-                    }
+                }
 
-                    // Spinning record (only the front one, only while the picker is open)
-                    RotationAnimator on rotation {
-                        running: disc.front && MusicPickerState.pickerVisible
-                        from: 0
-                        to: 360
-                        duration: 7000
-                        loops: Animation.Infinite
+                Behavior on pop {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
                     }
 
                 }
@@ -1639,8 +1785,8 @@ Item {
         Rectangle {
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.topMargin: -2
-            anchors.rightMargin: -4
+            anchors.topMargin: -4
+            anchors.rightMargin: -6
             width: Math.max(26, badgeText.implicitWidth + 14)
             height: 26
             radius: 13
@@ -1673,13 +1819,13 @@ Item {
 
         }
 
-        MouseArea {
-            id: dockMouse
+        Behavior on fan {
+            NumberAnimation {
+                duration: 560
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.8
+            }
 
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.queueOpen = !root.queueOpen
         }
 
         Behavior on opacity {
@@ -1708,7 +1854,7 @@ Item {
 
         anchors.right: queueDock.right
         anchors.bottom: queueDock.top
-        anchors.bottomMargin: 14
+        anchors.bottomMargin: 26
         width: 380
         height: panelCol.implicitHeight + 36
         radius: 26
@@ -1763,39 +1909,49 @@ Item {
                     color: WalColors.withAlpha(WalColors.color7, 0.45)
                 }
 
-                Rectangle {
+                Row {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    width: clearText.implicitWidth + 24
-                    height: 26
-                    radius: 13
-                    visible: root.queue.length > 0
-                    color: clearMouse.containsMouse ? WalColors.withAlpha(WalColors.color1, 0.3) : WalColors.withAlpha(WalColors.color7, 0.08)
+                    spacing: 8
 
-                    Text {
-                        id: clearText
+                    Rectangle {
+                        width: clearText.implicitWidth + 24
+                        height: 28
+                        radius: 14
+                        visible: root.queue.length > 0
+                        color: clearMouse.containsMouse ? WalColors.withAlpha(WalColors.color1, 0.3) : WalColors.withAlpha(WalColors.color7, 0.08)
 
-                        anchors.centerIn: parent
-                        text: "Clear"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        color: clearMouse.containsMouse ? WalColors.color1 : WalColors.withAlpha(WalColors.color7, 0.7)
-                    }
+                        Text {
+                            id: clearText
 
-                    MouseArea {
-                        id: clearMouse
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: MusicPickerState.clearQueue()
-                    }
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 120
+                            anchors.centerIn: parent
+                            text: "Clear"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            color: clearMouse.containsMouse ? WalColors.color1 : WalColors.withAlpha(WalColors.color7, 0.7)
                         }
 
+                        MouseArea {
+                            id: clearMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: MusicPickerState.clearQueue()
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 120
+                            }
+
+                        }
+
+                    }
+
+                    MiniButton {
+                        label: "×"
+                        onClicked: root.queueOpen = false
                     }
 
                 }
@@ -1916,12 +2072,12 @@ Item {
                 id: listWrap
 
                 width: parent.width
-                height: root.queue.length === 0 ? 76 : Math.min(queuePanel.maxRows, root.queue.length) * queuePanel.rowH
+                height: root.queue.length === 0 ? 84 : Math.min(queuePanel.maxRows, root.queue.length) * queuePanel.rowH
 
                 Text {
                     anchors.centerIn: parent
                     horizontalAlignment: Text.AlignHCenter
-                    text: "Queue is empty\nright-click a song or hit + on its cover"
+                    text: "Queue is empty\npull a record out of its sleeve\nor right-click a song"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
                     lineHeight: 1.3
@@ -1942,10 +2098,18 @@ Item {
 
                         required property int index
                         required property var modelData
-                        readonly property bool hot: rowMouse.containsMouse || upBtn.hovered || delBtn.hovered
+                        readonly property bool realHover: rowMouse.containsMouse || upBtn.hovered || delBtn.hovered
+                        // Also lit up when its record in the fan is hovered
+                        readonly property bool hot: realHover || root.hoverQueueIndex === index
 
                         width: queueList.width
                         height: queuePanel.rowH
+                        onRealHoverChanged: {
+                            if (realHover)
+                                root.hoverQueueIndex = index;
+                            else if (root.hoverQueueIndex === index)
+                                root.hoverQueueIndex = -1;
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -2074,7 +2238,7 @@ Item {
 
     }
 
-    // Flying record: from the song cover into the queue dock (self-destructs on landing)
+    // Flying record: from the sleeve into the queue dock (destroys itself on landing)
     Component {
         id: flyerComp
 
@@ -2089,39 +2253,21 @@ Item {
             // 0..1 progress along the flight path
             property real p: 0
 
-            width: 84
-            height: 84
+            width: 86
+            height: 86
             z: 200
             // Straight line + sine hump = a nice arc
             x: fromX + (toX - fromX) * p - width / 2
             y: fromY + (toY - fromY) * p - Math.sin(Math.PI * p) * 140 - height / 2
-            scale: 1 - 0.55 * p
-            rotation: 300 * p
-            opacity: p < 0.88 ? 1 : Math.max(0, (1 - p) / 0.12)
+            scale: 1 - 0.07 * p
+            opacity: p < 0.9 ? 1 : Math.max(0, (1 - p) / 0.1)
 
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                color: WalColors.color0
-                border.width: 2
-                border.color: WalColors.withAlpha(WalColors.color4, 0.8)
-            }
-
-            CoverThumb {
-                anchors.centerIn: parent
-                width: parent.width - 12
-                height: width
-                source: flyer.cover
-            }
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: 12
-                height: 12
-                radius: 6
-                color: WalColors.color0
-                border.width: 2
-                border.color: WalColors.withAlpha(WalColors.color7, 0.3)
+            VinylDisc {
+                size: 86
+                cover: flyer.cover
+                spin: true
+                spinDuration: 800
+                shadow: true
             }
 
             NumberAnimation {
@@ -2137,6 +2283,201 @@ Item {
                 onFinished: flyer.destroy()
             }
 
+        }
+
+    }
+
+    // A vinyl record: dark disc, grooves, a light reflection that spins with it,
+    // the cover as the label (or a number) and a spindle hole.
+    component VinylDisc: Item {
+        id: vd
+
+        property real size: 80
+        property string cover: ""
+        // Shows this text (e.g. a queue position) instead of the cover on the label
+        property string labelText: ""
+        property color labelColor: WalColors.color2
+        property bool spin: false
+        property int spinDuration: 7000
+        // Start angle of the reflection, so records do not all look identical
+        property real sheenPhase: 0
+        // 0..1: darkens the record (depth in the pile)
+        property real dim: 0
+        property bool shadow: false
+        readonly property real labelSize: labelText !== "" ? size * 0.64 : size * 0.54
+
+        width: size
+        height: size
+
+        // Cheap drop shadow
+        Rectangle {
+            visible: vd.shadow
+            x: 2
+            y: 4
+            width: vd.size
+            height: vd.size
+            radius: width / 2
+            color: "black"
+            opacity: 0.35
+        }
+
+        // Vinyl body
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: WalColors.color0
+            border.width: 1
+            border.color: WalColors.withAlpha(WalColors.color7, 0.25)
+        }
+
+        // Grooves
+        Repeater {
+            model: 3
+
+            delegate: Rectangle {
+                required property int index
+
+                anchors.centerIn: parent
+                width: vd.size * (0.93 - index * 0.11)
+                height: width
+                radius: width / 2
+                color: "transparent"
+                border.width: 1
+                border.color: WalColors.withAlpha(WalColors.color7, 0.07)
+            }
+
+        }
+
+        // Rotating part: reflection + cover label
+        Item {
+            anchors.fill: parent
+            rotation: vd.sheenPhase
+
+            Item {
+                id: spinner
+
+                anchors.fill: parent
+
+                // Two opposite light bands, like light on real vinyl
+                Shape {
+                    anchors.fill: parent
+                    antialiasing: true
+                    layer.enabled: true
+                    layer.samples: 4
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.13)
+                        strokeWidth: vd.size * 0.2
+                        fillColor: "transparent"
+                        capStyle: ShapePath.FlatCap
+
+                        PathAngleArc {
+                            centerX: vd.size / 2
+                            centerY: vd.size / 2
+                            radiusX: vd.size * 0.355
+                            radiusY: vd.size * 0.355
+                            startAngle: 205
+                            sweepAngle: 32
+                        }
+
+                    }
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(1, 1, 1, 0.13)
+                        strokeWidth: vd.size * 0.2
+                        fillColor: "transparent"
+                        capStyle: ShapePath.FlatCap
+
+                        PathAngleArc {
+                            centerX: vd.size / 2
+                            centerY: vd.size / 2
+                            radiusX: vd.size * 0.355
+                            radiusY: vd.size * 0.355
+                            startAngle: 25
+                            sweepAngle: 32
+                        }
+
+                    }
+
+                }
+
+                CoverThumb {
+                    anchors.centerIn: parent
+                    width: vd.labelSize
+                    height: width
+                    source: vd.cover
+                    visible: vd.labelText === ""
+                }
+
+                RotationAnimator on rotation {
+                    running: vd.spin
+                    from: 0
+                    to: 360
+                    duration: vd.spinDuration
+                    loops: Animation.Infinite
+                }
+
+            }
+
+        }
+
+        // Number label (static, so the digit does not spin)
+        Rectangle {
+            visible: vd.labelText !== ""
+            anchors.centerIn: parent
+            width: vd.labelSize
+            height: width
+            radius: width / 2
+            color: vd.labelColor
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                }
+
+            }
+
+        }
+
+        Text {
+            visible: vd.labelText !== ""
+            anchors.centerIn: parent
+            text: vd.labelText
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: Math.round(vd.size * 0.3)
+            font.bold: true
+            color: WalColors.color0
+        }
+
+        // Label rim
+        Rectangle {
+            anchors.centerIn: parent
+            width: vd.labelSize + 2
+            height: width
+            radius: width / 2
+            color: "transparent"
+            border.width: 1
+            border.color: WalColors.withAlpha(WalColors.color7, 0.3)
+        }
+
+        // Spindle hole
+        Rectangle {
+            visible: vd.labelText === ""
+            anchors.centerIn: parent
+            width: Math.max(4, vd.size * 0.09)
+            height: width
+            radius: width / 2
+            color: WalColors.color0
+            border.width: 1
+            border.color: WalColors.withAlpha(WalColors.color7, 0.35)
+        }
+
+        // Depth dimming
+        Rectangle {
+            visible: vd.dim > 0.01
+            anchors.fill: parent
+            radius: width / 2
+            color: WalColors.withAlpha(WalColors.color0, vd.dim)
         }
 
     }
