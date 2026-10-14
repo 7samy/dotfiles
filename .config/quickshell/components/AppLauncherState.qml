@@ -17,26 +17,6 @@ QtObject {
     // Bash expandiert die Globs (Quickshell selbst kann das nicht).
     property Process appsProcess
 
-    appsProcess: Process {
-        running: true
-        command: ["bash", "-c", "for f in /usr/share/applications/*.desktop /var/lib/flatpak/exports/share/applications/*.desktop /home/azu/.local/share/flatpak/exports/share/applications/*.desktop; do \
-            [ -f \"$f\" ] || continue; \
-            grep -q '^Type=Application' \"$f\" || continue; \
-            grep -q '^NoDisplay=true' \"$f\" && continue; \
-            grep -q '^Hidden=true' \"$f\" && continue; \
-            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2-); \
-            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2-); \
-            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2-); \
-            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2-); \
-            echo \"$name|$exec|$icon|$terminal\"; \
-        done"]
-
-        stdout: StdioCollector {
-            onStreamFinished: root.parseApplications(text)
-        }
-
-    }
-
     function loadApps() {
         if (root.appsLoaded || root.appsLoading)
             return ;
@@ -51,7 +31,13 @@ QtObject {
                 return l.trim();
             });
             const apps = [];
-            const blacklist = ["qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uuctl", "wpgtk", "xgps", "Wine", "Rofi", "Xfce", "Ark", "Blackmagic", "Cppcheck", "lstopo", "OpenJDK", "rmpc", "Electron", "Advanced Network", "Htop", "Base", "Calc", "Draw", "Impress", "Math"];
+            // Blacklist: exakte Namen (case-insensitive) ODER eindeutige
+            // Exec-Fragmente. Kurze generische Woerter wie "draw", "calc",
+            // "base", "math" wurden entfernt, weil sie andere Apps wie
+            // drawio faelschlich ausblenden.
+            const blacklistExact = ["qt5", "assistant", "designer", "linguist", "qdbus", "qv4l2", "qvidcap", "avahi", "bch", "hvd", "javaws", "nvidiasettings", "displaytest", "iconbrowser", "system-config", "stoken", "emu-manager", "cmake", "texdoctk", "uuctl", "wpgtk", "xgps", "wine", "rofi", "xfce", "ark", "blackmagic", "cppcheck", "lstopo", "openjdk", "rmpc", "electron", "advanced network", "htop", "libreoffice base", "libreoffice calc", "libreoffice draw", "libreoffice impress", "libreoffice math"];
+            // Exec-basierte Filter: pruefen den Exec-Befehl, nicht den Namen.
+            const blacklistExec = ["libreoffice --base", "libreoffice --calc", "libreoffice --draw", "libreoffice --impress", "libreoffice --math"];
             for (let line of lines) {
                 const parts = line.split('|');
                 if (parts.length >= 3) {
@@ -60,9 +46,12 @@ QtObject {
                     let icon = parts[2] ? parts[2].trim() : "";
                     let needsTerminal = (parts[3] && parts[3].trim() === "true");
                     exec = exec.replace(/%[fFuUikcnvezt]/g, "").trim();
-                    const fullNameInfo = (name + " " + exec).toLowerCase();
-                    const isBlacklisted = blacklist.some((item) => {
-                        return fullNameInfo.includes(item.toLowerCase());
+                    const nameLower = name.toLowerCase();
+                    const execLower = exec.toLowerCase();
+                    const isBlacklisted = blacklistExact.some((item) => {
+                        return nameLower === item;
+                    }) || blacklistExec.some((item) => {
+                        return execLower.includes(item);
                     });
                     if (name && exec && !isBlacklisted)
                         apps.push({
@@ -101,6 +90,26 @@ QtObject {
 
     function open() {
         PickerManager.open("app");
+    }
+
+    appsProcess: Process {
+        running: true
+        command: ["bash", "-c", "for f in /usr/share/applications/*.desktop /var/lib/flatpak/exports/share/applications/*.desktop /home/azu/.local/share/flatpak/exports/share/applications/*.desktop; do \
+            [ -f \"$f\" ] || continue; \
+            grep -q '^Type=Application' \"$f\" || continue; \
+            grep -q '^NoDisplay=true' \"$f\" && continue; \
+            grep -q '^Hidden=true' \"$f\" && continue; \
+            name=$(grep -m1 '^Name=' \"$f\" | cut -d= -f2-); \
+            exec=$(grep -m1 '^Exec=' \"$f\" | cut -d= -f2-); \
+            icon=$(grep -m1 '^Icon=' \"$f\" | cut -d= -f2-); \
+            terminal=$(grep -m1 '^Terminal=' \"$f\" | cut -d= -f2-); \
+            echo \"$name|$exec|$icon|$terminal\"; \
+        done"]
+
+        stdout: StdioCollector {
+            onStreamFinished: root.parseApplications(text)
+        }
+
     }
 
 }
