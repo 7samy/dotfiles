@@ -255,7 +255,7 @@ Item {
                 color: WalColors.color7
                 text: PickerManager.searchText
                 onTextChanged: {
-                    // If a Spotify/SoundCloud link is pasted: move to the download view
+                    // If a Spotify/SoundCloud/YouTube link is pasted: move to the download view
                     if (MusicPickerState.serviceOf(text) !== "") {
                         const link = text.trim();
                         text = "";
@@ -380,7 +380,7 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: 54
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Paste a Spotify or SoundCloud link"
+                text: "Paste a Spotify, SoundCloud or YouTube link"
                 color: WalColors.withAlpha(WalColors.color7, 0.35)
                 font.family: "JetBrainsMono Nerd Font"
                 font.pixelSize: 13
@@ -403,7 +403,7 @@ Item {
                     id: svcText
 
                     anchors.centerIn: parent
-                    text: dlCard.svc === "spotify" ? "Spotify" : "SoundCloud"
+                    text: dlCard.svcName
                     color: searchBar.modeAccent
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
@@ -940,6 +940,7 @@ Item {
         readonly property bool done: phase === "done"
         readonly property bool failed: phase === "error"
         readonly property string svc: MusicPickerState.serviceOf(linkInput.text)
+        readonly property string svcName: svc === "spotify" ? "Spotify" : (svc === "youtube" ? "YouTube Music" : (svc === "soundcloud" ? "SoundCloud" : ""))
         readonly property real prog: MusicPickerState.dlProgress
         readonly property int stage: MusicPickerState.dlStage
         readonly property color accent: failed ? WalColors.color1 : (done ? WalColors.color2 : WalColors.color4)
@@ -1334,7 +1335,7 @@ Item {
                     font.pixelSize: 16
                     font.bold: true
                     color: dlCard.failed ? WalColors.color1 : WalColors.color7
-                    text: dlCard.busy ? MusicPickerState.dlStatus : (dlCard.done ? (MusicPickerState.dlName || "Done") : (dlCard.failed ? "That didn't work" : (dlCard.svc === "" ? "Add a song" : (dlCard.svc === "spotify" ? "Spotify song detected" : "SoundCloud song detected"))))
+                    text: dlCard.busy ? MusicPickerState.dlStatus : (dlCard.done ? (MusicPickerState.dlName || "Done") : (dlCard.failed ? "That didn't work" : (dlCard.svc === "" ? "Add a song" : dlCard.svcName + " song detected")))
                 }
 
                 Text {
@@ -1346,7 +1347,7 @@ Item {
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
                     color: WalColors.withAlpha(WalColors.color7, 0.5)
-                    text: dlCard.busy ? (dlCard.prog >= 0 ? Math.round(dlCard.prog * 100) + " % · saving as mp3" : "One moment …") : (dlCard.done ? "Added to library" : (dlCard.failed ? MusicPickerState.dlError : (dlCard.svc === "" ? "Paste a Spotify or SoundCloud link above" : "Ready to download as mp3")))
+                    text: dlCard.busy ? (dlCard.prog >= 0 ? Math.round(dlCard.prog * 100) + " % · saving as mp3" : "One moment …") : (dlCard.done ? "Added to library" : (dlCard.failed ? MusicPickerState.dlError : (dlCard.svc === "" ? "Paste a Spotify, SoundCloud or YouTube link above" : "Ready to download as mp3")))
                 }
 
             }

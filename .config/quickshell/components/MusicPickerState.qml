@@ -28,7 +28,7 @@ QtObject {
     property var queueJobs: []
     property bool queueBusy: false
     readonly property string queueScript: Qt.resolvedUrl("../scripts/music_queue.sh").toString().replace("file://", "")
-    // ==== Link-Download (Spotify / SoundCloud -> mp3) ====
+    // ==== Link-Download (Spotify / SoundCloud / YouTube -> mp3) ====
     // Phasen: "idle" | "busy" | "done" | "error"
     property string dlPhase: "idle"
     readonly property bool dlBusy: dlPhase === "busy"
@@ -48,7 +48,7 @@ QtObject {
     property Process queueProcess
     property Process nowProcess
 
-    // Dienst anhand des Links erkennen: "spotify" | "soundcloud" | ""
+    // Dienst anhand des Links erkennen: "spotify" | "soundcloud" | "youtube" | ""
     function serviceOf(url) {
         const u = String(url || "").trim().toLowerCase();
         if (/^https:\/\/(open\.spotify\.com|spotify\.link)\//.test(u) || u.indexOf("spotify:track:") === 0)
@@ -56,6 +56,9 @@ QtObject {
 
         if (/^https:\/\/((www|m|on)\.)?soundcloud\.com\//.test(u) || /^https:\/\/snd\.sc\//.test(u))
             return "soundcloud";
+
+        if (/^https:\/\/((www|m|music)\.)?youtube\.com\//.test(u) || /^https:\/\/youtu\.be\//.test(u))
+            return "youtube";
 
         return "";
     }
@@ -81,7 +84,7 @@ QtObject {
 
         const u = String(url || "").trim();
         if (serviceOf(u) === "") {
-            root.dlError = "Kein Spotify- oder SoundCloud-Link";
+            root.dlError = "Kein Spotify-, SoundCloud- oder YouTube-Link";
             root.dlPhase = "error";
             return ;
         }

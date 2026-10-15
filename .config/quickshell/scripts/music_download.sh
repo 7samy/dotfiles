@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Laedt einen Song von SoundCloud oder Spotify als mp3 in den Music-Ordner.
+# Laedt einen Song von SoundCloud, YouTube (Music) oder Spotify als mp3 in den Music-Ordner.
 #   Aufruf: music_download.sh <link> <musikordner>
 #
 # SoundCloud -> yt-dlp
+# YouTube    -> yt-dlp (music.youtube.com, youtube.com, youtu.be)
 # Spotify    -> 1) spotdl (Titel/Kuenstler/Cover von Spotify, Tonspur von YouTube Music)
 #               2) Fallback, falls spotdl scheitert (z.B. AudioProviderError):
 #                  spotdl liefert nur die Songdaten, die Tonspur holt das normale
@@ -118,12 +119,14 @@ mkdir -p "$dir" 2> /dev/null || fail "Ordner nicht beschreibbar"
 case "$url" in
     https://open.spotify.com/* | https://spotify.link/* | spotify:track:*) svc=spotify ;;
     https://soundcloud.com/* | https://www.soundcloud.com/* | https://m.soundcloud.com/* | https://on.soundcloud.com/* | https://snd.sc/*) svc=soundcloud ;;
-    *) fail "Nur Spotify- oder SoundCloud-Links" ;;
+    https://music.youtube.com/* | https://www.youtube.com/* | https://m.youtube.com/* | https://youtube.com/* | https://youtu.be/*) svc=youtube ;;
+    *) fail "Nur Spotify-, SoundCloud- oder YouTube-Links" ;;
 esac
 
 case "$svc:$url" in
     spotify:*/album/* | spotify:*/playlist/* | spotify:*/artist/*) fail "Bitte einen einzelnen Song verlinken" ;;
     soundcloud:*/sets/*) fail "Bitte einen einzelnen Song verlinken" ;;
+    youtube:*/playlist\?* | youtube:*/browse/* | youtube:*/channel/*) fail "Bitte einen einzelnen Song verlinken" ;;
 esac
 
 need ffmpeg "sudo pacman -S ffmpeg"
@@ -135,9 +138,14 @@ cd "$tmp" || fail "Temp-Ordner nicht erreichbar"
 shopt -s nullglob
 
 # ---- Download ----
-if [ "$svc" = soundcloud ]; then
+if [ "$svc" = soundcloud ] || [ "$svc" = youtube ]; then
     need yt-dlp "sudo pacman -S yt-dlp"
-    emit STATUS "Lade von SoundCloud …"
+    if [ "$svc" = youtube ]; then
+        emit STATUS "Lade von YouTube …"
+    else
+        emit STATUS "Lade von SoundCloud …"
+    fi
+    # --no-playlist: bei Links wie watch?v=...&list=... nur den einen Song laden
     run_ytdlp --no-playlist --no-warnings \
         -f "bestaudio/best" -x --audio-format mp3 --audio-quality 0 \
         --embed-thumbnail --convert-thumbnails jpg --embed-metadata \
@@ -189,4 +197,4 @@ command -v mpc > /dev/null 2>&1 && mpc update --wait > /dev/null 2>&1
 
 name="${last%.mp3}"
 [ "$moved" -gt 1 ] && name="$moved Songs"
-emit DONE "$name"mit DONE "$name"
+emit DONE "$name"
