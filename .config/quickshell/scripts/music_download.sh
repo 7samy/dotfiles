@@ -26,9 +26,16 @@ emit() { printf '%s|%s\n' "$1" "$2"; }
 fail() { emit ERR "$1"; exit 1; }
 need() { command -v "$1" > /dev/null 2>&1 || fail "$1 fehlt ($2)"; }
 
+# Browser, dessen Cookies yt-dlp nutzt, wenn YouTube den Bot-Check zeigt
+# (firefox, chromium, chrome, brave, ...). Per Umgebungsvariable aenderbar,
+# leer lassen = nie Cookies verwenden.
+cookie_browser="${QS_COOKIE_BROWSER:-firefox}"
+ytdlp_extra=()
+botcheck_re='not a bot|confirm you.re not|sign in to confirm'
+
 # yt-dlp mit Fortschrittsanzeige; Rest der Argumente geht direkt an yt-dlp
 run_ytdlp() {
-    yt-dlp --ignore-config --newline \
+    yt-dlp --ignore-config --newline "${ytdlp_extra[@]}" \
         --progress-template "download:PROG|%(progress._percent_str)s" "$@" 2>> "$log" | while IFS= read -r line; do
         case "$line" in
             PROG\|*)
@@ -146,10 +153,20 @@ if [ "$svc" = soundcloud ] || [ "$svc" = youtube ]; then
         emit STATUS "Lade von SoundCloud …"
     fi
     # --no-playlist: bei Links wie watch?v=...&list=... nur den einen Song laden
-    run_ytdlp --no-playlist --no-warnings \
-        -f "bestaudio/best" -x --audio-format mp3 --audio-quality 0 \
-        --embed-thumbnail --convert-thumbnails jpg --embed-metadata \
-        -o "%(artist,uploader)s - %(title)s.%(ext)s" -- "$url"
+    download_direct() {
+        run_ytdlp --no-playlist --no-warnings \
+            -f "bestaudio/best" -x --audio-format mp3 --audio-quality 0 \
+            --embed-thumbnail --convert-thumbnails jpg --embed-metadata \
+            -o "%(artist,uploader)s - %(title)s.%(ext)s" -- "$url"
+    }
+    download_direct
+    files=("$tmp"/*.mp3)
+    # YouTube-Bot-Check -> einmal mit den Cookies des Browsers wiederholen
+    if [ ${#files[@]} -eq 0 ] && [ -n "$cookie_browser" ] && grep -qiE "$botcheck_re" "$log"; then
+        emit STATUS "Bot-Check, Lade mit Browser-Login …"
+        ytdlp_extra=(--cookies-from-browser "$cookie_browser")
+        download_direct
+    fi
 else
     need spotdl "pipx install spotdl"
     emit STATUS "Suche Song …"
@@ -164,6 +181,12 @@ else
     if [ ${#files[@]} -eq 0 ]; then
         emit STATUS "spotdl fehlgeschlagen, neuer Weg …"
         spotify_fallback
+        files=("$tmp"/*.mp3)
+        if [ ${#files[@]} -eq 0 ] && [ -n "$cookie_browser" ] && grep -qiE "$botcheck_re" "$log"; then
+            emit STATUS "Bot-Check, Lade mit Browser-Login …"
+            ytdlp_extra=(--cookies-from-browser "$cookie_browser")
+            spotify_fallback
+        fi
     fi
 fi
 
@@ -172,6 +195,9 @@ files=("$tmp"/*.mp3)
 if [ ${#files[@]} -eq 0 ]; then
     if grep -qiE 'javascript runtime|js runtime|n challenge|challenge solving' "$log"; then
         fail "yt-dlp braucht eine JS-Laufzeit (sudo pacman -S deno)"
+    fi
+    if grep -qiE "$botcheck_re" "$log"; then
+        fail "YouTube-Bot-Check: kurz warten oder in $cookie_browser bei YouTube einloggen"
     fi
     reason=$(grep -iE 'error|failed|unable|rate' "$log" | tail -n1 | cut -c1-80)
     fail "Download fehlgeschlagen${reason:+: $reason}"
