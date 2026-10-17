@@ -18,6 +18,12 @@ Singleton {
     })
     property real downloadProgress: 0
     property bool isDownloading: false
+    // NEU: true, sobald yt-dlp fertig geladen hat und nach mp3 konvertiert
+    property bool isConverting: false
+    property bool cancelled: false
+    // true, solange ein laufender mpv für den Wechsel auf eine andere Datei beendet wird
+    property bool restarting: false
+    property int startPollTries: 0
     property string downloadTitle: ""
     property string downloadError: ""
     property bool isSearching: false
@@ -27,7 +33,7 @@ Singleton {
     property double sessionStart: 0
     property double sessionCommitted: 0
 
-    // NEU: Signal, das die Picker-UI informiert, dass ein Download fertig ist
+    // Signal, das die Picker-UI informiert, dass ein Download fertig ist
     signal downloadCompleted()
 
     function toggle() {
@@ -60,7 +66,7 @@ Singleton {
         isSearching = true;
         searchResults = [];
         searchProc.running = false;
-        searchProc.command = ["bash", "-c", "yt-dlp 'ytsearch5:" + query + "' --flat-playlist --dump-json 2>/dev/null"];
+        searchProc.command = ["bash", "-c", "exec yt-dlp \"ytsearch5:$1\" --flat-playlist --dump-json 2>/dev/null", "qs-ytsearch", query];
         searchProc.running = true;
     }
 
@@ -77,14 +83,28 @@ Singleton {
         downloadTitle = title;
         downloadError = "";
         isDownloading = true;
+        isConverting = false;
         downloadProgress = 0;
         statusText = "Downloading...";
         downloadProc.running = false;
-        downloadProc.command = ["bash", "-c", "yt-dlp --newline -x --audio-format mp3 -o '" + downloadDir + "/%(title)s.%(ext)s' '" + url + "' 2>&1"];
+        cancelled = false;
+        downloadProc.lastError = "";
+        downloadProc.lastLine = "";
+        // --no-playlist + --playlist-items 1: ein Link = genau ein Download (auch bei &list=... Links)
+        downloadProc.command = ["bash", "-c", "mkdir -p \"$1\" && exec yt-dlp --newline --no-colors --no-playlist --playlist-items 1 -x --audio-format mp3 -o \"$1/%(title)s.%(ext)s\" -- \"$2\" 2>&1", "qs-ytdlp", downloadDir, url];
         downloadProc.running = true;
     }
 
+    function cancelDownload() {
+        if (!isDownloading)
+            return ;
+
+        cancelled = true;
+        downloadProc.running = false;
+    }
+
     function downloadFromInput(queryOrUrl) {
+        queryOrUrl = queryOrUrl.trim();
         if (queryOrUrl.startsWith("http://") || queryOrUrl.startsWith("https://") || queryOrUrl.startsWith("www.")) {
             downloadVideo(queryOrUrl, "Video");
             return true;
@@ -113,6 +133,7 @@ Singleton {
         isPlaying = true;
         currentPosition = 0;
         currentDuration = 0;
+        restarting = true;
         killMpvProc.running = false;
         killMpvProc.running = true;
         startMpvTimer.restart();
@@ -132,6 +153,15 @@ Singleton {
         const seconds = Math.max(0, Math.min(currentDuration, fraction * currentDuration));
         sendIpc('{"command": ["seek", ' + seconds.toFixed(2) + ', "absolute"]}');
         currentPosition = seconds;
+    }
+
+    // NEU: relativ vor-/zurückspulen (z.B. ±10 s)
+    function seekRelative(delta) {
+        if (currentFile === "" || currentDuration <= 0)
+            return ;
+
+        sendIpc('{"command": ["seek", ' + delta + ', "relative"]}');
+        currentPosition = Math.max(0, Math.min(currentDuration, currentPosition + delta));
     }
 
     function addListenTime(seconds) {
@@ -255,20 +285,35 @@ Singleton {
         id: downloadProc
 
         property string lastError: ""
+        property string lastLine: ""
 
         onExited: (exitCode, exitStatus) => {
+            if (root.cancelled) {
+                root.cancelled = false;
+                root.isDownloading = false;
+                root.isConverting = false;
+                root.downloadProgress = 0;
+                root.downloadTitle = "";
+                root.statusText = "";
+                lastError = "";
+                lastLine = "";
+                return ;
+            }
             if (root.isDownloading) {
                 root.isDownloading = false;
+                root.isConverting = false;
                 if (exitCode === 0) {
                     root.statusText = "Download finished";
                     root.loadLibrary();
-                    // NEU: Signal an die Picker-UI, damit sie zur Library wechselt
+                    // Signal an die Picker-UI, damit sie zur Library wechselt
                     root.downloadCompleted();
                 } else {
-                    root.downloadError = lastError || ("Exit code " + exitCode);
+                    root.downloadError = (lastError || lastLine || ("Exit code " + exitCode)).replace(/^ERROR:\s*/, "");
+                    console.warn("[JapaneseAudio] download failed (" + exitCode + "): " + root.downloadError);
                     root.statusText = "Download failed";
                 }
                 lastError = "";
+                lastLine = "";
                 statusTimer.restart();
             }
         }
@@ -279,13 +324,18 @@ Singleton {
                 if (pm)
                     root.downloadProgress = parseFloat(pm[1]) / 100;
 
-                if (data.indexOf("ERROR") >= 0 || data.indexOf("error:") >= 0)
-                    lastError = data;
+                if (data.indexOf("[ExtractAudio]") >= 0)
+                    root.isConverting = true;
 
+                const line = data.trim();
+                if (line.indexOf("ERROR") === 0)
+                    lastError = line;
+                else if (line !== "" && line.indexOf("[download]") !== 0)
+                    lastLine = line;
                 const dm = data.match(/\[download\]\s+Destination:\s+(.+)/);
                 if (dm && root.downloadTitle === "Video") {
                     const parts = dm[1].trim().split('/');
-                    root.downloadTitle = parts[parts.length - 1].replace(/\.mp3$/, "");
+                    root.downloadTitle = parts[parts.length - 1].replace(/\.[^.]+$/, "");
                 }
             }
         }
@@ -323,9 +373,10 @@ Singleton {
             mpvProc.command = ["bash", "-c", script, "qs-mpv", downloadDir + "/" + currentFile];
             mpvProc.running = false;
             mpvProc.running = true;
-            Qt.callLater(() => {
-                return pollPosition();
-            });
+            // mpv braucht einen Moment bis der IPC-Socket steht → mehrfach nachfragen
+            root.startPollTries = 0;
+            startPoll.restart();
+            restartGuard.restart();
         }
     }
 
@@ -333,17 +384,46 @@ Singleton {
         id: mpvProc
 
         onRunningChanged: {
-            if (!running) {
-                root.isPlaying = false;
-                root.currentPosition = 0;
-                root.currentDuration = 0;
+            if (running) {
+                root.restarting = false;
+                return ;
             }
+            // Der alte mpv wurde absichtlich beendet (Dateiwechsel) → Status nicht zurücksetzen
+            if (root.restarting)
+                return ;
+
+            root.isPlaying = false;
+            root.currentPosition = 0;
+            root.currentDuration = 0;
+        }
+    }
+
+    // Fragt nach dem Start ein paar Mal nach, bis mpv antwortet (korrigiert den Play/Pause-Status)
+    Timer {
+        id: startPoll
+
+        interval: 300
+        repeat: true
+        onTriggered: {
+            root.startPollTries++;
+            if (root.currentDuration > 0 || root.startPollTries > 20) {
+                stop();
+                return ;
+            }
+            root.pollPosition();
         }
     }
 
     Timer {
-        interval: 1000
-        running: root.isPlaying && root.currentFile !== "" && mpvProc.running
+        id: restartGuard
+
+        interval: 3000
+        onTriggered: root.restarting = false
+    }
+
+    Timer {
+        interval: root.isPlaying ? 1000 : 2000
+        running: root.currentFile !== "" && mpvProc.running
         repeat: true
         onTriggered: root.pollPosition()
     }
