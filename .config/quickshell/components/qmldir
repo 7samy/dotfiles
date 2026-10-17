@@ -18,6 +18,7 @@ singleton JapaneseAudioState 1.0 JapaneseAudioState.qml
 JapaneseAudioPicker 1.0 JapaneseAudioPicker.qml
 PickerSwitcher 1.0 PickerSwitcher.qml
 PowerMenuButton 1.0 PowerMenuButton.qml
+AppPicker 1.0 AppPicker.qml
 VolumeOrb 1.0 VolumeOrb.qml
 AudioToggle 1.0 AudioToggle.qml
 Clock 1.0 Clock.qml

@@ -53,14 +53,18 @@ QtObject {
                 root.color13 = colors?.color13 ?? "#c0caf5"
                 root.color14 = colors?.color14 ?? "#c0caf5"
                 root.color15 = colors?.color15 ?? "#c0caf5"
-                root.colorsUpdated()   
+                root.colorsUpdated()
             }
         }
     }
 
     function withAlpha(hex, alpha) {
-        if (!hex || hex.length < 7) return "#000000"
+        if (hex === undefined || hex === null) return "#000000"
+        var s = (typeof hex === "string") ? hex : hex.toString()
+        if (s.charAt(0) === "#") s = s.slice(1)
+        if (s.length === 8) s = s.slice(2)   // #aarrggbb → rrggbb
+        if (s.length !== 6) return "#000000"
         var a = Math.round(alpha * 255).toString(16).padStart(2, '0')
-        return "#" + a + hex.slice(1)
+        return "#" + a + s
     }
 }

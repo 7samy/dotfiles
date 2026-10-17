@@ -4,7 +4,7 @@ pragma Singleton
 QtObject {
     id: root
 
-    readonly property var pickers: ["clipboard", "app", "music", "wallpaper"]
+    readonly property var pickers: ["clipboard", "app", "apps", "music", "wallpaper"]
     property string activePicker: ""
     property string searchText: ""
     // true, wenn gerade frisch geöffnet wird (keiner war aktiv)

@@ -27,6 +27,8 @@ PanelWindow {
             clipboardLoader.item.focusSearch();
         else if (PickerManager.isOpen("app") && appLoader.item)
             appLoader.item.focusSearch();
+        else if (PickerManager.isOpen("apps") && appsLoader.item)
+            appsLoader.item.focusSearch();
         else if (PickerManager.isOpen("music") && musicLoader.item)
             musicLoader.item.focusSearch();
         else if (PickerManager.isOpen("wallpaper") && wallpaperLoader.item)
@@ -58,7 +60,6 @@ PanelWindow {
         right: true
     }
 
-    // Wenn PickerManager aufgeht, schließe Audio
     Connections {
         function onActivePickerChanged() {
             if (PickerManager.anyOpen && JapaneseAudioState.isOpen)
@@ -74,7 +75,6 @@ PanelWindow {
         target: PickerManager
     }
 
-    // Wenn Audio aufgeht, schließe PickerManager
     Connections {
         function onIsOpenChanged() {
             if (JapaneseAudioState.isOpen && PickerManager.anyOpen)
@@ -217,6 +217,62 @@ PanelWindow {
                             anchors.fill: parent
                             focus: false
                             opacity: PickerManager.activePicker === "app" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                // ---- Apps Picker (Task Manager) ----
+                Loader {
+                    id: appsLoader
+
+                    property bool keepAlive: false
+
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: keepAlive
+                    sourceComponent: appsComponent
+
+                    Connections {
+                        function onActivePickerChanged() {
+                            if (PickerManager.activePicker === "apps")
+                                appsLoader.keepAlive = true;
+                            else if (appsLoader.item)
+                                appsUnloadTimer.restart();
+                        }
+
+                        target: PickerManager
+                    }
+
+                    Timer {
+                        id: appsUnloadTimer
+
+                        interval: 320
+                        onTriggered: appsLoader.keepAlive = false
+                    }
+
+                    Component {
+                        id: appsComponent
+
+                        AppPicker {
+                            id: appsPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: PickerManager.activePicker === "apps" ? 1 : 0
                             visible: opacity > 0
 
                             Behavior on opacity {

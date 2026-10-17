@@ -52,7 +52,6 @@ PanelWindow {
         return t * t * (3 - 2 * t);
     }
 
-    // m:ss bzw. h:mm:ss für den Mini-Player
     function fmtTime(s) {
         if (!s || s < 0 || isNaN(s))
             return "0:00";
@@ -152,8 +151,16 @@ PanelWindow {
     exclusiveZone: BarState.barVisible ? 40 : 0
     WlrLayershell.keyboardFocus: calendarOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     onCalendarOpenChanged: {
-        if (calendarOpen)
+        if (calendarOpen) {
+            if (PickerManager.isOpen("apps"))
+                PickerManager.close();
+
             goToday();
+        }
+    }
+    onDrawerOpenChanged: {
+        if (!drawerOpen && PickerManager.isOpen("apps"))
+            PickerManager.close();
 
     }
 
@@ -178,9 +185,12 @@ PanelWindow {
 
     Connections {
         function onBarVisibleChanged() {
-            if (!BarState.barVisible)
+            if (!BarState.barVisible) {
                 panelWindow.closeCalendar();
+                if (PickerManager.isOpen("apps"))
+                    PickerManager.close();
 
+            }
         }
 
         target: BarState
@@ -336,7 +346,6 @@ PanelWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 0
 
-                        // Arch-Icon: Klick dreht es um 90° (Spitze nach rechts) und fährt die Icons aus
                         Item {
                             id: archBtn
 
@@ -384,7 +393,6 @@ PanelWindow {
 
                             }
 
-                            // Hinweis-Punkt: Audio läuft, obwohl die Icons eingefahren sind
                             Rectangle {
                                 x: 19
                                 y: 5
@@ -418,7 +426,6 @@ PanelWindow {
 
                         }
 
-                        // Drawer: die Icons gleiten von links aus dem Arch-Icon heraus
                         Item {
                             id: drawer
 
@@ -433,134 +440,84 @@ PanelWindow {
                                 height: parent.height
                                 leftPadding: 6
                                 rightPadding: 16
-                                spacing: 16
+                                spacing: 6
                                 opacity: panelWindow.revealT
 
-                                Item {
-                                    width: cbToggle.width
-                                    height: 32
+                                // Clipboard
+                                DrawerSlot {
+                                    id: cbSlot
 
-                                    ClipboardToggle {
-                                        id: cbToggle
-
-                                        y: height > 0 ? (parent.height - height) / 2 : 0
-                                    }
-
+                                    icon: "clipboard"
+                                    reveal: panelWindow.clamp01(panelWindow.revealT * 1.6)
+                                    onClicked: ClipboardState.toggle()
                                 }
 
-                                // Japanese Audio: Kanji-Button (öffnet den Picker) + Mini-Player
+                                // Laufende Apps ansehen / schließen
+                                DrawerSlot {
+                                    id: appsSlot
+
+                                    icon: "apps"
+                                    active: PickerManager.isOpen("apps")
+                                    reveal: panelWindow.clamp01(panelWindow.revealT * 1.6 - 0.3)
+                                    onClicked: PickerManager.toggle("apps")
+                                }
+
                                 Item {
                                     id: jaGroup
 
                                     readonly property bool miniActive: JapaneseAudioState.currentFile !== ""
+                                    property bool collapsed: false
+                                    readonly property bool miniShown: miniActive && !collapsed
+                                    readonly property bool hoverKeep: miniHover.hovered || jaBtn.hovered || capsule.dragging
                                     readonly property real frac: JapaneseAudioState.currentDuration > 0 ? panelWindow.clamp01(JapaneseAudioState.currentPosition / JapaneseAudioState.currentDuration) : 0
-                                    // weicher Fortschritt zwischen den 1-Sekunden-Updates
                                     property real shownFrac: frac
+                                    readonly property real reveal: panelWindow.clamp01(panelWindow.revealT * 1.6 - 0.6)
+                                    readonly property real timeW: JapaneseAudioState.currentDuration >= 3600 ? 44 : 29
+                                    readonly property real miniW: 116 + 2 * timeW
 
                                     height: 32
-                                    width: jaBtn.width + miniWrap.width + (miniActive ? 10 : 0)
+                                    width: capsule.x + capsule.width + 2
+                                    opacity: reveal
+                                    scale: 0.6 + 0.4 * reveal
+                                    transformOrigin: Item.Left
 
-                                    // 音 Toggle
-                                    Item {
-                                        id: jaBtn
+                                    Rectangle {
+                                        id: capsule
 
+                                        readonly property bool dragging: trackMouse.pressed
+                                        property real dragFrac: 0
+                                        readonly property real dispFrac: dragging ? dragFrac : jaGroup.shownFrac
+                                        readonly property real dispSecs: dragging ? dragFrac * JapaneseAudioState.currentDuration : JapaneseAudioState.currentPosition
+
+                                        x: 2
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: 24
-                                        height: 24
-
-                                        // Hover-Hintergrund
-                                        Rectangle {
-                                            anchors.centerIn: parent
-                                            width: 32
-                                            height: 32
-                                            radius: 8
-                                            color: WalColors.withAlpha(WalColors.color4, 0.15)
-                                            visible: jaHover.hovered
-                                            scale: jaHover.hovered ? 1 : 0.6
-
-                                            Behavior on scale {
-                                                NumberAnimation {
-                                                    duration: 150
-                                                    easing.type: Easing.OutCubic
-                                                }
-
-                                            }
-
-                                        }
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "音"
-                                            font.pixelSize: 18
-                                            font.bold: true
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            color: (jaHover.hovered || JapaneseAudioState.isPlaying) ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.5)
-                                            // Skalierung beim Hovern
-                                            scale: jaHover.hovered ? 1.15 : 1
-                                            transformOrigin: Item.Center
-
-                                            // Feinjustierung des Kanji-Glyphs (Baseline)
-                                            transform: Translate {
-                                                y: 1
-                                            }
-
-                                            Behavior on scale {
-                                                NumberAnimation {
-                                                    duration: 150
-                                                    easing.type: Easing.OutCubic
-                                                }
-
-                                            }
-
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: 150
-                                                }
-
-                                            }
-
-                                        }
+                                        height: 28
+                                        radius: 14
+                                        width: 28 + (jaGroup.miniShown ? jaGroup.miniW : 0)
+                                        color: WalColors.withAlpha(WalColors.color4, jaGroup.miniShown ? (miniHover.hovered ? 0.2 : 0.12) : 0)
 
                                         HoverHandler {
-                                            id: jaHover
+                                            id: miniHover
                                         }
 
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: JapaneseAudioState.toggle()
+                                        WheelHandler {
+                                            enabled: jaGroup.miniShown
+                                            onWheel: (event) => {
+                                                JapaneseAudioState.seekRelative(event.angleDelta.y > 0 ? 5 : -5);
+                                            }
                                         }
 
-                                    }
+                                        Item {
+                                            id: miniWrap
 
-                                    // Mini-Player: [●] 1:23 ━━━●━━ 4:56
-                                    Item {
-                                        id: miniWrap
+                                            x: 28
+                                            width: Math.max(0, capsule.width - 28)
+                                            height: parent.height
+                                            clip: true
+                                            opacity: jaGroup.miniShown ? 1 : 0
 
-                                        x: jaBtn.width + 10
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        height: 26
-                                        width: jaGroup.miniActive ? miniPill.width : 0
-                                        opacity: jaGroup.miniActive ? 1 : 0
-                                        clip: true
-
-                                        Rectangle {
-                                            id: miniPill
-
-                                            readonly property real timeW: JapaneseAudioState.currentDuration >= 3600 ? 44 : 29
-                                            readonly property bool dragging: trackMouse.pressed
-                                            property real dragFrac: 0
-                                            readonly property real dispFrac: dragging ? dragFrac : jaGroup.shownFrac
-                                            readonly property real dispSecs: dragging ? dragFrac * JapaneseAudioState.currentDuration : JapaneseAudioState.currentPosition
-
-                                            height: 26
-                                            width: 3 + 20 + 8 + timeW + 6 + 64 + 6 + timeW + 11
-                                            radius: 13
-                                            color: WalColors.withAlpha(WalColors.color4, miniHover.hovered ? 0.2 : 0.12)
-
-                                            // sanft atmender Schein, solange es spielt
                                             Rectangle {
-                                                x: 1
+                                                x: 0
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 width: 24
                                                 height: 24
@@ -589,11 +546,10 @@ PanelWindow {
 
                                             }
 
-                                            // Play/Pause-Button (gefüllt, kontrastreich)
                                             Rectangle {
                                                 id: miniBtn
 
-                                                x: 3
+                                                x: 2
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 width: 20
                                                 height: 20
@@ -601,7 +557,6 @@ PanelWindow {
                                                 color: WalColors.color4
                                                 scale: miniPlayArea.pressed ? 0.9 : (miniPlayArea.containsMouse ? 1.1 : 1)
 
-                                                // Pause-Symbol
                                                 Row {
                                                     anchors.centerIn: parent
                                                     spacing: 2
@@ -639,7 +594,6 @@ PanelWindow {
 
                                                 }
 
-                                                // Play-Symbol
                                                 Text {
                                                     anchors.centerIn: parent
                                                     anchors.horizontalCenterOffset: 1
@@ -672,7 +626,6 @@ PanelWindow {
                                                     anchors.fill: parent
                                                     hoverEnabled: true
                                                     cursorShape: Qt.PointingHandCursor
-                                                    // gleiche Datei → Pause/Play, Datei zu Ende → startet neu
                                                     onClicked: JapaneseAudioState.play(JapaneseAudioState.currentFile)
                                                 }
 
@@ -686,17 +639,16 @@ PanelWindow {
 
                                             }
 
-                                            // vergangene Zeit
                                             Text {
-                                                x: 31
-                                                width: miniPill.timeW
+                                                x: 30
+                                                width: jaGroup.timeW
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 horizontalAlignment: Text.AlignRight
-                                                text: panelWindow.fmtTime(miniPill.dispSecs)
+                                                text: panelWindow.fmtTime(capsule.dispSecs)
                                                 font.family: "JetBrainsMono Nerd Font"
                                                 font.pixelSize: 10
-                                                font.bold: miniPill.dragging
-                                                color: miniPill.dragging ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, JapaneseAudioState.isPlaying ? 0.9 : 0.5)
+                                                font.bold: capsule.dragging
+                                                color: capsule.dragging ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, JapaneseAudioState.isPlaying ? 0.9 : 0.5)
 
                                                 Behavior on color {
                                                     ColorAnimation {
@@ -707,11 +659,10 @@ PanelWindow {
 
                                             }
 
-                                            // Duration-Handle: anklicken oder ziehen zum Spulen
                                             Item {
                                                 id: trackBox
 
-                                                x: 31 + miniPill.timeW + 6
+                                                x: 30 + jaGroup.timeW + 6
                                                 width: 64
                                                 height: parent.height
 
@@ -720,7 +671,7 @@ PanelWindow {
 
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     width: parent.width
-                                                    height: (trackMouse.containsMouse || miniPill.dragging) ? 5 : 3
+                                                    height: (trackMouse.containsMouse || capsule.dragging) ? 5 : 3
                                                     radius: height / 2
                                                     color: WalColors.withAlpha(WalColors.color7, 0.16)
 
@@ -735,7 +686,7 @@ PanelWindow {
 
                                                 Rectangle {
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    width: parent.width * miniPill.dispFrac
+                                                    width: parent.width * capsule.dispFrac
                                                     height: trackBg.height
                                                     radius: height / 2
                                                     color: WalColors.withAlpha(WalColors.color4, JapaneseAudioState.isPlaying ? 1 : 0.55)
@@ -750,9 +701,9 @@ PanelWindow {
                                                 }
 
                                                 Rectangle {
-                                                    x: parent.width * miniPill.dispFrac - width / 2
+                                                    x: parent.width * capsule.dispFrac - width / 2
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    width: miniPill.dragging ? 10 : (trackMouse.containsMouse ? 8 : 0)
+                                                    width: capsule.dragging ? 10 : (trackMouse.containsMouse ? 8 : 0)
                                                     height: width
                                                     radius: width / 2
                                                     color: WalColors.color4
@@ -777,26 +728,25 @@ PanelWindow {
                                                     preventStealing: true
                                                     cursorShape: Qt.PointingHandCursor
                                                     onPressed: (mouse) => {
-                                                        miniPill.dragFrac = panelWindow.clamp01(mouse.x / width);
+                                                        capsule.dragFrac = panelWindow.clamp01(mouse.x / width);
                                                     }
                                                     onPositionChanged: (mouse) => {
                                                         if (pressed)
-                                                            miniPill.dragFrac = panelWindow.clamp01(mouse.x / width);
+                                                            capsule.dragFrac = panelWindow.clamp01(mouse.x / width);
 
                                                     }
                                                     onReleased: {
                                                         if (JapaneseAudioState.currentDuration > 0)
-                                                            JapaneseAudioState.seekToFraction(miniPill.dragFrac);
+                                                            JapaneseAudioState.seekToFraction(capsule.dragFrac);
 
                                                     }
                                                 }
 
                                             }
 
-                                            // Gesamtdauer
                                             Text {
                                                 x: trackBox.x + 64 + 6
-                                                width: miniPill.timeW
+                                                width: jaGroup.timeW
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 text: JapaneseAudioState.currentDuration > 0 ? panelWindow.fmtTime(JapaneseAudioState.currentDuration) : "--:--"
                                                 font.family: "JetBrainsMono Nerd Font"
@@ -804,30 +754,18 @@ PanelWindow {
                                                 color: WalColors.withAlpha(WalColors.color7, 0.4)
                                             }
 
-                                            HoverHandler {
-                                                id: miniHover
-                                            }
-
-                                            // Mausrad über dem Mini-Player: ±5 Sekunden spulen
-                                            WheelHandler {
-                                                onWheel: (event) => {
-                                                    JapaneseAudioState.seekRelative(event.angleDelta.y > 0 ? 5 : -5);
-                                                }
-                                            }
-
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: 150
-                                                }
-
-                                            }
-
-                                            Behavior on width {
+                                            Behavior on opacity {
                                                 NumberAnimation {
-                                                    duration: 200
-                                                    easing.type: Easing.OutCubic
+                                                    duration: 240
                                                 }
 
+                                            }
+
+                                        }
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 150
                                             }
 
                                         }
@@ -840,13 +778,32 @@ PanelWindow {
 
                                         }
 
-                                        Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: 240
-                                            }
+                                    }
+
+                                    DrawerSlot {
+                                        id: jaBtn
+
+                                        x: 0
+                                        icon: "wave"
+                                        active: JapaneseAudioState.isPlaying
+                                        playing: JapaneseAudioState.isPlaying
+                                        onClicked: JapaneseAudioState.toggle()
+                                    }
+
+                                    Timer {
+                                        interval: 3000
+                                        running: jaGroup.miniActive && !jaGroup.collapsed && !JapaneseAudioState.isPlaying && !jaGroup.hoverKeep
+                                        onTriggered: jaGroup.collapsed = true
+                                    }
+
+                                    Connections {
+                                        function onIsPlayingChanged() {
+                                            if (JapaneseAudioState.isPlaying)
+                                                jaGroup.collapsed = false;
 
                                         }
 
+                                        target: JapaneseAudioState
                                     }
 
                                     Behavior on shownFrac {
@@ -863,6 +820,11 @@ PanelWindow {
 
                             }
 
+                        }
+
+                        Item {
+                            width: (1 - panelWindow.revealT) * 14
+                            height: 1
                         }
 
                         ActiveWindow {
@@ -886,7 +848,6 @@ PanelWindow {
 
                             property int hoveredIndex: -1
                             readonly property real pillWidth: 34
-                            // 0=PowerMenu, 1=Audio, 2=Stats, 3=VPN
                             readonly property int lockedIndex: {
                                 if (typeof VpnState !== "undefined" && VpnState.dropdownOpen)
                                     return 3;
@@ -1338,6 +1299,254 @@ PanelWindow {
                 easing.bezierCurve: Appearance.anim.curves.standard
             }
 
+        }
+
+    }
+
+    // Einheitlicher Slot für alle Drawer-Icons
+    component DrawerSlot: Item {
+        id: slot
+
+        property string icon: "clipboard"
+        property bool active: false
+        property bool playing: false
+        property real reveal: 1
+        readonly property bool hovered: slotHover.hovered
+        readonly property color ink: (hovered || active) ? WalColors.color4 : WalColors.withAlpha(WalColors.color2, 0.85)
+        readonly property bool hoverWave: icon === "wave" && (hovered || playing)
+        property real hoverEnergy: hoverWave ? 1 : 0
+        property real hoverPhase: 0
+
+        signal clicked()
+
+        width: 32
+        height: 32
+        opacity: reveal
+        scale: 0.6 + 0.4 * reveal
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 28
+            height: 28
+            radius: 14
+            color: WalColors.withAlpha(WalColors.color4, slot.active ? 0.2 : (slot.hovered ? 0.15 : 0))
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 150
+                }
+
+            }
+
+        }
+
+        Item {
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            visible: slot.icon === "clipboard"
+            scale: slot.hovered ? 1.12 : 1
+
+            Rectangle {
+                x: 2
+                y: 3
+                width: 14
+                height: 14
+                radius: 3
+                color: "transparent"
+                border.width: 1.6
+                border.color: slot.ink
+            }
+
+            Rectangle {
+                x: 5
+                y: 8
+                width: slot.hovered ? 8 : 6
+                height: 1.6
+                radius: 0.8
+                color: slot.ink
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+            }
+
+            Rectangle {
+                x: 5
+                y: 12
+                width: slot.hovered ? 5 : 8
+                height: 1.6
+                radius: 0.8
+                color: WalColors.withAlpha(slot.ink, 0.65)
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: 240
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+            }
+
+            Rectangle {
+                x: 6
+                y: slot.hovered ? 0.5 : 1
+                width: 6
+                height: 4.5
+                radius: 2
+                color: slot.ink
+
+                Behavior on y {
+                    NumberAnimation {
+                        duration: 160
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 150
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
+        Item {
+            id: appsIcon
+
+            property real spread: slot.hovered ? 1 : 0
+
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            visible: slot.icon === "apps"
+            scale: slot.hovered ? 1.12 : 1
+
+            Repeater {
+                model: 4
+
+                delegate: Rectangle {
+                    required property int index
+                    readonly property int cx: index % 2
+                    readonly property int cy: Math.floor(index / 2)
+
+                    x: 2.2 + cx * 7.6 + (cx === 0 ? -1 : 1) * appsIcon.spread
+                    y: 2.2 + cy * 7.6 + (cy === 0 ? -1 : 1) * appsIcon.spread
+                    width: 6.2
+                    height: 6.2
+                    radius: 2
+                    antialiasing: true
+                    color: slot.ink
+                    rotation: (slot.active && index === 1) ? 45 : 0
+
+                    Behavior on rotation {
+                        NumberAnimation {
+                            duration: 260
+                            easing.type: Easing.OutBack
+                        }
+
+                    }
+
+                }
+
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 150
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+            Behavior on spread {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 1.9
+            visible: slot.icon === "wave"
+            scale: slot.hovered ? 1.12 : 1
+
+            Repeater {
+                model: 5
+
+                delegate: Item {
+                    id: bar
+
+                    required property int index
+                    readonly property var baseH: [7, 10, 12, 10, 7]
+                    readonly property var hAmp: [2, 3.5, 4.5, 3.5, 2]
+
+                    width: 2
+                    height: 18
+
+                    Rectangle {
+                        x: 0
+                        y: (parent.height - height) / 2
+                        width: parent.width
+                        height: bar.baseH[bar.index] + slot.hoverEnergy * bar.hAmp[bar.index] * Math.sin(slot.hoverPhase - bar.index * 0.9)
+                        radius: width / 2
+                        antialiasing: true
+                        color: slot.ink
+                    }
+
+                }
+
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 150
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
+        HoverHandler {
+            id: slotHover
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: slot.clicked()
+        }
+
+        Behavior on hoverEnergy {
+            NumberAnimation {
+                duration: 450
+                easing.type: Easing.InOutSine
+            }
+
+        }
+
+        NumberAnimation on hoverPhase {
+            from: 0
+            to: 2 * Math.PI
+            duration: 1600
+            loops: Animation.Infinite
+            running: slot.icon === "wave" && (slot.hoverWave || slot.hoverEnergy > 0.001)
         }
 
     }
