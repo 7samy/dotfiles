@@ -8,6 +8,7 @@ Singleton {
 
     readonly property string downloadDir: "/home/azu/Documents/Japanese-Audios"
     readonly property string statsFile: Quickshell.stateDir + "/japanese-audio-stats.json"
+    readonly property string ipcSocket: "/tmp/mpv_japanese.sock"
     property bool isOpen: false
     property bool isPlaying: false
     property string currentFile: ""
@@ -15,6 +16,19 @@ Singleton {
     property var library: []
     property var stats: ({
     })
+    property real downloadProgress: 0
+    property bool isDownloading: false
+    property string downloadTitle: ""
+    property string downloadError: ""
+    property bool isSearching: false
+    property var searchResults: []
+    property real currentPosition: 0
+    property real currentDuration: 0
+    property double sessionStart: 0
+    property double sessionCommitted: 0
+
+    // NEU: Signal, das die Picker-UI informiert, dass ein Download fertig ist
+    signal downloadCompleted()
 
     function toggle() {
         isOpen = !isOpen;
@@ -28,57 +42,114 @@ Singleton {
         isOpen = false;
     }
 
-    // ── Ordner auslesen ──
     function loadLibrary() {
         listProc.running = false;
         listProc.running = true;
     }
 
-    // ── Stats auslesen ──
     function loadStats() {
         statsReadProc.running = false;
         statsReadProc.running = true;
     }
 
-    // ── Download via yt-dlp ──
-    function searchAndDownload(queryOrUrl) {
-        if (queryOrUrl.trim() === "")
+    // ── Suche ──
+    function searchVideos(query) {
+        if (query.trim() === "")
             return ;
 
-        statusText = "Searching / Downloading...";
+        isSearching = true;
+        searchResults = [];
+        searchProc.running = false;
+        searchProc.command = ["bash", "-c", "yt-dlp 'ytsearch5:" + query + "' --flat-playlist --dump-json 2>/dev/null"];
+        searchProc.running = true;
+    }
+
+    function clearSearch() {
+        searchResults = [];
+        isSearching = false;
+    }
+
+    // ── Download ──
+    function downloadVideo(url, title) {
+        if (isDownloading)
+            return ;
+
+        downloadTitle = title;
+        downloadError = "";
+        isDownloading = true;
+        downloadProgress = 0;
+        statusText = "Downloading...";
         downloadProc.running = false;
-        // ytsearch1: sucht das erste Ergebnis, falls es keine URL ist
-        const target = queryOrUrl.startsWith("http") ? queryOrUrl : "ytsearch1:" + queryOrUrl;
-        downloadProc.command = ["bash", "-c", "yt-dlp -x --audio-format mp3 -o '" + downloadDir + "/%(title)s.%(ext)s' '" + target + "'"];
+        downloadProc.command = ["bash", "-c", "yt-dlp --newline -x --audio-format mp3 -o '" + downloadDir + "/%(title)s.%(ext)s' '" + url + "' 2>&1"];
         downloadProc.running = true;
     }
 
-    // ── Playback via mpv ──
+    function downloadFromInput(queryOrUrl) {
+        if (queryOrUrl.startsWith("http://") || queryOrUrl.startsWith("https://") || queryOrUrl.startsWith("www.")) {
+            downloadVideo(queryOrUrl, "Video");
+            return true;
+        }
+        searchVideos(queryOrUrl);
+        return false;
+    }
+
+    // ── IPC ──
+    function sendIpc(jsonStr) {
+        const py = "import socket,sys\n" + "try:\n" + "  s=socket.socket(socket.AF_UNIX)\n" + "  s.connect('" + ipcSocket + "')\n" + "  s.sendall(sys.argv[1].encode()+b'\\n')\n" + "  s.close()\n" + "except: sys.exit(1)";
+        ipcProc.command = ["python3", "-c", py, jsonStr];
+        ipcProc.running = false;
+        ipcProc.running = true;
+    }
+
+    // ── Playback ──
     function play(file) {
-        if (currentFile === file && isPlaying) {
-            // Pause via IPC
-            ipcProc.command = ["bash", "-c", "echo '{\"command\": [\"set_property\", \"pause\", true]}' | socat - /tmp/mpv_japanese.sock"];
-            ipcProc.running = true;
-            isPlaying = false;
+        if (currentFile === file && mpvProc.running) {
+            sendIpc('{"command": ["cycle", "pause"]}');
+            isPlaying = !isPlaying;
+            pollVerifier.restart();
             return ;
         }
-        if (currentFile === file && !isPlaying) {
-            // Resume via IPC
-            ipcProc.command = ["bash", "-c", "echo '{\"command\": [\"set_property\", \"pause\", false]}' | socat - /tmp/mpv_japanese.sock"];
-            ipcProc.running = true;
-            isPlaying = true;
-            return ;
-        }
-        // Neuen Track starten
         currentFile = file;
         isPlaying = true;
-        // Falls mpv noch läuft, killen
+        currentPosition = 0;
+        currentDuration = 0;
+        killMpvProc.running = false;
         killMpvProc.running = true;
-        // Kurz warten, dann neu starten
         startMpvTimer.restart();
     }
 
-    // ── Stats berechnen ──
+    function pollPosition() {
+        const py = 'import socket, json\n' + 'try:\n' + '    s = socket.socket(socket.AF_UNIX)\n' + '    s.settimeout(0.3)\n' + '    s.connect("' + ipcSocket + '")\n' + '    def cmd(c):\n' + '        s.sendall((json.dumps({"command": c}) + "\\n").encode())\n' + '        buf = b""\n' + '        while b"\\n" not in buf:\n' + '            chunk = s.recv(4096)\n' + '            if not chunk: break\n' + '            buf += chunk\n' + '        for line in buf.split(b"\\n"):\n' + '            if line:\n' + '                try:\n' + '                    d = json.loads(line)\n' + '                    if "data" in d and "error" in d: return d["data"]\n' + '                except: pass\n' + '        return None\n' + '    pos = cmd(["get_property", "time-pos"])\n' + '    dur = cmd(["get_property", "duration"])\n' + '    pause = cmd(["get_property", "pause"])\n' + '    print(json.dumps({"pos": pos, "dur": dur, "pause": pause}))\n' + '    s.close()\n' + 'except Exception as e:\n' + '    print(json.dumps({"error": str(e)}))\n';
+        posPollProc.command = ["python3", "-c", py];
+        posPollProc.running = false;
+        posPollProc.running = true;
+    }
+
+    function seekToFraction(fraction) {
+        if (currentDuration <= 0)
+            return ;
+
+        const seconds = Math.max(0, Math.min(currentDuration, fraction * currentDuration));
+        sendIpc('{"command": ["seek", ' + seconds.toFixed(2) + ', "absolute"]}');
+        currentPosition = seconds;
+    }
+
+    function addListenTime(seconds) {
+        const today = Qt.formatDate(new Date(), "yyyy-MM-dd");
+        let newStats = Object.assign({
+        }, root.stats);
+        newStats[today] = (newStats[today] || 0) + seconds;
+        root.stats = newStats;
+        saveStats();
+    }
+
+    function saveStats() {
+        const jsonStr = JSON.stringify(root.stats).replace(/'/g, "'\\''");
+        statsWriteProc.command = ["bash", "-c", "echo '" + jsonStr + "' > " + root.statsFile];
+        statsWriteProc.running = false;
+        statsWriteProc.running = true;
+    }
+
     function getStatsForPeriod(period) {
         let now = new Date();
         let totalSeconds = 0;
@@ -88,9 +159,7 @@ Singleton {
             if (period === "day") {
                 include = (dateStr === Qt.formatDate(now, "yyyy-MM-dd"));
             } else if (period === "week") {
-                // Berechnung der aktuellen Woche (Montag bis Sonntag)
                 let dayOfWeek = (now.getDay() + 6) % 7;
-                // 0 = Montag
                 let monday = new Date(now);
                 monday.setDate(now.getDate() - dayOfWeek);
                 monday.setHours(0, 0, 0, 0);
@@ -114,7 +183,7 @@ Singleton {
         command: ["bash", "-c", "mkdir -p " + root.downloadDir + " && find " + root.downloadDir + " -maxdepth 1 -name '*.mp3' -printf '%f\\n' | sort"]
         onRunningChanged: {
             if (running)
-                root.library = []; // Reset beim Neuladen
+                root.library = [];
 
         }
 
@@ -151,40 +220,112 @@ Singleton {
     }
 
     Process {
-        id: downloadProc
+        id: searchProc
 
         onRunningChanged: {
-            if (running) {
-                root.statusText = "Downloading...";
-            } else {
-                root.statusText = "Download finished";
-                root.loadLibrary();
+            if (!running)
+                root.isSearching = false;
+
+        }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                try {
+                    const obj = JSON.parse(data);
+                    if (obj && obj.title && obj.id) {
+                        let arr = root.searchResults.slice();
+                        arr.push({
+                            "id": obj.id,
+                            "title": obj.title,
+                            "url": "https://www.youtube.com/watch?v=" + obj.id,
+                            "duration": obj.duration_string || "",
+                            "thumbnail": obj.thumbnails ? obj.thumbnails[obj.thumbnails.length - 1].url : "",
+                            "uploader": obj.uploader || ""
+                        });
+                        root.searchResults = arr;
+                    }
+                } catch (e) {
+                }
+            }
+        }
+
+    }
+
+    Process {
+        id: downloadProc
+
+        property string lastError: ""
+
+        onExited: (exitCode, exitStatus) => {
+            if (root.isDownloading) {
+                root.isDownloading = false;
+                if (exitCode === 0) {
+                    root.statusText = "Download finished";
+                    root.loadLibrary();
+                    // NEU: Signal an die Picker-UI, damit sie zur Library wechselt
+                    root.downloadCompleted();
+                } else {
+                    root.downloadError = lastError || ("Exit code " + exitCode);
+                    root.statusText = "Download failed";
+                }
+                lastError = "";
                 statusTimer.restart();
             }
         }
+
+        stdout: SplitParser {
+            onRead: (data) => {
+                const pm = data.match(/\[download\]\s+([\d.]+)%/);
+                if (pm)
+                    root.downloadProgress = parseFloat(pm[1]) / 100;
+
+                if (data.indexOf("ERROR") >= 0 || data.indexOf("error:") >= 0)
+                    lastError = data;
+
+                const dm = data.match(/\[download\]\s+Destination:\s+(.+)/);
+                if (dm && root.downloadTitle === "Video") {
+                    const parts = dm[1].trim().split('/');
+                    root.downloadTitle = parts[parts.length - 1].replace(/\.mp3$/, "");
+                }
+            }
+        }
+
     }
 
     Timer {
         id: statusTimer
 
-        interval: 3000
-        onTriggered: root.statusText = ""
+        interval: 3500
+        onTriggered: {
+            root.statusText = "";
+            root.downloadProgress = 0;
+            root.downloadTitle = "";
+            root.downloadError = "";
+        }
+    }
+
+    Process {
+        id: ipcProc
     }
 
     Process {
         id: killMpvProc
 
-        command: ["bash", "-c", "pkill -f 'mpv.*mpv_japanese.sock' || true"]
+        command: ["bash", "-c", "pkill -f 'mpv.*mpv_japanese.sock' 2>/dev/null || true"]
     }
 
     Timer {
         id: startMpvTimer
 
-        interval: 100
+        interval: 150
         onTriggered: {
+            const script = "M=''; " + "if [ -f /usr/lib/mpv-mpris/mpris.so ]; then M='--script=/usr/lib/mpv-mpris/mpris.so'; " + "elif [ -f /usr/share/mpv/scripts/mpris.so ]; then M='--script=/usr/share/mpv/scripts/mpris.so'; fi; " + "exec mpv --no-video --quiet $M " + "--input-ipc-server=" + ipcSocket + " " + "--force-window=no --terminal=no -- \"$1\"";
+            mpvProc.command = ["bash", "-c", script, "qs-mpv", downloadDir + "/" + currentFile];
             mpvProc.running = false;
-            mpvProc.command = ["bash", "-c", "mpv --no-video --input-ipc-server=/tmp/mpv_japanese.sock --force-window=no '" + downloadDir + "/" + currentFile + "'"];
             mpvProc.running = true;
+            Qt.callLater(() => {
+                return pollPosition();
+            });
         }
     }
 
@@ -194,32 +335,86 @@ Singleton {
         onRunningChanged: {
             if (!running) {
                 root.isPlaying = false;
-                root.currentFile = "";
+                root.currentPosition = 0;
+                root.currentDuration = 0;
             }
         }
     }
 
-    Process {
-        id: ipcProc
+    Timer {
+        interval: 1000
+        running: root.isPlaying && root.currentFile !== "" && mpvProc.running
+        repeat: true
+        onTriggered: root.pollPosition()
     }
 
-    // ── Zeit-Tracking (jede Minute) ──
     Timer {
-        interval: 60000 // 1 Minute
+        id: pollVerifier
+
+        interval: 300
+        onTriggered: root.pollPosition()
+    }
+
+    Process {
+        id: posPollProc
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const d = JSON.parse(text.trim());
+                    if (d.error)
+                        return ;
+
+                    if (d.pos !== null && d.pos !== undefined)
+                        root.currentPosition = d.pos;
+
+                    if (d.dur !== null && d.dur !== undefined && d.dur > 0)
+                        root.currentDuration = d.dur;
+
+                    if (d.pause !== null && d.pause !== undefined)
+                        root.isPlaying = !d.pause;
+
+                } catch (e) {
+                }
+            }
+        }
+
+    }
+
+    Connections {
+        function onIsPlayingChanged() {
+            if (root.isPlaying) {
+                root.sessionStart = Date.now();
+                root.sessionCommitted = 0;
+            } else {
+                if (root.sessionStart > 0) {
+                    const elapsed = Math.round((Date.now() - root.sessionStart) / 1000);
+                    const remaining = elapsed - root.sessionCommitted;
+                    if (remaining > 0)
+                        root.addListenTime(remaining);
+
+                }
+                root.sessionStart = 0;
+                root.sessionCommitted = 0;
+            }
+        }
+
+        target: root
+    }
+
+    Timer {
+        interval: 30000
         running: root.isPlaying
         repeat: true
         onTriggered: {
-            const today = Qt.formatDate(new Date(), "yyyy-MM-dd");
-            let current = root.stats[today] || 0;
-            // Kopiere das Objekt, um QML-Change-Signale auszulösen
-            let newStats = Object.assign({
-            }, root.stats);
-            newStats[today] = current + 60;
-            root.stats = newStats;
-            // In Datei speichern (JSON escapen für bash)
-            const jsonStr = JSON.stringify(root.stats).replace(/'/g, "'\\''");
-            statsWriteProc.command = ["bash", "-c", "echo '" + jsonStr + "' > " + root.statsFile];
-            statsWriteProc.running = true;
+            if (root.sessionStart > 0) {
+                const elapsed = Math.round((Date.now() - root.sessionStart) / 1000);
+                const remaining = elapsed - root.sessionCommitted;
+                if (remaining > 0) {
+                    root.addListenTime(remaining);
+                    root.sessionCommitted = elapsed;
+                }
+            }
         }
     }
 

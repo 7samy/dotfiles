@@ -11,35 +11,34 @@ Item {
     readonly property real innerWidth: panelWidth - 2 * pad
     readonly property string mono: "JetBrainsMono Nerd Font"
     property string filter: "library"
-    property int selectedIndex: 0
+    property string searchQuery: ""
     property bool intro: true
     property real shown: 0
-    // --- Stats State ---
+    readonly property bool isSearchMode: searchQuery !== "" && (JapaneseAudioState.isSearching || JapaneseAudioState.searchResults.length > 0)
     property string activePeriod: "day"
     readonly property var currentStats: parseTime(JapaneseAudioState.getStatsForPeriod(activePeriod))
     readonly property real currentMinutes: (parseInt(currentStats.h) * 60) + parseInt(currentStats.m)
-    // Maximalwerte für den Fortschrittsbalken (anpassbar)
     readonly property real maxMinutes: {
         switch (activePeriod) {
         case "day":
-            return 60; // 1 Stunde pro Tag
+            return 60;
         case "week":
-            return 300; // 5 Stunden pro Woche
+            return 300;
         case "month":
-            return 1200; // 20 Stunden pro Monat
+            return 1200;
         case "year":
-            return 14400; // 240 Stunden pro Jahr
+            return 14400;
         }
         return 60;
     }
     readonly property real progress: Math.min(1, currentMinutes / maxMinutes)
     property real displayProgress: progress
-    // --- Animations Progress (Unfold) ---
     property real statsProgress: filter === "stats" ? 1 : 0
-    property real libraryProgress: filter === "library" ? 1 : 0
+    property real libraryProgress: (filter === "library" && !isSearchMode) ? 1 : 0
+    property real searchProgress: (filter === "library" && isSearchMode) ? 1 : 0
     readonly property var entries: JapaneseAudioState.library
+    readonly property var results: JapaneseAudioState.searchResults
 
-    // Parst "Xh Ym" in ein Objekt
     function parseTime(str) {
         const h = str.match(/(\d+)h/);
         const m = str.match(/(\d+)m/);
@@ -47,6 +46,22 @@ Item {
             "h": h ? h[1] : "0",
             "m": m ? m[1] : "0"
         };
+    }
+
+    function formatTime(seconds) {
+        if (!seconds || seconds < 0 || isNaN(seconds))
+            return "0:00";
+
+        const totalSecs = Math.floor(seconds);
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        const sStr = s < 10 ? "0" + s : s.toString();
+        if (h > 0) {
+            const mStr = m < 10 ? "0" + m : m.toString();
+            return h + ":" + mStr + ":" + sStr;
+        }
+        return m + ":" + sStr;
     }
 
     function playIntro() {
@@ -60,6 +75,18 @@ Item {
         if (visible) {
             playIntro();
         }
+    }
+
+    // NEU: Wenn Download erfolgreich abgeschlossen → Library öffnen
+    Connections {
+        function onDownloadCompleted() {
+            searchInput.text = "";
+            root.searchQuery = "";
+            JapaneseAudioState.clearSearch();
+            root.filter = "library";
+        }
+
+        target: JapaneseAudioState
     }
 
     Timer {
@@ -134,7 +161,7 @@ Item {
             width: root.innerWidth
             spacing: 0
 
-            // ───────────── Header ─────────────
+            // ═══════════ Header ═══════════
             Item {
                 id: header
 
@@ -174,18 +201,26 @@ Item {
                         color: WalColors.color7
                         selectionColor: WalColors.withAlpha(WalColors.color4, 0.4)
                         clip: true
+                        text: root.searchQuery
+                        onTextChanged: {
+                            root.searchQuery = text;
+                            if (text === "")
+                                JapaneseAudioState.clearSearch();
+
+                        }
                         onAccepted: {
-                            if (text !== "") {
-                                JapaneseAudioState.searchAndDownload(text);
-                                text = "";
-                            }
+                            if (text !== "")
+                                JapaneseAudioState.downloadFromInput(text);
+
                         }
                         Keys.onPressed: (event) => {
                             if (event.key === Qt.Key_Escape) {
-                                if (text !== "")
+                                if (text !== "") {
                                     text = "";
-                                else
+                                    JapaneseAudioState.clearSearch();
+                                } else {
                                     JapaneseAudioState.close();
+                                }
                                 event.accepted = true;
                             }
                         }
@@ -275,106 +310,125 @@ Item {
 
             }
 
-            // Status Text
+            // ═══════════ Download Card ═══════════
             Item {
                 width: parent.width
-                height: JapaneseAudioState.statusText !== "" ? 30 : 0
-                opacity: JapaneseAudioState.statusText !== "" ? 1 : 0
-                visible: height > 0
+                height: JapaneseAudioState.isDownloading ? 72 : 0
                 clip: true
-
-                Text {
-                    anchors.centerIn: parent
-                    text: JapaneseAudioState.statusText
-                    font.family: root.mono
-                    font.pixelSize: 12
-                    color: WalColors.color4
-                }
-
-                Behavior on height {
-                    Smooth {
-                    }
-
-                }
-
-                Behavior on opacity {
-                    Smooth {
-                    }
-
-                }
-
-            }
-
-            // ───────────── Library View ─────────────
-            Item {
-                width: parent.width
-                height: Math.min(entries.length * 52, 400) * root.libraryProgress
-                opacity: root.libraryProgress
                 visible: height > 0.5
-                clip: true
 
-                ListView {
-                    id: list
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.topMargin: 8
+                    anchors.bottomMargin: 4
+                    radius: 14
+                    color: WalColors.withAlpha(WalColors.color4, 0.06)
+                    border.width: 1
+                    border.color: WalColors.withAlpha(WalColors.color4, 0.18)
+                }
 
-                    width: parent.width
-                    height: Math.min(entries.length * 52, 400)
-                    model: entries
-                    spacing: 4
-                    boundsBehavior: Flickable.StopAtBounds
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    anchors.topMargin: 16
+                    anchors.bottomMargin: 12
+                    spacing: 12
 
-                    delegate: Item {
-                        id: row
+                    // Statisches Download-Icon (kein Pulsieren mehr)
+                    Item {
+                        width: 24
+                        height: 24
+                        anchors.verticalCenter: parent.verticalCenter
 
-                        required property var modelData
-                        required property int index
-                        readonly property bool isCurrent: JapaneseAudioState.currentFile === modelData
+                        Text {
+                            anchors.centerIn: parent
+                            text: "⬇"
+                            font.pixelSize: 20
+                            font.bold: true
+                            color: WalColors.color4
+                        }
 
-                        width: list.width
-                        height: 52
+                    }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 16
-                            color: row.isCurrent ? WalColors.withAlpha(WalColors.color4, 0.13) : "transparent"
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - 48
+                        spacing: 6
+
+                        Row {
+                            width: parent.width
 
                             Text {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 16
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: playBtn.left
-                                anchors.rightMargin: 10
-                                text: modelData.replace(".mp3", "")
+                                width: parent.width - 56
+                                text: JapaneseAudioState.downloadTitle
                                 font.family: root.mono
-                                font.pixelSize: 13
+                                font.pixelSize: 12
+                                color: WalColors.color7
                                 elide: Text.ElideRight
-                                color: row.isCurrent ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.72)
+                            }
+
+                            Text {
+                                width: 48
+                                horizontalAlignment: Text.AlignRight
+                                text: Math.round(JapaneseAudioState.downloadProgress * 100) + "%"
+                                font.family: root.mono
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: WalColors.color4
+                            }
+
+                        }
+
+                        Item {
+                            width: parent.width
+                            height: 4
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 2
+                                color: WalColors.withAlpha(WalColors.color7, 0.08)
                             }
 
                             Rectangle {
-                                id: playBtn
+                                width: parent.width * JapaneseAudioState.downloadProgress
+                                height: parent.height
+                                radius: 2
+                                color: WalColors.color4
 
-                                anchors.right: parent.right
-                                anchors.rightMargin: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 34
-                                height: 34
-                                radius: 11
-                                color: row.isCurrent ? WalColors.withAlpha(WalColors.color4, 0.2) : WalColors.withAlpha(WalColors.color7, 0.07)
+                                Rectangle {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 10
+                                    height: 10
+                                    radius: 5
+                                    color: WalColors.color4
+                                    opacity: 0.5
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: (row.isCurrent && JapaneseAudioState.isPlaying) ? "" : ""
-                                    font.family: root.mono
-                                    font.pixelSize: 14
-                                    color: row.isCurrent ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.5)
+                                    SequentialAnimation on scale {
+                                        running: JapaneseAudioState.isDownloading
+                                        loops: Animation.Infinite
+
+                                        NumberAnimation {
+                                            to: 1.6
+                                            duration: 800
+                                        }
+
+                                        NumberAnimation {
+                                            to: 1
+                                            duration: 800
+                                        }
+
+                                    }
+
                                 }
 
-                            }
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 200
+                                    }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: JapaneseAudioState.play(modelData)
+                                }
+
                             }
 
                         }
@@ -383,9 +437,527 @@ Item {
 
                 }
 
+                Behavior on height {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
             }
 
-            // ───────────── Stats View (Minimalist & Sleek) ─────────────
+            // ═══════════ Library View ═══════════
+            Item {
+                width: parent.width
+                height: Math.min(entries.length * 80, 420) * root.libraryProgress
+                opacity: root.libraryProgress
+                visible: height > 0.5
+                clip: true
+
+                ListView {
+                    id: list
+
+                    width: parent.width
+                    height: Math.min(entries.length * 80, 420)
+                    model: entries
+                    spacing: 6
+                    boundsBehavior: Flickable.StopAtBounds
+                    topMargin: 8
+
+                    delegate: Item {
+                        id: row
+
+                        required property var modelData
+                        required property int index
+                        readonly property bool isCurrent: JapaneseAudioState.currentFile === modelData
+                        readonly property bool isPlayingNow: isCurrent && JapaneseAudioState.isPlaying
+                        readonly property real positionProgress: isCurrent && JapaneseAudioState.currentDuration > 0 ? JapaneseAudioState.currentPosition / JapaneseAudioState.currentDuration : 0
+
+                        width: list.width
+                        height: 74
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 16
+                            color: WalColors.withAlpha(WalColors.color4, 0.13)
+                            opacity: row.isCurrent ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 220
+                                }
+
+                            }
+
+                            SequentialAnimation on color {
+                                running: row.isPlayingNow
+                                loops: Animation.Infinite
+
+                                ColorAnimation {
+                                    to: WalColors.withAlpha(WalColors.color4, 0.2)
+                                    duration: 1800
+                                    easing.type: Easing.InOutSine
+                                }
+
+                                ColorAnimation {
+                                    to: WalColors.withAlpha(WalColors.color4, 0.13)
+                                    duration: 1800
+                                    easing.type: Easing.InOutSine
+                                }
+
+                            }
+
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 16
+                            color: WalColors.withAlpha(WalColors.color7, 0.04)
+                            opacity: (rowMouse.containsMouse && !row.isCurrent) ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+
+                            }
+
+                        }
+
+                        Rectangle {
+                            width: 3
+                            height: 40
+                            radius: 2
+                            anchors.left: parent.left
+                            anchors.leftMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: WalColors.color4
+                            opacity: row.isCurrent ? 1 : 0
+                            scale: row.isPlayingNow ? 1 : 0.6
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 200
+                                }
+
+                            }
+
+                            Behavior on scale {
+                                Springy {
+                                }
+
+                            }
+
+                        }
+
+                        Rectangle {
+                            id: playBtn
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 38
+                            height: 38
+                            radius: 12
+                            color: row.isCurrent ? WalColors.withAlpha(WalColors.color4, 0.25) : WalColors.withAlpha(WalColors.color7, 0.07)
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 2
+                                visible: row.isPlayingNow
+
+                                Repeater {
+                                    model: 3
+
+                                    delegate: Rectangle {
+                                        width: 3
+                                        height: 6
+                                        radius: 1.5
+                                        color: WalColors.color4
+
+                                        SequentialAnimation on height {
+                                            loops: Animation.Infinite
+
+                                            NumberAnimation {
+                                                to: [10, 16, 12][index]
+                                                duration: 400 + index * 100
+                                                easing.type: Easing.InOutSine
+                                            }
+
+                                            NumberAnimation {
+                                                to: 6
+                                                duration: 400 + index * 100
+                                                easing.type: Easing.InOutSine
+                                            }
+
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: !row.isPlayingNow
+                                text: row.isCurrent && JapaneseAudioState.isPlaying ? "" : ""
+                                font.family: root.mono
+                                font.pixelSize: 16
+                                color: row.isCurrent ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.55)
+                            }
+
+                        }
+
+                        Column {
+                            anchors.left: playBtn.right
+                            anchors.leftMargin: 14
+                            anchors.right: parent.right
+                            anchors.rightMargin: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 6
+
+                            Text {
+                                width: parent.width
+                                text: modelData.replace(".mp3", "")
+                                font.family: root.mono
+                                font.pixelSize: 13
+                                font.bold: row.isCurrent
+                                elide: Text.ElideRight
+                                color: row.isCurrent ? WalColors.color7 : WalColors.withAlpha(WalColors.color7, 0.72)
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 150
+                                    }
+
+                                }
+
+                            }
+
+                            Item {
+                                width: parent.width
+                                height: row.isCurrent ? 16 : 0
+                                opacity: row.isCurrent ? 1 : 0
+                                visible: opacity > 0
+
+                                Row {
+                                    id: timeLabels
+
+                                    width: parent.width
+                                    height: 12
+
+                                    Text {
+                                        text: root.formatTime(JapaneseAudioState.currentPosition)
+                                        font.family: root.mono
+                                        font.pixelSize: 10
+                                        color: WalColors.withAlpha(WalColors.color7, 0.5)
+                                    }
+
+                                    Item {
+                                        width: parent.width - 60
+                                        height: 1
+                                    }
+
+                                    Text {
+                                        text: root.formatTime(JapaneseAudioState.currentDuration)
+                                        font.family: root.mono
+                                        font.pixelSize: 10
+                                        color: WalColors.withAlpha(WalColors.color7, 0.5)
+                                    }
+
+                                }
+
+                                Item {
+                                    id: seekBar
+
+                                    anchors.top: timeLabels.bottom
+                                    anchors.topMargin: 2
+                                    width: parent.width
+                                    height: 10
+                                    z: 2
+
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        height: 4
+                                        radius: 2
+                                        color: WalColors.withAlpha(WalColors.color7, 0.12)
+                                    }
+
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width * row.positionProgress
+                                        height: 4
+                                        radius: 2
+                                        color: WalColors.color4
+
+                                        Rectangle {
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: seekMouse.containsMouse ? 14 : 10
+                                            height: width
+                                            radius: width / 2
+                                            color: WalColors.color4
+                                            border.width: 2
+                                            border.color: WalColors.withAlpha(WalColors.color0, 0.9)
+
+                                            Behavior on width {
+                                                NumberAnimation {
+                                                    duration: 150
+                                                }
+
+                                            }
+
+                                        }
+
+                                    }
+
+                                    MouseArea {
+                                        id: seekMouse
+
+                                        anchors.fill: parent
+                                        anchors.topMargin: -4
+                                        anchors.bottomMargin: -4
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: (mouse) => {
+                                            JapaneseAudioState.seekToFraction(mouse.x / width);
+                                        }
+                                    }
+
+                                }
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 200
+                                    }
+
+                                }
+
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: 200
+                                    }
+
+                                }
+
+                            }
+
+                        }
+
+                        MouseArea {
+                            id: rowMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: JapaneseAudioState.play(modelData)
+                        }
+
+                    }
+
+                }
+
+            }
+
+            // ═══════════ Search Results ═══════════
+            Item {
+                width: parent.width
+                height: Math.min(results.length * 80, 420) * root.searchProgress
+                opacity: root.searchProgress
+                visible: height > 0.5
+                clip: true
+
+                Item {
+                    width: parent.width
+                    height: 24
+                    y: 8
+
+                    Text {
+                        text: JapaneseAudioState.isSearching ? "Searching..." : "Search Results"
+                        font.family: root.mono
+                        font.pixelSize: 11
+                        color: WalColors.withAlpha(WalColors.color7, 0.5)
+                    }
+
+                }
+
+                ListView {
+                    id: searchList
+
+                    anchors.top: parent.top
+                    anchors.topMargin: 32
+                    width: parent.width
+                    height: Math.min(results.length * 80, 380)
+                    model: results
+                    spacing: 6
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: Item {
+                        id: searchRow
+
+                        required property var modelData
+
+                        width: searchList.width
+                        height: 74
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 12
+                            color: searchMouse.containsMouse ? WalColors.withAlpha(WalColors.color7, 0.06) : "transparent"
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 150
+                                }
+
+                            }
+
+                        }
+
+                        Image {
+                            id: thumb
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 96
+                            height: 58
+                            source: modelData.thumbnail
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: true
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 8
+                                color: "transparent"
+                                border.width: 1
+                                border.color: WalColors.withAlpha(WalColors.color7, 0.1)
+                            }
+
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                anchors.right: parent.right
+                                anchors.margins: 4
+                                width: durText.width + 8
+                                height: 14
+                                radius: 7
+                                color: WalColors.withAlpha(WalColors.color0, 0.85)
+
+                                Text {
+                                    id: durText
+
+                                    anchors.centerIn: parent
+                                    text: modelData.duration
+                                    font.family: root.mono
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: WalColors.color7
+                                }
+
+                            }
+
+                        }
+
+                        Column {
+                            anchors.left: thumb.right
+                            anchors.leftMargin: 12
+                            anchors.right: dlBtn.left
+                            anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
+
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                font.family: root.mono
+                                font.pixelSize: 12
+                                color: WalColors.color7
+                                elide: Text.ElideRight
+                                maximumLineCount: 2
+                                wrapMode: Text.Wrap
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: modelData.uploader
+                                font.family: root.mono
+                                font.pixelSize: 10
+                                color: WalColors.withAlpha(WalColors.color7, 0.5)
+                                elide: Text.ElideRight
+                            }
+
+                        }
+
+                        Rectangle {
+                            id: dlBtn
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 36
+                            height: 36
+                            radius: 10
+                            color: JapaneseAudioState.isDownloading ? WalColors.withAlpha(WalColors.color7, 0.05) : (dlMouse.containsMouse ? WalColors.color4 : WalColors.withAlpha(WalColors.color4, 0.2))
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "⬇"
+                                font.pixelSize: 20
+                                font.bold: true
+                                color: JapaneseAudioState.isDownloading ? WalColors.withAlpha(WalColors.color7, 0.2) : (dlMouse.containsMouse ? WalColors.color0 : WalColors.color4)
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 150
+                                    }
+
+                                }
+
+                            }
+
+                            MouseArea {
+                                id: dlMouse
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: JapaneseAudioState.isDownloading ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                onClicked: {
+                                    if (!JapaneseAudioState.isDownloading)
+                                        JapaneseAudioState.downloadVideo(modelData.url, modelData.title);
+
+                                }
+                            }
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 150
+                                }
+
+                            }
+
+                        }
+
+                        MouseArea {
+                            id: searchMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                        }
+
+                    }
+
+                }
+
+            }
+
+            // ═══════════ Stats View ═══════════
             Item {
                 width: parent.width
                 height: 280 * root.statsProgress
@@ -399,7 +971,6 @@ Item {
                     height: 280
                     opacity: Math.min(1, root.statsProgress * 1.4)
 
-                    // ---------- Tab-Switcher (Unverändert) ----------
                     Item {
                         id: tabBar
 
@@ -481,7 +1052,6 @@ Item {
 
                         }
 
-                        // 3-Dot-Trail
                         Item {
                             id: trailGroup
 
@@ -595,7 +1165,6 @@ Item {
 
                     }
 
-                    // ---------- NEUE MINIMALISTISCHE STATISTIK ----------
                     Item {
                         anchors.top: tabBar.bottom
                         anchors.bottom: parent.bottom
@@ -605,7 +1174,6 @@ Item {
                             anchors.centerIn: parent
                             spacing: 14
 
-                            // Grosse Typografie
                             Row {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 spacing: 4
@@ -645,27 +1213,23 @@ Item {
 
                             }
 
-                            // Sleeker, glühender Fortschrittsbalken
                             Item {
                                 width: 220
                                 height: 6
                                 anchors.horizontalCenter: parent.horizontalCenter
 
-                                // Hintergrund
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: 3
                                     color: WalColors.withAlpha(WalColors.color7, 0.08)
                                 }
 
-                                // Füllung
                                 Rectangle {
                                     width: parent.width * root.displayProgress
                                     height: parent.height
                                     radius: 3
                                     color: WalColors.color4
 
-                                    // Glühende Spitze
                                     Rectangle {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
@@ -675,7 +1239,6 @@ Item {
                                         color: WalColors.color4
                                         opacity: 0.3
 
-                                        // Pulsieren der Spitze
                                         SequentialAnimation on scale {
                                             loops: Animation.Infinite
 
@@ -695,7 +1258,6 @@ Item {
 
                                     }
 
-                                    // Harter Kern der Spitze
                                     Rectangle {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
@@ -709,7 +1271,6 @@ Item {
 
                             }
 
-                            // Subtiler Text
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "TOTAL LISTENED"
@@ -755,6 +1316,14 @@ Item {
         NumberAnimation {
             duration: 280
             easing.type: Easing.InCubic
+        }
+
+    }
+
+    Behavior on searchProgress {
+        NumberAnimation {
+            duration: 320
+            easing.type: Easing.OutQuart
         }
 
     }
