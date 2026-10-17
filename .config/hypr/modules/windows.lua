@@ -58,7 +58,7 @@ hl.workspace_rule({ workspace = "7", no_border = true, no_rounding = true })
 hl.window_rule({
   match = { class = "com.gabm.satty" },
   float = true,
-  size = "800 600",   -- feste Pixelgröße (Breite Höhe)
+  size = "800 600", -- feste Pixelgröße (Breite Höhe)
   center = true,
 })
 

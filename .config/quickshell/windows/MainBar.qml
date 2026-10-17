@@ -5,15 +5,10 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
 
-// Bar und Kalender sind EINE Form in EINEM Fenster.
-// `morph` (0 = Bar, 1 = Kalender) treibt Breite, Höhe und das Überblenden der Inhalte.
 PanelWindow {
     id: panelWindow
 
     required property var screen
-    // ------------------------------------------------------------------
-    // Zustand
-    // ------------------------------------------------------------------
     property bool calendarOpen: false
     property bool startupDone: false
     property real morph: calendarOpen ? 1 : 0
@@ -23,11 +18,8 @@ PanelWindow {
     property date selectedDate: new Date()
     property string selectedKey: Qt.formatDate(new Date(), "yyyy-MM-dd")
     readonly property string todayKey: Qt.formatDate(now, "yyyy-MM-dd")
-    // ------------------------------------------------------------------
-    // Geometrie (alle Maße an einer Stelle)
-    // ------------------------------------------------------------------
     readonly property real barHeight: 40
-    readonly property real cornerR: 20 // Ohren oben + Ecken unten
+    readonly property real cornerR: 20
     readonly property real barWidth: screen.width / 1.333
     readonly property real calBodyWidth: 500
     readonly property real calWidth: calBodyWidth + 2 * cornerR
@@ -35,12 +27,11 @@ PanelWindow {
     readonly property real calPad: 16
     readonly property real cellW: (calBodyWidth - 2 * calPad) / 8
     readonly property real cellH: 34
-    // Staffelung der Animation: erst Inhalt weg, dann Breite, dann Höhe, dann Kalender ein
     readonly property real barContentOpacity: 1 - clamp01(morph / 0.12)
     readonly property real wT: smooth((morph - 0.05) / 0.55)
     readonly property real hT: smooth((morph - 0.25) / 0.6)
     readonly property real calContentOpacity: clamp01((morph - 0.8) / 0.2)
-    property real nudge: 0 // nur für den Startup-Fix (siehe startupFix)
+    property real nudge: 0
     readonly property real shapeW: barWidth + (calWidth - barWidth) * wT + nudge
     readonly property real shapeH: barHeight + (calHeight - barHeight) * hT
     readonly property var monthNames: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -49,9 +40,6 @@ PanelWindow {
     readonly property var cells: buildCells(viewYear, viewMonth)
     readonly property var weekNumbers: buildWeekNumbers(viewYear, viewMonth)
 
-    // ------------------------------------------------------------------
-    // Funktionen
-    // ------------------------------------------------------------------
     function clamp01(x) {
         return Math.max(0, Math.min(1, x));
     }
@@ -128,7 +116,6 @@ PanelWindow {
         const offset = (new Date(year, month, 1).getDay() + 6) % 7;
         const list = [];
         for (let r = 0; r < 6; r++) {
-            // Donnerstag der Zeile bestimmt die ISO-Kalenderwoche
             list.push(isoWeek(new Date(year, month, 1 - offset + r * 7 + 3)));
         }
         return list;
@@ -138,13 +125,9 @@ PanelWindow {
         return weekdayLong[d.getDay()] + ", " + monthNames[d.getMonth()] + " " + d.getDate() + "  ·  Week " + isoWeek(d);
     }
 
-    // ------------------------------------------------------------------
-    // Fenster
-    // ------------------------------------------------------------------
     anchors.top: true
     anchors.left: true
     anchors.right: true
-    // Fenster ist dauerhaft so hoch wie der Kalender; sichtbar/klickbar ist nur die Form (mask).
     implicitHeight: Math.max(barHeight, calHeight)
     color: "transparent"
     exclusiveZone: BarState.barVisible ? 40 : 0
@@ -168,7 +151,6 @@ PanelWindow {
 
     }
 
-    // Klick außerhalb schließt den Kalender
     HyprlandFocusGrab {
         windows: [panelWindow]
         active: panelWindow.calendarOpen
@@ -196,14 +178,8 @@ PanelWindow {
         id: rootContainer
 
         anchors.fill: parent
-        // 0.004 statt 0: ein Item mit Deckkraft 0 wird nicht gerendert, der Startup-Fix
-        // (siehe startupFix) braucht aber einen echten Render-Durchlauf.
         opacity: BarState.barVisible ? (panelWindow.startupDone ? 1 : 0.004) : 0
 
-        // --------------------------------------------------------------
-        // Die Form: oben konkave "Ohren", unten runde Ecken.
-        // Bei morph = 0 exakt die bisherige Bar (Breite 75 %, Höhe 40).
-        // --------------------------------------------------------------
         Shape {
             id: shapeItem
 
@@ -222,7 +198,6 @@ PanelWindow {
                 startX: 0
                 startY: 0
 
-                // Ohr links (konkav)
                 PathArc {
                     x: panelWindow.cornerR
                     y: panelWindow.cornerR
@@ -230,13 +205,11 @@ PanelWindow {
                     radiusY: panelWindow.cornerR
                 }
 
-                // linke Kante nach unten
                 PathLine {
                     x: panelWindow.cornerR
                     y: shapeItem.height - panelWindow.cornerR
                 }
 
-                // Ecke unten links
                 PathArc {
                     x: 2 * panelWindow.cornerR
                     y: shapeItem.height
@@ -245,13 +218,11 @@ PanelWindow {
                     direction: PathArc.Counterclockwise
                 }
 
-                // Unterkante
                 PathLine {
                     x: shapeItem.width - 2 * panelWindow.cornerR
                     y: shapeItem.height
                 }
 
-                // Ecke unten rechts
                 PathArc {
                     x: shapeItem.width - panelWindow.cornerR
                     y: shapeItem.height - panelWindow.cornerR
@@ -260,13 +231,11 @@ PanelWindow {
                     direction: PathArc.Counterclockwise
                 }
 
-                // rechte Kante nach oben
                 PathLine {
                     x: shapeItem.width - panelWindow.cornerR
                     y: panelWindow.cornerR
                 }
 
-                // Ohr rechts (konkav)
                 PathArc {
                     x: shapeItem.width
                     y: 0
@@ -283,9 +252,6 @@ PanelWindow {
 
         }
 
-        // Die Shape (CurveRenderer) zeichnet sich bei reinen Farbänderungen nicht zuverlässig neu.
-        // Deshalb wird die Füllung nach dem Start und bei jedem Farbwechsel einmal kurz
-        // zurückgesetzt und danach wieder an WalColors gebunden.
         Connections {
             function onColorsUpdated() {
                 panelWindow.redrawShape();
@@ -303,9 +269,6 @@ PanelWindow {
             })
         }
 
-        // Startup-Fix: Nach dem Start baut der CurveRenderer die Form erst neu auf, wenn sich
-        // die Geometrie ändert (genau das passiert beim ersten Öffnen des Kalenders). Deshalb
-        // wird die Breite beim Start ein paar Mal um 0,1 px verändert und am Ende zurückgesetzt.
         Timer {
             id: startupFix
 
@@ -319,15 +282,11 @@ PanelWindow {
                 panelWindow.nudge = (ticks % 2 === 1) ? 0.1 : 0;
                 if (ticks >= 4) {
                     stop();
-                    // Bar erst jetzt sanft einblenden, damit man den Neuaufbau nicht sieht
                     panelWindow.startupDone = true;
                 }
             }
         }
 
-        // --------------------------------------------------------------
-        // Bar-Inhalt (auf die aktuelle Formbreite beschnitten)
-        // --------------------------------------------------------------
         Item {
             id: barClip
 
@@ -350,10 +309,11 @@ PanelWindow {
                     anchors.leftMargin: 35
                     anchors.rightMargin: 35
 
+                    // ═════════════════════════ LINKE SEITE ═════════════════════════
                     Row {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 30
+                        spacing: 16 // Von 20 auf 16 reduziert für etwas mehr Nähe
 
                         Text {
                             text: "󰣇"
@@ -362,8 +322,79 @@ PanelWindow {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Clipboard-Picker oeffnet sich ueber dieses Icon.
                         ClipboardToggle {
+                        }
+
+                        // Japanese Audio Toggle (Kanji 音)
+                        Item {
+                            id: jaBtn
+
+                            width: 24
+                            height: 24
+
+                            // Hover-Hintergrund
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 32
+                                height: 32
+                                radius: 8
+                                color: WalColors.withAlpha(WalColors.color4, 0.15)
+                                visible: jaHover.hovered
+                                scale: jaHover.hovered ? 1 : 0.6
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 150
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                }
+
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "音"
+                                font.pixelSize: 18
+                                font.bold: true
+                                font.family: "JetBrainsMono Nerd Font"
+                                color: (jaHover.hovered || JapaneseAudioState.isPlaying) ? WalColors.color4 : WalColors.withAlpha(WalColors.color7, 0.5)
+                                // Skalierung beim Hovern
+                                scale: jaHover.hovered ? 1.15 : 1
+                                transformOrigin: Item.Center
+
+                                // Von 6 auf 5 Pixel reduziert
+                                transform: Translate {
+                                    y: 5
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 150
+                                        easing.type: Easing.OutCubic
+                                    }
+
+                                }
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 150
+                                    }
+
+                                }
+
+                            }
+
+                            HoverHandler {
+                                id: jaHover
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: JapaneseAudioState.toggle()
+                            }
+
                         }
 
                         ActiveWindow {
@@ -375,21 +406,19 @@ PanelWindow {
                         anchors.centerIn: parent
                     }
 
+                    // ═════════════════════════ RECHTE SEITE (Dropdowns) ═════════════════════════
                     Row {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         height: parent.height
                         spacing: 40
 
-                        // ---- Icon-Gruppe mit morphing Pill ----
                         Item {
                             id: iconGroup
 
-                            // -1 = nichts gehovert
                             property int hoveredIndex: -1
                             readonly property real pillWidth: 34
-                            // ---- lockedIndex: welches Dropdown ist gerade offen? ----
-                            // Zuordnung: 0=PowerMenu, 1=Audio, 2=Stats, 3=VPN
+                            // 0=PowerMenu, 1=Audio, 2=Stats, 3=VPN
                             readonly property int lockedIndex: {
                                 if (typeof VpnState !== "undefined" && VpnState.dropdownOpen)
                                     return 3;
@@ -523,7 +552,6 @@ PanelWindow {
 
                         }
 
-                        // Linksklick auf die Uhr verwandelt die Bar in den Kalender
                         Clock {
                             onClicked: panelWindow.toggleCalendar()
                         }
@@ -536,9 +564,7 @@ PanelWindow {
 
         }
 
-        // --------------------------------------------------------------
-        // Kalender-Inhalt (auf die aktuelle Formhöhe beschnitten)
-        // --------------------------------------------------------------
+        // Kalender-Inhalt
         Item {
             id: calClip
 
@@ -585,7 +611,6 @@ PanelWindow {
                     horizontalCenter: parent.horizontalCenter
                 }
 
-                // ---- Uhrzeit + Datum der Auswahl ----
                 Item {
                     width: parent.width
                     height: 54
@@ -640,7 +665,6 @@ PanelWindow {
                     color: WalColors.withAlpha(WalColors.color7, 0.1)
                 }
 
-                // ---- Monatsnavigation (Klick auf den Titel = heute) ----
                 Item {
                     width: parent.width
                     height: 30
@@ -668,13 +692,6 @@ PanelWindow {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: panelWindow.shiftMonth(-1)
-                        }
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 100
-                            }
-
                         }
 
                     }
@@ -724,18 +741,10 @@ PanelWindow {
                             onClicked: panelWindow.shiftMonth(1)
                         }
 
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 100
-                            }
-
-                        }
-
                     }
 
                 }
 
-                // ---- Wochentage ----
                 Row {
                     height: 16
 
@@ -766,7 +775,6 @@ PanelWindow {
 
                 }
 
-                // ---- Tage (6 Zeilen, immer gleich hoch) ----
                 Column {
                     id: dayGrid
 
@@ -828,13 +836,6 @@ PanelWindow {
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 12
                                             font.bold: dayCell.isToday
-                                        }
-
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: 100
-                                            }
-
                                         }
 
                                     }

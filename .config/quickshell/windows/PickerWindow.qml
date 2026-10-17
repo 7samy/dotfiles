@@ -7,6 +7,8 @@ import Quickshell.Wayland
 PanelWindow {
     id: pickerWindow
 
+    readonly property bool isAudioOpen: JapaneseAudioState.isOpen
+    readonly property bool isAnyOpen: PickerManager.anyOpen || isAudioOpen
     readonly property var currentScreen: {
         const focused = Hyprland.focusedMonitor;
         if (focused) {
@@ -29,6 +31,8 @@ PanelWindow {
             musicLoader.item.focusSearch();
         else if (PickerManager.isOpen("wallpaper") && wallpaperLoader.item)
             wallpaperLoader.item.focusSearch();
+        else if (isAudioOpen && japaneseAudioLoader.item)
+            japaneseAudioLoader.item.forceActiveFocus();
     }
 
     WlrLayershell.namespace: "quickshell:pickers"
@@ -36,7 +40,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     WlrLayershell.exclusiveZone: -1
     screen: currentScreen
-    visible: PickerManager.anyOpen
+    visible: isAnyOpen
     color: "transparent"
     onVisibleChanged: {
         if (visible) {
@@ -54,8 +58,12 @@ PanelWindow {
         right: true
     }
 
+    // Wenn PickerManager aufgeht, schließe Audio
     Connections {
         function onActivePickerChanged() {
+            if (PickerManager.anyOpen && JapaneseAudioState.isOpen)
+                JapaneseAudioState.close();
+
             if (pickerWindow.visible)
                 Qt.callLater(() => {
                 return pickerWindow.focusActivePicker();
@@ -64,6 +72,22 @@ PanelWindow {
         }
 
         target: PickerManager
+    }
+
+    // Wenn Audio aufgeht, schließe PickerManager
+    Connections {
+        function onIsOpenChanged() {
+            if (JapaneseAudioState.isOpen && PickerManager.anyOpen)
+                PickerManager.close();
+
+            if (pickerWindow.visible)
+                Qt.callLater(() => {
+                return pickerWindow.focusActivePicker();
+            });
+
+        }
+
+        target: JapaneseAudioState
     }
 
     Rectangle {
@@ -99,7 +123,7 @@ PanelWindow {
 
                 anchors.fill: parent
 
-                // ---- Clipboard Picker (lazy, keepAlive-Pattern) ----
+                // ---- Clipboard Picker ----
                 Loader {
                     id: clipboardLoader
 
@@ -155,7 +179,7 @@ PanelWindow {
 
                 }
 
-                // ---- App Launcher (lazy, keepAlive-Pattern) ----
+                // ---- App Launcher ----
                 Loader {
                     id: appLoader
 
@@ -211,7 +235,7 @@ PanelWindow {
 
                 }
 
-                // ---- Music Picker (lazy, keepAlive-Pattern) ----
+                // ---- Music Picker ----
                 Loader {
                     id: musicLoader
 
@@ -267,7 +291,7 @@ PanelWindow {
 
                 }
 
-                // ---- Wallpaper Picker (lazy, keepAlive-Pattern) ----
+                // ---- Wallpaper Picker ----
                 Loader {
                     id: wallpaperLoader
 
@@ -305,6 +329,62 @@ PanelWindow {
                             anchors.fill: parent
                             focus: false
                             opacity: PickerManager.activePicker === "wallpaper" ? 1 : 0
+                            visible: opacity > 0
+
+                            Behavior on opacity {
+                                enabled: !PickerManager.openingFresh
+
+                                NumberAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                // ---- Japanese Audio Picker ----
+                Loader {
+                    id: japaneseAudioLoader
+
+                    property bool keepAlive: false
+
+                    anchors.fill: parent
+                    asynchronous: true
+                    active: keepAlive
+                    sourceComponent: japaneseAudioComponent
+
+                    Connections {
+                        function onIsOpenChanged() {
+                            if (JapaneseAudioState.isOpen)
+                                japaneseAudioLoader.keepAlive = true;
+                            else if (japaneseAudioLoader.item)
+                                japaneseAudioUnloadTimer.restart();
+                        }
+
+                        target: JapaneseAudioState
+                    }
+
+                    Timer {
+                        id: japaneseAudioUnloadTimer
+
+                        interval: 320
+                        onTriggered: japaneseAudioLoader.keepAlive = false
+                    }
+
+                    Component {
+                        id: japaneseAudioComponent
+
+                        JapaneseAudioPicker {
+                            id: japaneseAudioPicker
+
+                            anchors.fill: parent
+                            focus: false
+                            opacity: JapaneseAudioState.isOpen ? 1 : 0
                             visible: opacity > 0
 
                             Behavior on opacity {

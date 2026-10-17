@@ -11,9 +11,6 @@ ShellRoot {
             var s = Quickshell.screens[i];
             console.log("screen", i, s.name, JSON.stringify(s.geometry));
         }
-        // States vorab laden, damit die Scans laufen, waehrend der User
-        // noch nichts tut. Sonst starten die Scans erst beim ersten
-        // Oeffnen des jeweiligen Pickers (sichtbare Verzoegerung).
         AppLauncherState.loadApps();
         MusicPickerState.loadSongs();
         WallpaperPickerState.loadWallpapers();
@@ -23,6 +20,11 @@ ShellRoot {
     GlobalShortcut {
         name: "toggle_clipboard"
         onPressed: ClipboardState.toggle()
+    }
+
+    GlobalShortcut {
+        name: "toggle_japanese_audio"
+        onPressed: JapaneseAudioState.toggle()
     }
 
     GlobalShortcut {
@@ -62,8 +64,6 @@ ShellRoot {
                 console.log("Variant delegate created, modelData:", modelData && modelData.name ? modelData.name : modelData);
             }
 
-            // Der Kalender steckt jetzt in der MainBar (Bar verwandelt sich in den Kalender),
-            // CalendarDropdown wird nicht mehr instanziiert.
             MainBar {
                 screen: modelData
             }

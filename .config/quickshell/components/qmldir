@@ -13,7 +13,9 @@ singleton StatsState 1.0 StatsState.qml
 singleton StatsProvider 1.0 StatsProvider.qml
 singleton Appearance 1.0 Appearance.qml
 singleton VpnPickerState 1.0 VpnPickerState.qml
+singleton JapaneseAudioState 1.0 JapaneseAudioState.qml
 
+JapaneseAudioPicker 1.0 JapaneseAudioPicker.qml
 PickerSwitcher 1.0 PickerSwitcher.qml
 PowerMenuButton 1.0 PowerMenuButton.qml
 VolumeOrb 1.0 VolumeOrb.qml
