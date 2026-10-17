@@ -9,6 +9,7 @@ Singleton {
     readonly property string downloadDir: "/home/azu/Documents/Japanese-Audios"
     readonly property string statsFile: Quickshell.stateDir + "/japanese-audio-stats.json"
     readonly property string ipcSocket: "/tmp/mpv_japanese.sock"
+    readonly property string cookieFile: "/home/azu/.config/quickshell/youtube-cookies.txt"
     property bool isOpen: false
     property bool isPlaying: false
     property string currentFile: ""
@@ -18,22 +19,20 @@ Singleton {
     })
     property real downloadProgress: 0
     property bool isDownloading: false
-    // NEU: true, sobald yt-dlp fertig geladen hat und nach mp3 konvertiert
     property bool isConverting: false
     property bool cancelled: false
-    // true, solange ein laufender mpv für den Wechsel auf eine andere Datei beendet wird
     property bool restarting: false
     property int startPollTries: 0
     property string downloadTitle: ""
     property string downloadError: ""
     property bool isSearching: false
+    property string searchError: ""
     property var searchResults: []
     property real currentPosition: 0
     property real currentDuration: 0
     property double sessionStart: 0
     property double sessionCommitted: 0
 
-    // Signal, das die Picker-UI informiert, dass ein Download fertig ist
     signal downloadCompleted()
 
     function toggle() {
@@ -65,13 +64,17 @@ Singleton {
 
         isSearching = true;
         searchResults = [];
+        searchError = "";
         searchProc.running = false;
-        searchProc.command = ["bash", "-c", "exec yt-dlp \"ytsearch5:$1\" --flat-playlist --dump-json 2>/dev/null", "qs-ytsearch", query];
+        // PATH erweitern, Cookies-Datei nutzen, mweb/tv-Client erzwingen
+        const cmd = "export PATH=\"$PATH:$HOME/.cargo/bin:$HOME/.deno/bin:$HOME/.local/bin:/usr/local/bin\"; " + "exec yt-dlp \"ytsearch5:$1\" --flat-playlist --dump-json --cookies \"" + root.cookieFile + "\" --extractor-args \"youtube:player_client=mweb,tv\"";
+        searchProc.command = ["bash", "-c", cmd, "qs-ytsearch", query];
         searchProc.running = true;
     }
 
     function clearSearch() {
         searchResults = [];
+        searchError = "";
         isSearching = false;
     }
 
@@ -88,10 +91,9 @@ Singleton {
         statusText = "Downloading...";
         downloadProc.running = false;
         cancelled = false;
-        downloadProc.lastError = "";
-        downloadProc.lastLine = "";
-        // --no-playlist + --playlist-items 1: ein Link = genau ein Download (auch bei &list=... Links)
-        downloadProc.command = ["bash", "-c", "mkdir -p \"$1\" && exec yt-dlp --newline --no-colors --no-playlist --playlist-items 1 -x --audio-format mp3 -o \"$1/%(title)s.%(ext)s\" -- \"$2\" 2>&1", "qs-ytdlp", downloadDir, url];
+        // PATH erweitern, Cookies-Datei nutzen, mweb/tv-Client erzwingen
+        const cmd = "export PATH=\"$PATH:$HOME/.cargo/bin:$HOME/.deno/bin:$HOME/.local/bin:/usr/local/bin\"; " + "mkdir -p \"$1\" && exec yt-dlp --newline --no-colors --no-playlist --playlist-items 1 -x --audio-format mp3 " + "--cookies \"" + root.cookieFile + "\" " + "--extractor-args \"youtube:player_client=mweb,tv\" " + "-o \"$1/%(title)s.%(ext)s\" -- \"$2\" 2>&1";
+        downloadProc.command = ["bash", "-c", cmd, "qs-ytdlp", downloadDir, url];
         downloadProc.running = true;
     }
 
@@ -155,7 +157,6 @@ Singleton {
         currentPosition = seconds;
     }
 
-    // NEU: relativ vor-/zurückspulen (z.B. ±10 s)
     function seekRelative(delta) {
         if (currentFile === "" || currentDuration <= 0)
             return ;
@@ -252,10 +253,18 @@ Singleton {
     Process {
         id: searchProc
 
-        onRunningChanged: {
-            if (!running)
-                root.isSearching = false;
+        property string errBuffer: ""
 
+        onRunningChanged: {
+            if (!running) {
+                root.isSearching = false;
+                if (errBuffer !== "") {
+                    console.warn("[JapaneseAudio] Search error:", errBuffer);
+                    root.searchError = errBuffer.replace(/^ERROR:\s*/gm, "").trim();
+                }
+            } else {
+                errBuffer = "";
+            }
         }
 
         stdout: SplitParser {
@@ -279,13 +288,16 @@ Singleton {
             }
         }
 
+        stderr: SplitParser {
+            onRead: (data) => {
+                searchProc.errBuffer += data + "\n";
+            }
+        }
+
     }
 
     Process {
         id: downloadProc
-
-        property string lastError: ""
-        property string lastLine: ""
 
         onExited: (exitCode, exitStatus) => {
             if (root.cancelled) {
@@ -295,8 +307,6 @@ Singleton {
                 root.downloadProgress = 0;
                 root.downloadTitle = "";
                 root.statusText = "";
-                lastError = "";
-                lastLine = "";
                 return ;
             }
             if (root.isDownloading) {
@@ -305,15 +315,14 @@ Singleton {
                 if (exitCode === 0) {
                     root.statusText = "Download finished";
                     root.loadLibrary();
-                    // Signal an die Picker-UI, damit sie zur Library wechselt
                     root.downloadCompleted();
                 } else {
-                    root.downloadError = (lastError || lastLine || ("Exit code " + exitCode)).replace(/^ERROR:\s*/, "");
+                    if (root.downloadError === "")
+                        root.downloadError = "Exit code " + exitCode;
+
                     console.warn("[JapaneseAudio] download failed (" + exitCode + "): " + root.downloadError);
                     root.statusText = "Download failed";
                 }
-                lastError = "";
-                lastLine = "";
                 statusTimer.restart();
             }
         }
@@ -328,10 +337,9 @@ Singleton {
                     root.isConverting = true;
 
                 const line = data.trim();
-                if (line.indexOf("ERROR") === 0)
-                    lastError = line;
-                else if (line !== "" && line.indexOf("[download]") !== 0)
-                    lastLine = line;
+                if (line.includes("ERROR") && root.downloadError === "")
+                    root.downloadError = line.replace(/^ERROR:\s*/, "").trim();
+
                 const dm = data.match(/\[download\]\s+Destination:\s+(.+)/);
                 if (dm && root.downloadTitle === "Video") {
                     const parts = dm[1].trim().split('/');
@@ -373,7 +381,6 @@ Singleton {
             mpvProc.command = ["bash", "-c", script, "qs-mpv", downloadDir + "/" + currentFile];
             mpvProc.running = false;
             mpvProc.running = true;
-            // mpv braucht einen Moment bis der IPC-Socket steht → mehrfach nachfragen
             root.startPollTries = 0;
             startPoll.restart();
             restartGuard.restart();
@@ -388,7 +395,6 @@ Singleton {
                 root.restarting = false;
                 return ;
             }
-            // Der alte mpv wurde absichtlich beendet (Dateiwechsel) → Status nicht zurücksetzen
             if (root.restarting)
                 return ;
 
@@ -398,7 +404,6 @@ Singleton {
         }
     }
 
-    // Fragt nach dem Start ein paar Mal nach, bis mpv antwortet (korrigiert den Play/Pause-Status)
     Timer {
         id: startPoll
 

@@ -16,7 +16,25 @@ Item {
     property real shown: 0
     property string activePeriod: "day"
     readonly property bool isSearchMode: searchQuery !== "" && (JapaneseAudioState.isSearching || JapaneseAudioState.searchResults.length > 0)
-    readonly property var entries: JapaneseAudioState.library
+    // ── aktuell spielende Datei immer ganz oben ──
+    readonly property var entries: {
+        const lib = JapaneseAudioState.library;
+        const cur = JapaneseAudioState.currentFile;
+        if (!cur || lib.length === 0)
+            return lib;
+
+        const idx = lib.indexOf(cur);
+        if (idx <= 0)
+            return lib;
+
+        const out = [cur];
+        for (let i = 0; i < lib.length; i++) {
+            if (i !== idx)
+                out.push(lib[i]);
+
+        }
+        return out;
+    }
     readonly property var results: JapaneseAudioState.searchResults
     // ───────────────────────── Stats data ─────────────────────────
     readonly property var currentStats: parseTime(JapaneseAudioState.getStatsForPeriod(activePeriod))
@@ -38,11 +56,9 @@ Item {
     readonly property real progress: Math.min(1, currentMinutes / maxMinutes)
     property real shownMinutes: currentMinutes
     property real displayProgress: progress
-    // Count-up / ring-fill while the Stats tab opens
     readonly property real introK: stage(statsProgress, 0.1)
     readonly property real heroMinutes: shownMinutes * introK
     readonly property real heroProgress: displayProgress * introK
-    // Last 7 days (oldest → today)
     readonly property var weekData: {
         const s = JapaneseAudioState.stats || ({
         });
@@ -83,7 +99,7 @@ Item {
         }
         return n;
     }
-    // ───────────────────────── Body sizing (one smooth height for all tabs) ─────────────────────────
+    // ───────────────────────── Body sizing ─────────────────────────
     readonly property real libH: entries.length > 0 ? Math.min(entries.length * 80 + 8, 420) : 84
     readonly property real searchH: Math.min(results.length * 80, 380) + 32
     readonly property real statsH: 336
@@ -128,7 +144,6 @@ Item {
         return Math.floor(t / 60) + "h " + (t % 60) + "m";
     }
 
-    // Staggered sub-progress: 0 until `d`, then 0→1
     function stage(p, d) {
         return Math.max(0, Math.min(1, (p - d) / (1 - d)));
     }
@@ -146,7 +161,6 @@ Item {
 
     }
 
-    // Wenn Download erfolgreich abgeschlossen → Library öffnen
     Connections {
         function onDownloadCompleted() {
             searchInput.text = "";
@@ -393,7 +407,6 @@ Item {
                 readonly property color sheenColor: Qt.lighter(accent, 1.9)
                 property real dlValue: JapaneseAudioState.downloadProgress
 
-                // withAlpha() needs the raw WalColors values, not a `color` property
                 function tint(a) {
                     return failed ? WalColors.withAlpha(WalColors.color1, a) : WalColors.withAlpha(WalColors.color4, a);
                 }
@@ -419,7 +432,6 @@ Item {
                     anchors.topMargin: 10
                     anchors.bottomMargin: 4
 
-                    // soft breathing glow behind the ring
                     Rectangle {
                         anchors.centerIn: dlRingBox
                         width: 56
@@ -505,7 +517,6 @@ Item {
                             maximumLineCount: dlCard.failed ? 3 : 1
                         }
 
-                        // Progress bar: tinted gradient with a travelling sheen
                         Item {
                             width: parent.width
                             height: 6
@@ -605,7 +616,6 @@ Item {
 
                     }
 
-                    // Cancel
                     Rectangle {
                         anchors.right: parent.right
                         anchors.rightMargin: 12
@@ -675,7 +685,7 @@ Item {
 
             }
 
-            // ═══════════ Body: Library / Search / Stats ═══════════
+            // ═══════════ Body ═══════════
             Item {
                 id: body
 
@@ -711,9 +721,36 @@ Item {
                             readonly property bool isCurrent: JapaneseAudioState.currentFile === modelData
                             readonly property bool isPlayingNow: isCurrent && JapaneseAudioState.isPlaying
                             readonly property real positionProgress: isCurrent && JapaneseAudioState.currentDuration > 0 ? Math.min(1, JapaneseAudioState.currentPosition / JapaneseAudioState.currentDuration) : 0
+                            // ── Entrance animation ──
+                            property real enter: 1
 
                             width: list.width
                             height: 74
+                            opacity: enter
+                            Component.onCompleted: {
+                                if (root.intro) {
+                                    enter = 0;
+                                    rowEnter.start();
+                                }
+                            }
+
+                            SequentialAnimation {
+                                id: rowEnter
+
+                                PauseAnimation {
+                                    duration: Math.min(row.index, 9) * 30 + 60
+                                }
+
+                                NumberAnimation {
+                                    target: row
+                                    property: "enter"
+                                    to: 1
+                                    duration: 460
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
+                                }
+
+                            }
 
                             // Current-row background
                             Rectangle {
@@ -776,7 +813,7 @@ Item {
 
                             }
 
-                            // Play button: progress ring + sonar ping while playing
+                            // Play button
                             Item {
                                 id: playBtn
 
@@ -858,7 +895,6 @@ Item {
 
                                 }
 
-                                // Pause icon
                                 Row {
                                     anchors.centerIn: parent
                                     spacing: 3
@@ -894,7 +930,6 @@ Item {
 
                                 }
 
-                                // Play icon
                                 Text {
                                     anchors.centerIn: parent
                                     anchors.horizontalCenterOffset: 1
@@ -921,7 +956,6 @@ Item {
 
                             }
 
-                            // Whole-row click: play / pause (sits below the controls)
                             MouseArea {
                                 id: rowMouse
 
@@ -931,7 +965,6 @@ Item {
                                 onClicked: JapaneseAudioState.play(row.modelData)
                             }
 
-                            // ±10 s skip buttons
                             Row {
                                 id: skipRow
 
@@ -989,7 +1022,6 @@ Item {
 
                                 }
 
-                                // Scrubber
                                 Item {
                                     width: parent.width
                                     height: row.isCurrent ? 30 : 0
@@ -1053,7 +1085,6 @@ Item {
 
                                         }
 
-                                        // Time bubble while scrubbing
                                         Rectangle {
                                             x: Math.max(0, Math.min(seekBar.width - width, seekBar.width * seekBar.frac - width / 2))
                                             y: -26
@@ -1160,6 +1191,10 @@ Item {
                                     duration: 240
                                 }
 
+                            }
+
+                            transform: Translate {
+                                y: (1 - row.enter) * 12
                             }
 
                         }
@@ -1385,7 +1420,6 @@ Item {
                     opacity: Math.min(1, root.statsProgress * 2.5)
                     visible: opacity > 0.01
 
-                    // Period tabs
                     Item {
                         id: tabBar
 
@@ -1586,7 +1620,6 @@ Item {
 
                     }
 
-                    // Hero: goal ring + tiles
                     Row {
                         id: hero
 
@@ -1693,7 +1726,6 @@ Item {
 
                     }
 
-                    // Last 7 days chart
                     Item {
                         id: chart
 
@@ -1784,7 +1816,6 @@ Item {
                                         hoverEnabled: true
                                     }
 
-                                    // Bars grow in one after another when the tab opens
                                     Behavior on g {
                                         SequentialAnimation {
                                             PauseAnimation {
@@ -1878,7 +1909,6 @@ Item {
         epsilon: 0.2
     }
 
-    // Circular progress ring (or spinner when `spinning`)
     component Ring: Item {
         id: ring
 

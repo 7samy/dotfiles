@@ -433,8 +433,103 @@ PanelWindow {
                             height: 32
                             clip: true
 
+                            // Pill-Ebene: gleiche Logik wie die rechte Icon-Gruppe.
+                            Item {
+                                id: pillLayer
+
+                                x: drawerContent.x
+                                width: drawerContent.implicitWidth
+                                height: drawerContent.height
+                                opacity: panelWindow.revealT
+
+                                Rectangle {
+                                    id: drawerPill
+
+                                    x: drawerContent.pillX
+                                    y: (parent.height - height) / 2
+                                    width: drawerContent.pillW
+                                    height: 32
+                                    radius: height / 2
+                                    color: WalColors.withAlpha(WalColors.color4, drawerContent.focused ? 0.3 : 0.12)
+
+                                    Behavior on x {
+                                        NumberAnimation {
+                                            duration: 320
+                                            easing.type: Easing.OutBack
+                                            easing.overshoot: 1.08
+                                        }
+
+                                    }
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: 320
+                                            easing.type: Easing.OutBack
+                                            easing.overshoot: 1.08
+                                        }
+
+                                    }
+
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 260
+                                            easing.type: Easing.OutCubic
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
                             Row {
                                 id: drawerContent
+
+                                // ── Pill-Logik (analog zur rechten Icon-Gruppe) ──
+                                readonly property int hoveredIndex: {
+                                    if (cbSlot.hovered)
+                                        return 0;
+
+                                    if (appsSlot.hovered)
+                                        return 1;
+
+                                    if (jaBtn.hovered)
+                                        return 2;
+
+                                    return -1;
+                                }
+                                readonly property int lockedIndex: {
+                                    if (ClipboardState.pickerVisible)
+                                        return 0;
+
+                                    if (PickerManager.isOpen("apps"))
+                                        return 1;
+
+                                    if (JapaneseAudioState.isPlaying)
+                                        return 2;
+
+                                    return -1;
+                                }
+                                readonly property int effectiveIndex: hoveredIndex >= 0 ? hoveredIndex : lockedIndex
+                                readonly property bool focused: effectiveIndex >= 0
+                                readonly property real pillWidth: 34
+                                // WICHTIG: Im Ruhezustand um die Differenz der Paddings verkleinern, damit die Icons exakt mittig sitzen.
+                                readonly property real pillW: focused ? pillWidth : implicitWidth - (rightPadding - leftPadding)
+                                readonly property real pillX: {
+                                    if (!focused)
+                                        return 0;
+
+                                    if (effectiveIndex === 0)
+                                        return cbSlot.x + cbSlot.width / 2 - pillWidth / 2;
+
+                                    if (effectiveIndex === 1)
+                                        return appsSlot.x + appsSlot.width / 2 - pillWidth / 2;
+
+                                    if (effectiveIndex === 2)
+                                        return jaGroup.x + jaBtn.x + jaBtn.width / 2 - pillWidth / 2;
+
+                                    return 0;
+                                }
 
                                 x: drawer.width - implicitWidth
                                 height: parent.height
@@ -448,6 +543,7 @@ PanelWindow {
                                     id: cbSlot
 
                                     icon: "clipboard"
+                                    active: ClipboardState.pickerVisible
                                     reveal: panelWindow.clamp01(panelWindow.revealT * 1.6)
                                     onClicked: ClipboardState.toggle()
                                 }
@@ -1303,7 +1399,7 @@ PanelWindow {
 
     }
 
-    // Einheitlicher Slot für alle Drawer-Icons
+    // Einheitlicher Slot für alle Drawer-Icons (Hover-/Aktiv-Hintergrund übernimmt die Drawer-Pill)
     component DrawerSlot: Item {
         id: slot
 
@@ -1323,22 +1419,6 @@ PanelWindow {
         height: 32
         opacity: reveal
         scale: 0.6 + 0.4 * reveal
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: 28
-            height: 28
-            radius: 14
-            color: WalColors.withAlpha(WalColors.color4, slot.active ? 0.2 : (slot.hovered ? 0.15 : 0))
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: 150
-                }
-
-            }
-
-        }
 
         Item {
             anchors.centerIn: parent
